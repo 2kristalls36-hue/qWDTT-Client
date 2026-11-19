@@ -3,11 +3,7 @@ name: Android debug APK
 on:
   push:
     branches:
-      - develop
-  pull_request:
-    branches:
-      - develop
-      - master
+      - main
   workflow_dispatch:
 
 concurrency:

@@ -180,6 +180,31 @@ fun HomeScreen(settingsStore: SettingsStore, onOpenProfiles: () -> Unit) {
 
     if (logsOpen) LogsSheet(onDismiss = { logsOpen = false })
 
+    // The app crashed last time: show what happened so it can be sent to the developer.
+    var crash by remember { mutableStateOf(com.wdtt.client.lite.CrashLog.read(context)) }
+    crash?.let { text ->
+        com.wdtt.client.ui.components.surface.ArdttDialog(
+            title = "Приложение было закрыто из-за ошибки",
+            onDismissRequest = { com.wdtt.client.lite.CrashLog.clear(context); crash = null },
+            confirmAction = com.wdtt.client.ui.components.surface.ArdttDialogAction("Скопировать", onClick = {
+                val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                cm.setPrimaryClip(android.content.ClipData.newPlainText("Ошибка qWDTT Lite", text))
+                Toast.makeText(context, "Текст ошибки скопирован.", Toast.LENGTH_SHORT).show()
+                com.wdtt.client.lite.CrashLog.clear(context)
+                crash = null
+            }),
+            dismissAction = com.wdtt.client.ui.components.surface.ArdttDialogAction("Закрыть", onClick = {
+                com.wdtt.client.lite.CrashLog.clear(context); crash = null
+            }),
+        ) {
+            Text(
+                text.lineSequence().take(14).joinToString("\n"),
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+            )
+        }
+    }
+
     if (sheetOpen && profile != null) {
         ProfileSheet(
             profile = profile,

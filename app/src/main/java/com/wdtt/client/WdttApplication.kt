@@ -13,6 +13,7 @@ class WdttApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        com.wdtt.client.lite.CrashLog.install(this)
         NotificationHelper.ensureTunnelChannel(this)
         AppShortcuts.refreshAsync(this)
         com.wdtt.client.lite.ExpiryWarningWorker.schedule(this)

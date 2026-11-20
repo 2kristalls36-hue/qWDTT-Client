@@ -36,12 +36,14 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.StrokeCap
@@ -162,16 +164,29 @@ fun ConnectButton(
                 }
             }
         }
-        // Neon glow behind the rim.
+        // Neon glow behind the rim: a wide rotating sweep ring faded in and out by a radial
+        // mask. Drawn, not blurred, so nothing is clipped to a square on any device.
         if (neonGlow > 0f) {
-            Box(
+            Canvas(
                 Modifier
-                    .size(200.dp)
+                    .size(236.dp)
                     .alpha(neonGlow)
-                    .blur(30.dp)
-                    .rotate(phase * 120f)
-                    .background(Brush.sweepGradient(colors.neon + colors.neon.first()), CircleShape),
-            )
+                    .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen),
+            ) {
+                val r = size.minDimension / 2f
+                rotate(phase * 120f) {
+                    drawCircle(Brush.sweepGradient(colors.neon + colors.neon.first()), radius = r * 0.83f, style = Stroke(width = r * 0.34f))
+                }
+                drawCircle(
+                    Brush.radialGradient(
+                        0f to Color.Transparent, 0.62f to Color.Transparent,
+                        0.8f to Color.Black, 1f to Color.Transparent,
+                        center = center, radius = r,
+                    ),
+                    radius = r,
+                    blendMode = BlendMode.DstIn,
+                )
+            }
         }
         // Track ring: soft level tint, or a rotating neon rim at the maximum.
         Canvas(Modifier.size(196.dp)) {

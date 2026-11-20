@@ -36,8 +36,12 @@ class ExpiryWarningWorker(context: Context, params: WorkerParameters) : Coroutin
 
         fun schedule(context: Context) {
             val request = PeriodicWorkRequestBuilder<ExpiryWarningWorker>(12, TimeUnit.HOURS).build()
-            WorkManager.getInstance(context)
-                .enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.KEEP, request)
+            try {
+                WorkManager.getInstance(context)
+                    .enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.KEEP, request)
+            } catch (_: IllegalStateException) {
+                // WorkManager is not initialized (no startup provider, e.g. in JVM tests).
+            }
         }
     }
 

@@ -37,6 +37,9 @@ fun AppRoot(settingsStore: SettingsStore) {
         ArdttNavItem(Routes.PROFILES, "Профили", Icons.Outlined.Person),
         ArdttNavItem(Routes.APPS, "Приложения", Icons.Outlined.Apps),
     )
+    // A link or file opened from another app is imported on the profiles tab.
+    val incoming by com.wdtt.client.MainActivity.pendingFileUri
+    androidx.compose.runtime.LaunchedEffect(incoming) { if (incoming != null) route = Routes.PROFILES }
     Box(Modifier.fillMaxSize()) {
         ArdttBackdrop(modifier = Modifier.fillMaxSize())
         AnimatedContent(
@@ -50,7 +53,8 @@ fun AppRoot(settingsStore: SettingsStore) {
                     settingsStore = settingsStore,
                     onOpenProfiles = { route = Routes.PROFILES },
                 )
-                else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(current) }
+                Routes.PROFILES -> com.wdtt.client.ui.profiles.ProfilesScreen(settingsStore)
+                else -> com.wdtt.client.ui.apps.AppsScreen(settingsStore)
             }
         }
         ArdttNavigationBar(

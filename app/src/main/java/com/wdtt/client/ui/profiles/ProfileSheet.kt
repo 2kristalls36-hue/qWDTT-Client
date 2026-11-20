@@ -59,6 +59,7 @@ fun ProfileSheet(
     onDismiss: () -> Unit,
     onOtherProfiles: (() -> Unit)? = null,
     onMakeActive: (() -> Unit)? = null,
+    onDelete: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -138,6 +139,14 @@ fun ProfileSheet(
 
         if (onMakeActive != null && !isActive) {
             ArdttButton(text = "Сделать активным", onClick = onMakeActive, modifier = Modifier.fillMaxWidth())
+        }
+        if (onDelete != null) {
+            ArdttButton(
+                text = "Удалить профиль",
+                onClick = onDelete,
+                variant = ArdttButtonVariant.Danger,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
         if (onOtherProfiles != null) {
             ArdttButton(

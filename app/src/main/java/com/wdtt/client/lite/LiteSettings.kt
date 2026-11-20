@@ -1,0 +1,73 @@
+package com.wdtt.client.lite
+
+import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+
+private val Context.liteStore: DataStore<Preferences> by preferencesDataStore("lite")
+
+/** Subscription facts for one profile, as last reported by the server. */
+data class SubscriptionInfo(
+    /** Unix seconds; 0 — the subscription has no end date. */
+    val expiresAt: Long,
+    val maxDevices: Int,
+    val boundDevices: Int,
+    /** Unix ms of the last successful server answer. */
+    val checkedAt: Long,
+)
+
+/** Settings that exist only in qWDTT Lite: power level, expiry warnings, cached subscription data. */
+class LiteSettings(context: Context) {
+    private val store = context.applicationContext.liteStore
+
+    companion object {
+        private val POWER = intPreferencesKey("power_level")
+        private val WARN_ENABLED = booleanPreferencesKey("expiry_warn_enabled")
+        private val WARN_DAYS = intPreferencesKey("expiry_warn_days")
+        const val DEFAULT_WARN_DAYS = 3
+        val WARN_DAY_CHOICES = listOf(1, 3, 7)
+
+        private fun expiresKey(id: String) = longPreferencesKey("sub_expires_$id")
+        private fun maxDevKey(id: String) = intPreferencesKey("sub_max_dev_$id")
+        private fun boundDevKey(id: String) = intPreferencesKey("sub_bound_dev_$id")
+        private fun checkedKey(id: String) = longPreferencesKey("sub_checked_$id")
+        /** Expiry date the last warning was shown for, so each date warns once. */
+        private fun warnedKey(id: String) = longPreferencesKey("sub_warned_for_$id")
+    }
+
+    val powerLevel: Flow<PowerLevel> = store.data.map { PowerLevel.fromIndex(it[POWER] ?: PowerLevel.Default.ordinal) }
+    suspend fun savePowerLevel(level: PowerLevel) = store.edit { it[POWER] = level.ordinal }
+
+    val warnEnabled: Flow<Boolean> = store.data.map { it[WARN_ENABLED] ?: true }
+    val warnDays: Flow<Int> = store.data.map { it[WARN_DAYS] ?: DEFAULT_WARN_DAYS }
+    suspend fun saveWarnEnabled(enabled: Boolean) = store.edit { it[WARN_ENABLED] = enabled }
+    suspend fun saveWarnDays(days: Int) = store.edit { it[WARN_DAYS] = days }
+
+    fun subscription(profileId: String): Flow<SubscriptionInfo?> = store.data.map { p ->
+        val checked = p[checkedKey(profileId)] ?: return@map null
+        SubscriptionInfo(
+            expiresAt = p[expiresKey(profileId)] ?: 0L,
+            maxDevices = p[maxDevKey(profileId)] ?: 1,
+            boundDevices = p[boundDevKey(profileId)] ?: 0,
+            checkedAt = checked,
+        )
+    }
+
+    suspend fun saveSubscription(profileId: String, info: SubscriptionInfo) = store.edit { p ->
+        p[expiresKey(profileId)] = info.expiresAt
+        p[maxDevKey(profileId)] = info.maxDevices
+        p[boundDevKey(profileId)] = info.boundDevices
+        p[checkedKey(profileId)] = info.checkedAt
+    }
+
+    suspend fun warnedFor(profileId: String): Long = store.data.first()[warnedKey(profileId)] ?: 0L
+    suspend fun saveWarnedFor(profileId: String, expiresAt: Long) = store.edit { it[warnedKey(profileId)] = expiresAt }
+}

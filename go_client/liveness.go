@@ -58,7 +58,11 @@ var serverAnswersKeepalive atomic.Bool
 type sessionLiveness struct {
 	lastRx   atomic.Int64 // unix ms последнего пакета от сервера (данные или ответ)
 	pongSeen *atomic.Bool // сервер умеет отвечать на keepalive (общий признак)
+	kaSentAt atomic.Int64 // unix ns отправки последнего keepalive, 0 — ответ уже получен
 }
+
+// noteKeepaliveSent — keepalive ушёл серверу; ответ на него даст замер пинга.
+func (l *sessionLiveness) noteKeepaliveSent(now time.Time) { l.kaSentAt.Store(now.UnixNano()) }
 
 func newSessionLiveness(now time.Time) *sessionLiveness {
 	return newSessionLivenessShared(now, &serverAnswersKeepalive)
@@ -78,6 +82,9 @@ func (l *sessionLiveness) noteRx(now time.Time) { l.lastRx.Store(now.UnixMilli()
 func (l *sessionLiveness) notePong(now time.Time) {
 	l.pongSeen.Store(true)
 	l.noteRx(now)
+	if sent := l.kaSentAt.Swap(0); sent > 0 {
+		notePingSample(time.Duration(now.UnixNano() - sent))
+	}
 }
 
 // grace оставляет потоку ровно livenessWakeWindow на ответ при текущем

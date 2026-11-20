@@ -544,6 +544,7 @@ func RunSession(
 				}
 				select {
 				case slot.PrioCh <- pkt:
+					liveness.noteKeepaliveSent(time.Now())
 				default:
 					putPktBuf(pkt)
 				}

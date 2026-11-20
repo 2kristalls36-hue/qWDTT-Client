@@ -15,6 +15,7 @@ class WdttApplication : Application() {
         super.onCreate()
         NotificationHelper.ensureTunnelChannel(this)
         AppShortcuts.refreshAsync(this)
+        com.wdtt.client.lite.ExpiryWarningWorker.schedule(this)
     }
 
     fun getBackend(context: Context): GoBackend {

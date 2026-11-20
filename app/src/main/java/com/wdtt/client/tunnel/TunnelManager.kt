@@ -107,6 +107,20 @@ object TunnelManager {
     val config = MutableStateFlow<String?>(null)
     val stats = MutableStateFlow("Ожидание данных...")
     val activeWorkers = MutableStateFlow(0)
+    /** Server round trip from tunnel keepalives, ms; 0 — no data yet. */
+    val pingMs = MutableStateFlow(0L)
+    /** Download speed over the last stats window, Mbit/s; null — not measured yet. */
+    val downlinkMbps = MutableStateFlow<Double?>(null)
+    private var speedSampleMb = -1.0
+    private var speedSampleAtMs = 0L
+
+    /** Clears live numbers when the tunnel goes down. */
+    fun resetLiveStats() {
+        pingMs.value = 0L
+        downlinkMbps.value = null
+        speedSampleMb = -1.0
+        speedSampleAtMs = 0L
+    }
     val isReconnecting = MutableStateFlow(false)
     val connectionPipeline = MutableStateFlow(ConnectionPipelineState())
     /** Проверка соединения через VK (см. ConnectionDiagnostics, go_client/netdiag.go). */
@@ -134,6 +148,7 @@ object TunnelManager {
     private fun markRunning(value: Boolean) {
         running.value = value
         connectedSinceMs.value = if (value) System.currentTimeMillis() else 0L
+        if (!value) resetLiveStats()
     }
     
     val cooldownSeconds = MutableStateFlow(0)
@@ -974,6 +989,16 @@ object TunnelManager {
 
                         val downlinkMb = Regex("↓\\s*([\\d.,]+)").find(msg)
                             ?.groupValues?.getOrNull(1)?.replace(",", ".")?.toDoubleOrNull()
+                        pingMs.value = Regex("Пинг:\\s*(\\d+)").find(msg)
+                            ?.groupValues?.getOrNull(1)?.toLongOrNull() ?: 0L
+                        if (downlinkMb != null) {
+                            if (speedSampleMb >= 0 && downlinkMb >= speedSampleMb && now > speedSampleAtMs) {
+                                val seconds = (now - speedSampleAtMs) / 1000.0
+                                downlinkMbps.value = (downlinkMb - speedSampleMb) * 8.0 * 1.048576 / seconds
+                            }
+                            speedSampleMb = downlinkMb
+                            speedSampleAtMs = now
+                        }
                         val uplinkMb = Regex("↑\\s*([\\d.,]+)").find(msg)
                             ?.groupValues?.getOrNull(1)?.replace(",", ".")?.toDoubleOrNull()
                         if (downlinkMb != null && uplinkMb != null) {

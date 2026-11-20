@@ -45,8 +45,12 @@ fun AppRoot(settingsStore: SettingsStore) {
             label = "tab",
             modifier = Modifier.fillMaxSize(),
         ) { current ->
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(current)
+            when (current) {
+                Routes.HOME -> com.wdtt.client.ui.home.HomeScreen(
+                    settingsStore = settingsStore,
+                    onOpenProfiles = { route = Routes.PROFILES },
+                )
+                else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(current) }
             }
         }
         ArdttNavigationBar(

@@ -19,12 +19,13 @@ func NewStats() *Stats {
 func (s *Stats) RunLoop(shutdown <-chan struct{}) {
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
+	var ping pingReporter
 
 	for {
 		select {
 		case <-shutdown:
 			return
-		case <-ticker.C:
+		case now := <-ticker.C:
 			active := s.ActiveConnections.Load()
 			up := s.TotalBytesUp.Load()
 			down := s.TotalBytesDown.Load()
@@ -32,7 +33,12 @@ func (s *Stats) RunLoop(shutdown <-chan struct{}) {
 			upMB := float64(up) / (1024.0 * 1024.0)
 			downMB := float64(down) / (1024.0 * 1024.0)
 
-			log.Printf("[СТАТИСТИКА] Активных: %d | Трафик: %.2f МБ | ↓%.2f МБ / ↑%.2f МБ", active, totalMB, downMB, upMB)
+			// Пинг дописывается в конец строки: старые разборщики строки его не видят.
+			if ms := ping.next(now); ms > 0 {
+				log.Printf("[СТАТИСТИКА] Активных: %d | Трафик: %.2f МБ | ↓%.2f МБ / ↑%.2f МБ | Пинг: %d мс", active, totalMB, downMB, upMB, ms)
+			} else {
+				log.Printf("[СТАТИСТИКА] Активных: %d | Трафик: %.2f МБ | ↓%.2f МБ / ↑%.2f МБ", active, totalMB, downMB, upMB)
+			}
 		}
 	}
 }

@@ -604,6 +604,10 @@ class SettingsStore(context: Context) {
         }
     }
 
+    suspend fun saveWorkersPerHash(workers: Int) {
+        dataStore.edit { prefs -> prefs[WORKERS_PER_HASH] = workers }
+    }
+
     suspend fun saveManualPortsEnabled(enabled: Boolean) {
         dataStore.edit { prefs ->
             prefs[MANUAL_PORTS_ENABLED] = enabled

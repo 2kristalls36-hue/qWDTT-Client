@@ -6,6 +6,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -97,6 +99,11 @@ fun HomeScreen(settingsStore: SettingsStore, onOpenProfiles: () -> Unit) {
     val subView = SubscriptionText.view(sub, warnDays)
 
     var sheetOpen by remember { mutableStateOf(false) }
+    var logsOpen by remember { mutableStateOf(false) }
+
+    // A failed start ends quietly in the engine; show its reason once.
+    val fatal by TunnelManager.lastFatalError.collectAsStateWithLifecycle()
+    LaunchedEffect(fatal) { fatal?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() } }
 
     // Refresh the subscription once the tunnel is up: the server is surely reachable then.
     LaunchedEffect(state, profileId) {
@@ -114,7 +121,14 @@ fun HomeScreen(settingsStore: SettingsStore, onOpenProfiles: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
         Row(Modifier.fillMaxWidth().widthIn(max = 460.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("qWDTT Lite", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold), modifier = Modifier.weight(1f))
+            Text(
+                "qWDTT Lite",
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier
+                    .weight(1f)
+                    .pointerInput(Unit) { detectTapGestures(onLongPress = { logsOpen = true }) },
+            )
             ProfileChip(
                 name = profile?.name ?: "Нет профиля",
                 value = if (profile == null) null else subView.short,
@@ -132,9 +146,17 @@ fun HomeScreen(settingsStore: SettingsStore, onOpenProfiles: () -> Unit) {
                     when (state) {
                         TunnelUiState.Off -> {
                             val activity = context as? MainActivity ?: return@ConnectButton
-                            TunnelActions.connect(activity) {
-                                Toast.makeText(context, "Профиль не выбран.", Toast.LENGTH_SHORT).show()
-                                onOpenProfiles()
+                            TunnelActions.connect(activity) { problem ->
+                                when (problem) {
+                                    TunnelActions.Problem.NoProfile -> {
+                                        Toast.makeText(context, "Профиль не выбран.", Toast.LENGTH_SHORT).show()
+                                        onOpenProfiles()
+                                    }
+                                    TunnelActions.Problem.NoCallLink -> {
+                                        Toast.makeText(context, "Для подключения нужна ссылка на звонок VK.", Toast.LENGTH_LONG).show()
+                                        sheetOpen = true
+                                    }
+                                }
                             }
                         }
                         else -> TunnelActions.disconnect(context)
@@ -152,6 +174,8 @@ fun HomeScreen(settingsStore: SettingsStore, onOpenProfiles: () -> Unit) {
             modifier = Modifier.widthIn(max = 460.dp),
         )
     }
+
+    if (logsOpen) LogsSheet(onDismiss = { logsOpen = false })
 
     if (sheetOpen && profile != null) {
         ProfileSheet(

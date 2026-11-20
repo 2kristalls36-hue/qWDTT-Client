@@ -92,7 +92,8 @@ fun ProfilesScreen(settingsStore: SettingsStore) {
     var addOpen by remember { mutableStateOf(false) }
     var subscriptionInput by remember { mutableStateOf<String?>(null) }
     var pending by remember { mutableStateOf<ParsedImport?>(null) }
-    var details by remember { mutableStateOf<ConnectionProfile?>(null) }
+    var detailsId by remember { mutableStateOf<String?>(null) }
+    val details = profiles.firstOrNull { it.id == detailsId }
     var deleting by remember { mutableStateOf<ConnectionProfile?>(null) }
 
     fun offer(text: String?, emptyMessage: String) {
@@ -140,7 +141,7 @@ fun ProfilesScreen(settingsStore: SettingsStore) {
                         profile = p,
                         active = p.id == activeId,
                         ping = if (running && p.id == activeId) ping else 0L,
-                        onClick = { details = p },
+                        onClick = { detailsId = p.id },
                     )
                 }
             }
@@ -226,14 +227,14 @@ fun ProfilesScreen(settingsStore: SettingsStore) {
             profile = p,
             isActive = isActive,
             ping = if (running && isActive) ping else 0L,
-            onDismiss = { details = null },
+            onDismiss = { detailsId = null },
             onMakeActive = {
                 scope.launch {
                     store.applyProfile(context, p.id)
-                    details = null
+                    detailsId = null
                 }
             },
-            onDelete = { details = null; deleting = p },
+            onDelete = { detailsId = null; deleting = p },
         )
     }
 

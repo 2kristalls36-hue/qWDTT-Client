@@ -40,10 +40,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -227,7 +230,7 @@ private fun PowerSlider(
     val scope = rememberCoroutineScope()
     val pos = remember { Animatable(level.ordinal / 2f) }
     var dragging by remember { mutableStateOf(false) }
-    LaunchedEffect(level) {
+    LaunchedEffect(level, dragging) {
         if (!dragging) pos.animateTo(level.ordinal / 2f, spring(dampingRatio = 0.8f, stiffness = 400f))
     }
     val isMax = level == PowerLevel.Maximum
@@ -242,19 +245,31 @@ private fun PowerSlider(
     var widthPx by remember { mutableFloatStateOf(1f) }
     val pad = with(LocalDensity.current) { 14.dp.toPx() }
 
+    // Gesture handlers live across level changes (keyed on Unit), so a drag is never
+    // cut off when the level switches under the finger; they read the latest values here.
+    val currentLevel by rememberUpdatedState(level)
+    val currentOnChange by rememberUpdatedState(onLevelChange)
     fun fracAt(x: Float) = ((x - pad) / (widthPx - 2 * pad)).coerceIn(0f, 1f)
     fun select(frac: Float) {
         val next = PowerLevel.fromIndex((frac * 2).roundToInt())
-        if (next != level) {
+        if (next != currentLevel) {
             haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-            onLevelChange(next)
+            currentOnChange(next)
         }
+    }
+    fun settle() {
+        dragging = false
+        val stop = (pos.value * 2).roundToInt() / 2f
+        select(stop)
+        scope.launch { pos.animateTo(stop, spring(0.8f, 400f)) }
     }
 
     BoxWithConstraints(
         Modifier
+            .testTag("power-slider")
             .fillMaxWidth()
             .height(44.dp)
+            .onSizeChanged { widthPx = it.width.toFloat() }
             .alpha(alpha)
             .semantics {
                 stateDescription = level.title
@@ -263,23 +278,18 @@ private fun PowerSlider(
             }
             .then(
                 if (locked) Modifier else Modifier
-                    .pointerInput(level) {
+                    .pointerInput(Unit) {
                         detectTapGestures { o ->
                             val f = fracAt(o.x)
                             select(f)
                             scope.launch { pos.animateTo((f * 2).roundToInt() / 2f, spring(0.8f, 400f)) }
                         }
                     }
-                    .pointerInput(level) {
+                    .pointerInput(Unit) {
                         detectHorizontalDragGestures(
                             onDragStart = { dragging = true },
-                            onDragEnd = {
-                                dragging = false
-                                val stop = (pos.value * 2).roundToInt() / 2f
-                                select(stop)
-                                scope.launch { pos.animateTo(stop, spring(0.8f, 400f)) }
-                            },
-                            onDragCancel = { dragging = false },
+                            onDragEnd = { settle() },
+                            onDragCancel = { settle() },
                         ) { change, _ ->
                             val f = fracAt(change.position.x)
                             scope.launch { pos.snapTo(f) }
@@ -289,7 +299,6 @@ private fun PowerSlider(
             ),
     ) {
         Canvas(Modifier.matchParentSize()) {
-            widthPx = size.width
             val cy = size.height / 2f
             val trackH = 10.dp.toPx()
             val left = pad

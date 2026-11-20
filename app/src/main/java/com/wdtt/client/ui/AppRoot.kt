@@ -40,6 +40,9 @@ fun AppRoot(settingsStore: SettingsStore) {
     // A link or file opened from another app is imported on the profiles tab.
     val incoming by com.wdtt.client.MainActivity.pendingFileUri
     androidx.compose.runtime.LaunchedEffect(incoming) { if (incoming != null) route = Routes.PROFILES }
+    androidx.compose.runtime.CompositionLocalProvider(
+        androidx.compose.material3.LocalContentColor provides androidx.compose.material3.MaterialTheme.colorScheme.onBackground,
+    ) {
     Box(Modifier.fillMaxSize()) {
         ArdttBackdrop(modifier = Modifier.fillMaxSize())
         AnimatedContent(
@@ -64,4 +67,5 @@ fun AppRoot(settingsStore: SettingsStore) {
             modifier = Modifier.align(Alignment.BottomCenter),
         )
     }
+}
 }

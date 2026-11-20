@@ -22,7 +22,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,6 +44,7 @@ import com.wdtt.client.lite.TunnelActions
 import com.wdtt.client.ui.components.control.ArdttButton
 import com.wdtt.client.ui.components.control.ArdttButtonVariant
 import com.wdtt.client.ui.components.control.ArdttChoiceChip
+import com.wdtt.client.ui.components.control.ArdttTextField
 import com.wdtt.client.ui.components.surface.ArdttBottomSheet
 import com.wdtt.client.ui.home.PingColors
 import com.wdtt.client.ui.home.ToneColors
@@ -129,6 +132,29 @@ fun ProfileSheet(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+
+        Block("Звонок VK") {
+            var link by remember(profile.id, profile.vkHashes) { mutableStateOf(profile.vkHashes) }
+            val saved = profile.vkHashes.isNotBlank()
+            Text(
+                if (saved) "Ссылка указана." else "Для подключения нужна ссылка на звонок VK.",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (saved) MaterialTheme.colorScheme.onSurfaceVariant else ToneColors.Critical,
+            )
+            ArdttTextField(
+                value = link,
+                onValueChange = { link = it },
+                placeholder = "https://vk.com/call/join/…",
+                modifier = Modifier.fillMaxWidth(),
+            )
+            if (link.trim() != profile.vkHashes.trim()) {
+                ArdttButton(
+                    text = "Сохранить",
+                    onClick = { scope.launch { TunnelActions.saveCallLink(context, profile.id, link) } },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
 
         Block("Сервер") {

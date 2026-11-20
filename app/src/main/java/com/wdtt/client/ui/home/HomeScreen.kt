@@ -105,6 +105,9 @@ fun HomeScreen(settingsStore: SettingsStore, onOpenProfiles: () -> Unit) {
     val fatal by TunnelManager.lastFatalError.collectAsStateWithLifecycle()
     LaunchedEffect(fatal) { fatal?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() } }
 
+    // The home screen widget mirrors level, profile and state.
+    LaunchedEffect(level, profile?.name, state, ping) { com.wdtt.client.TunnelWidgetProvider.refresh(context) }
+
     // Refresh the subscription once the tunnel is up: the server is surely reachable then.
     LaunchedEffect(state, profileId) {
         if (state == TunnelUiState.On && profileId.isNotBlank()) TunnelActions.refreshSubscription(context, profileId)

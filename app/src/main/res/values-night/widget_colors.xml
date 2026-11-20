@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="widget_surface">#16202C</color>
+    <color name="widget_outline">#26A8D0FF</color>
+    <color name="widget_text">#E5EDF8</color>
+    <color name="widget_muted">#B9C9DB</color>
+    <color name="widget_stable">#4ADE80</color>
+    <color name="widget_balanced">#A8D0FF</color>
+    <color name="widget_on_level">#08131F</color>
+    <color name="widget_neon_1">#C04BFF</color>
+    <color name="widget_neon_2">#00F0FF</color>
+    <color name="widget_neon_3">#FF3DE0</color>
+    <color name="widget_max_text">#00F0FF</color>
+</resources>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Neon rim: a sweep-gradient disc with the dark core laid over it. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="oval">
+            <gradient
+                android:type="sweep"
+                android:startColor="@color/widget_neon_1"
+                android:centerColor="@color/widget_neon_2"
+                android:endColor="@color/widget_neon_3" />
+        </shape>
+    </item>
+    <item android:bottom="2dp" android:left="2dp" android:right="2dp" android:top="2dp">
+        <shape android:shape="oval">
+            <solid android:color="@color/widget_night" />
+        </shape>
+    </item>
+</layer-list>

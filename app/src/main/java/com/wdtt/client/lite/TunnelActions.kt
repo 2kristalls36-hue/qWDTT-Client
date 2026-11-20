@@ -16,25 +16,35 @@ object TunnelActions {
 
     enum class Problem { NoProfile, NoCallLink }
 
+    fun problemText(problem: Problem): String = when (problem) {
+        Problem.NoProfile -> "Профиль не выбран."
+        Problem.NoCallLink -> "Для подключения нужна ссылка на звонок VK."
+    }
+
+    /** Applies the active profile, RAW mode and power. Returns why it cannot connect, or null. */
+    suspend fun prepareActive(context: Context): Problem? {
+        val settings = SettingsStore(context)
+        val profileId = settings.currentProfileId.first()
+        if (profileId.isBlank() || ProfilesStore(context).getProfileOnce(profileId) == null) return Problem.NoProfile
+        prepareSettings(context, profileId)
+        // Without a VK call link the tunnel service stops silently; say so instead.
+        if (settings.vkHashes.first().isBlank()) return Problem.NoCallLink
+        return null
+    }
+
     fun connect(activity: MainActivity, onProblem: (Problem) -> Unit) {
         val appContext = activity.applicationContext
         TunnelManager.scope.launch {
-            val settings = SettingsStore(appContext)
-            val profileId = settings.currentProfileId.first()
-            if (profileId.isBlank() || ProfilesStore(appContext).getProfileOnce(profileId) == null) {
-                withContext(Dispatchers.Main) { onProblem(Problem.NoProfile) }
-                return@launch
-            }
-            prepareSettings(appContext, profileId)
-            // Without a VK call link the tunnel service stops silently; say so instead.
-            if (settings.vkHashes.first().isBlank()) {
-                withContext(Dispatchers.Main) { onProblem(Problem.NoCallLink) }
+            val problem = prepareActive(appContext)
+            if (problem != null) {
+                withContext(Dispatchers.Main) { onProblem(problem) }
                 return@launch
             }
             withContext(Dispatchers.Main) {
                 TunnelManager.beginConnecting()
                 activity.prepareVpnThen { TunnelControl.startFromSavedSettings(appContext) }
             }
+            val profileId = SettingsStore(appContext).currentProfileId.first()
             refreshSubscription(appContext, profileId)
         }
     }

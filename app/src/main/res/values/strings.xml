@@ -4,4 +4,5 @@
     <string name="shortcut_start_long">Подключить qWDTT</string>
     <string name="shortcut_stop_short">Отключить</string>
     <string name="shortcut_stop_long">Отключить qWDTT</string>
+    <string name="widget_description">Подключение и состояние туннеля</string>
 </resources>

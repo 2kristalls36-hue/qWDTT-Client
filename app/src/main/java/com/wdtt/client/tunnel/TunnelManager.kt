@@ -682,6 +682,7 @@ object TunnelManager {
                 val env = pb.environment()
                 env["LD_LIBRARY_PATH"] = context.applicationInfo.nativeLibraryDir
 
+                com.wdtt.client.lite.RawLog.marker("запуск клиента: режим ${params.connectionMode}, потоков ${params.workersPerHash}")
                 process = pb.start()
                 processStartedAtMs = System.currentTimeMillis()
                 if (!screenOn) writeGoCommand("SCREEN_OFF")
@@ -795,6 +796,7 @@ object TunnelManager {
                 var lastResetTime = System.currentTimeMillis()
 
                 reader.forEachLine { line ->
+                    com.wdtt.client.lite.RawLog.add(line)
                     // Периодический сброс счетчиков ошибок (раз в 60 сек)
                     val now = System.currentTimeMillis()
                     if (now - lastResetTime > 60000) {
@@ -1327,6 +1329,7 @@ object TunnelManager {
                 // Если процесс умер сам, ловим код выхода
                 try {
                     val exitCode = observedProcess.exitValue()
+                    com.wdtt.client.lite.RawLog.marker("клиент завершился, код $exitCode")
                     if (exitCode != 0 && !transportRestartInProgress) {
                         updateLog("sys_exit", "Процесс крашнулся с кодом $exitCode", 99, true)
                     }
@@ -1413,6 +1416,7 @@ object TunnelManager {
     }
 
     private fun handleCriticalError(message: String) {
+        com.wdtt.client.lite.RawLog.marker("приложение остановило туннель: $message")
         updateLog("circuit_breaker", "[СТОП] $message", -1, true)
         stop()
     }

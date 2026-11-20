@@ -17,6 +17,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -120,7 +122,7 @@ fun ProfileSheet(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 LiteSettings.WARN_DAY_CHOICES.forEach { d ->
                     ArdttChoiceChip(
-                        label = "За ${SubscriptionText.days(d.toLong())}",
+                        label = SubscriptionText.days(d.toLong()),
                         selected = d == warnDays,
                         enabled = warnEnabled,
                         onClick = { scope.launch { lite.saveWarnDays(d) } },
@@ -152,6 +154,40 @@ fun ProfileSheet(
                 ArdttButton(
                     text = "Сохранить",
                     onClick = { scope.launch { TunnelActions.saveCallLink(context, profile.id, link) } },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+
+        Block("Пароль подключения") {
+            var pass by remember(profile.id, profile.password) { mutableStateOf(profile.password) }
+            var shown by remember { mutableStateOf(false) }
+            ArdttTextField(
+                value = pass,
+                onValueChange = { pass = it },
+                placeholder = "Пароль",
+                visualTransformation = if (shown) androidx.compose.ui.text.input.VisualTransformation.None
+                    else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Password,
+                    autoCorrectEnabled = false,
+                ),
+                trailingIcon = {
+                    androidx.compose.material3.IconButton(onClick = { shown = !shown }) {
+                        androidx.compose.material3.Icon(
+                            if (shown) androidx.compose.material.icons.Icons.Outlined.VisibilityOff
+                            else androidx.compose.material.icons.Icons.Outlined.Visibility,
+                            contentDescription = if (shown) "Скрыть пароль" else "Показать пароль",
+                        )
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            if (pass.trim() != profile.password.trim()) {
+                ArdttButton(
+                    text = "Сохранить",
+                    onClick = { scope.launch { TunnelActions.savePassword(context, profile.id, pass) } },
+                    enabled = pass.isNotBlank(),
                     modifier = Modifier.fillMaxWidth(),
                 )
             }

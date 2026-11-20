@@ -1,4 +1,3 @@
-import java.util.Properties
 import org.gradle.api.tasks.Exec
 
 plugins {
@@ -22,8 +21,11 @@ android {
         applicationId = "net.qwdtt.lite"
         minSdk = 28
         targetSdk = 35
-        versionCode = 43
-        versionName = "1.4.5"
+        // Minutes since 2020-01-01: grows with every build, local or CI,
+        // so a newer APK always installs over an older one.
+        val buildMinute = ((System.currentTimeMillis() - 1_577_836_800_000L) / 60_000L).toInt()
+        versionCode = buildMinute
+        versionName = "1.0." + buildMinute
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -41,39 +43,23 @@ android {
         }
     }
 
-    val localProperties = Properties()
-    val localPropertiesFile = rootProject.file("local.properties")
-    if (localPropertiesFile.exists()) {
-        localProperties.load(localPropertiesFile.inputStream())
-    }
-
     signingConfigs {
-        create("release") {
-            val keyFile = localProperties.getProperty("KEYSTORE_FILE")
-            if (keyFile != null) {
-                // Резолвим путь: если начинается с "..", берём от корня проекта
-                val resolvedFile = if (keyFile.startsWith("..")) {
-                    // ../release.keystore -> корень проекта / release.keystore
-                    file(rootDir.resolve(keyFile.substring(3)))
-                } else {
-                    file(keyFile)
-                }
-                if (resolvedFile.exists()) {
-                    storeFile = resolvedFile
-                    storePassword = localProperties.getProperty("KEYSTORE_PASSWORD")
-                    keyAlias = localProperties.getProperty("KEY_ALIAS")
-                    keyPassword = localProperties.getProperty("KEY_PASSWORD")
-                } else {
-                    println("WARNING: Keystore file not found: $keyFile (resolved: ${resolvedFile.absolutePath})")
-                }
-            }
-            enableV1Signing = true
+        // One key for every build (local and CI), so any APK installs over another.
+        // Personal private repository: the key is kept in it on purpose.
+        create("lite") {
+            storeFile = file("signing/lite.jks")
+            storePassword = "removed"
+            keyAlias = "lite"
+            keyPassword = "removed"
             enableV2Signing = true
             enableV3Signing = true
         }
     }
 
     buildTypes {
+        getByName("debug") {
+            signingConfig = signingConfigs.getByName("lite")
+        }
         getByName("release") {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -81,20 +67,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            val keyFile = localProperties.getProperty("KEYSTORE_FILE")
-            val resolvedFile = if (keyFile != null && keyFile.startsWith("..")) {
-                file(rootDir.resolve(keyFile.substring(3)))
-            } else if (keyFile != null) {
-                file(keyFile)
-            } else null
-            
-            if (resolvedFile != null && resolvedFile.exists()) {
-                signingConfig = signingConfigs.getByName("release")
-                println("✅ Signing config applied: ${resolvedFile.absolutePath}")
-            } else {
-                println("⚠️ WARNING: Keystore not found, using debug signing")
-                println("   Looked for: ${resolvedFile?.absolutePath ?: keyFile}")
-            }
+            signingConfig = signingConfigs.getByName("lite")
         }
     }
 

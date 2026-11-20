@@ -1,0 +1,434 @@
+package com.wdtt.client.ui.components.control
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.key
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextOverflow
+import com.wdtt.client.ui.components.surface.ArdttFloatingShell
+import com.wdtt.client.ui.theme.ArdttAlpha
+import com.wdtt.client.ui.theme.ArdttButtonLabelStyle
+import com.wdtt.client.ui.theme.ArdttElevation
+import com.wdtt.client.ui.theme.ArdttShapes
+import com.wdtt.client.ui.theme.ArdttSize
+import com.wdtt.client.ui.theme.ArdttSpacing
+import com.wdtt.client.ui.theme.ArdttSurface
+
+enum class ArdttButtonVariant {
+    Primary,
+    Tonal,
+    Outlined,
+    Text,
+    Danger,
+    Icon,
+}
+
+enum class ArdttButtonSize {
+    Regular,
+    Compact,
+}
+
+/**
+ * Shared button contract. [ArdttPrimaryButton] stays as the full-width primary
+ * wrapper used by feed CTAs.
+ */
+@Composable
+fun ArdttButton(
+    text: String = "",
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    variant: ArdttButtonVariant = ArdttButtonVariant.Primary,
+    size: ArdttButtonSize = ArdttButtonSize.Regular,
+    enabled: Boolean = true,
+    busy: Boolean = false,
+    fillMaxWidth: Boolean = ardttButtonFillsWidth(variant, size, text),
+    icon: ImageVector? = null,
+    contentDescription: String? = null,
+    containerColor: Color? = null,
+    contentColor: Color? = null,
+    floating: Boolean = false,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val minHeight = ardttButtonMinHeight(variant, size)
+    val glassPrimary = floating && variant == ArdttButtonVariant.Primary
+    val pair = buttonColors(
+        variant = variant,
+        primary = scheme.primary,
+        onPrimary = scheme.onPrimary,
+        containerOverride = containerColor,
+        contentOverride = contentColor,
+        floating = glassPrimary,
+    )
+    // Glass keeps the shell alpha when disabled. Multiplying it draws a solid
+    // tint first and a see-through fill once the enabled state settles.
+    val disabledPair = ardttDisabledButtonColors(
+        variant = variant,
+        pair = pair,
+        containerOverridden = glassPrimary || containerColor != null,
+    )
+    val clickable = enabled && !busy
+    val showsText = ardttButtonShowsText(variant, text)
+    val semanticsModifier = Modifier.semantics(mergeDescendants = true) {
+        this.role = Role.Button
+        val name = contentDescription ?: text
+        this.contentDescription = name
+        if (busy) this.stateDescription = "Загрузка"
+        if (!enabled) this.disabled()
+    }
+    val widthModifier = if (fillMaxWidth) Modifier.fillMaxWidth() else Modifier
+    val sized = modifier
+        .then(widthModifier)
+        .then(semanticsModifier)
+        .defaultMinSize(minHeight = minHeight)
+
+    val content: @Composable () -> Unit = {
+        if (busy) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(
+                    if (size == ArdttButtonSize.Compact) ArdttSize.SpinnerSmall else ArdttSize.Spinner,
+                ),
+                strokeWidth = ArdttSize.Stroke,
+                color = pair.content,
+            )
+        } else {
+            if (icon != null && variant != ArdttButtonVariant.Icon) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(ArdttSize.Icon),
+                )
+                if (showsText) {
+                    Spacer(modifier = Modifier.width(ArdttSpacing.Small))
+                }
+            }
+            if (showsText) {
+                Text(
+                    text,
+                    style = ArdttButtonLabelStyle,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            } else if (variant == ArdttButtonVariant.Icon && icon != null) {
+                Icon(icon, contentDescription = null, modifier = Modifier.size(ArdttSize.Icon))
+            }
+        }
+    }
+
+    when (variant) {
+        ArdttButtonVariant.Primary, ArdttButtonVariant.Danger -> {
+            if (glassPrimary) {
+                // Material Button draws its fill on a surface layer. On a tab
+                // return that layer shows a solid plate with no label, then the
+                // glass fill and the text. A plain background keeps both together.
+                GlassFillButton(
+                    onClick = onClick,
+                    enabled = clickable,
+                    modifier = sized,
+                    fill = if (clickable) pair.container else disabledPair.container,
+                    label = if (clickable) pair.content else disabledPair.content,
+                    contentPadding = ardttButtonContentPadding(variant, showsText),
+                    content = content,
+                )
+            } else {
+                val castsShadow = ardttFilledButtonCastsShadow(pair.container.alpha, glassPrimary)
+                // Elevation animates after the first frame. Remounting when the
+                // shadow decision changes starts the layer at the new value.
+                key(enabled, castsShadow) {
+                    Button(
+                        onClick = onClick,
+                        enabled = clickable,
+                        modifier = sized,
+                        shape = ArdttShapes.Control,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = pair.container,
+                            contentColor = pair.content,
+                            disabledContainerColor = disabledPair.container,
+                            disabledContentColor = disabledPair.content,
+                        ),
+                        elevation = if (castsShadow) {
+                            ButtonDefaults.buttonElevation(
+                                defaultElevation = ArdttElevation.Raised,
+                                pressedElevation = ArdttElevation.Low,
+                                disabledElevation = ArdttElevation.None,
+                            )
+                        } else {
+                            ButtonDefaults.buttonElevation(
+                                defaultElevation = ArdttElevation.None,
+                                pressedElevation = ArdttElevation.None,
+                                focusedElevation = ArdttElevation.None,
+                                hoveredElevation = ArdttElevation.None,
+                                disabledElevation = ArdttElevation.None,
+                            )
+                        },
+                        contentPadding = ardttButtonContentPadding(variant, showsText),
+                    ) { content() }
+                }
+            }
+        }
+        ArdttButtonVariant.Tonal -> {
+            FilledTonalButton(
+                onClick = onClick,
+                enabled = clickable,
+                modifier = sized,
+                shape = ArdttShapes.Control,
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = pair.container,
+                    contentColor = pair.content,
+                    disabledContainerColor = disabledPair.container,
+                    disabledContentColor = disabledPair.content,
+                ),
+            ) { content() }
+        }
+        ArdttButtonVariant.Outlined -> {
+            OutlinedButton(
+                onClick = onClick,
+                enabled = clickable,
+                modifier = sized,
+                shape = if (size == ArdttButtonSize.Compact) ArdttShapes.Icon else ArdttShapes.Control,
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = pair.content,
+                    disabledContentColor = disabledPair.content,
+                ),
+                contentPadding = ardttButtonContentPadding(variant, showsText),
+            ) { content() }
+        }
+        ArdttButtonVariant.Text -> {
+            TextButton(
+                onClick = onClick,
+                enabled = clickable,
+                modifier = sized.defaultMinSize(minHeight = ArdttSize.TouchTarget),
+                colors = ButtonDefaults.textButtonColors(
+                    contentColor = pair.content,
+                    disabledContentColor = disabledPair.content,
+                ),
+            ) { content() }
+        }
+        ArdttButtonVariant.Icon -> {
+            val iconMin = ardttButtonMinHeight(variant, size)
+            if (size == ArdttButtonSize.Compact && ardttCompactIconUsesExactMinSize()) {
+                Box(
+                    modifier = sized
+                        .size(iconMin)
+                        .clip(ArdttShapes.Pill)
+                        .clickable(enabled = clickable, onClick = onClick),
+                    contentAlignment = Alignment.Center,
+                ) { content() }
+            } else {
+                IconButton(
+                    onClick = onClick,
+                    enabled = clickable,
+                    modifier = sized.defaultMinSize(
+                        minWidth = iconMin,
+                        minHeight = iconMin,
+                    ),
+                    colors = IconButtonDefaults.iconButtonColors(
+                        contentColor = pair.content,
+                        disabledContentColor = disabledPair.content,
+                    ),
+                ) { content() }
+            }
+        }
+    }
+}
+
+/**
+ * Disabled look shared by every variant.
+ *
+ * Filled buttons keep their hue but recede ([ArdttAlpha.DisabledContainer]);
+ * a caller that passed its own `containerColor` (profile switcher lock) already
+ * chose the disabled fill, so that override is kept as is. Labels of every
+ * variant drop to [ArdttAlpha.Disabled] — the same step as menu items and
+ * dimmed chips, so «отключено» reads the same on every control.
+ */
+internal fun ardttDisabledButtonColors(
+    variant: ArdttButtonVariant,
+    pair: ButtonPair,
+    containerOverridden: Boolean,
+): ButtonPair {
+    val filled = variant == ArdttButtonVariant.Primary ||
+        variant == ArdttButtonVariant.Tonal ||
+        variant == ArdttButtonVariant.Danger
+    val container = when {
+        !filled || containerOverridden -> pair.container
+        else -> pair.container.copy(alpha = pair.container.alpha * ArdttAlpha.DisabledContainer)
+    }
+    // Filled labels sit on a still-tinted container: Subtle keeps them legible
+    // against that fill, Disabled is for labels over the plain surface.
+    val contentAlpha = if (filled) ArdttAlpha.Subtle else ArdttAlpha.Disabled
+    return ButtonPair(container, pair.content.copy(alpha = pair.content.alpha * contentAlpha))
+}
+
+/**
+ * Glass sticky fill. Background and label are one layout, so a tab change
+ * cannot paint a solid button before the title.
+ */
+@Composable
+private fun GlassFillButton(
+    onClick: () -> Unit,
+    enabled: Boolean,
+    modifier: Modifier,
+    fill: Color,
+    label: Color,
+    contentPadding: PaddingValues,
+    content: @Composable () -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .clip(ArdttShapes.Control)
+            .background(fill)
+            .border(ArdttFloatingShell.shellBorder(), ArdttShapes.Control)
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        CompositionLocalProvider(LocalContentColor provides label) {
+            Row(
+                modifier = Modifier.padding(contentPadding),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+            ) { content() }
+        }
+    }
+}
+
+/**
+ * Material draws button shadow on a graphics layer that paints the fill opaque
+ * for a frame. Glass and any other translucent fill skip that layer.
+ */
+internal fun ardttFilledButtonCastsShadow(containerAlpha: Float, glassPrimary: Boolean): Boolean =
+    !glassPrimary && containerAlpha >= 0.99f
+
+/** Compact icon chrome stays on the glyph box, not the 48 dp IconButton target. */
+internal fun ardttCompactIconUsesExactMinSize(): Boolean = true
+
+internal fun ardttButtonMinHeight(variant: ArdttButtonVariant, size: ArdttButtonSize) = when {
+    variant == ArdttButtonVariant.Icon && size == ArdttButtonSize.Compact -> ArdttSize.IconLarge
+    variant == ArdttButtonVariant.Icon -> ArdttSize.TouchTarget
+    size == ArdttButtonSize.Compact -> ArdttSize.ButtonCompact
+    else -> ArdttSize.Button
+}
+
+internal fun ardttButtonShowsText(variant: ArdttButtonVariant, text: String): Boolean =
+    variant != ArdttButtonVariant.Icon && text.isNotBlank()
+
+internal fun ardttButtonFillsWidth(
+    variant: ArdttButtonVariant,
+    size: ArdttButtonSize,
+    text: String,
+): Boolean = (variant == ArdttButtonVariant.Primary || variant == ArdttButtonVariant.Danger) &&
+    size == ArdttButtonSize.Regular &&
+    ardttButtonShowsText(variant, text)
+
+internal fun ardttButtonContentPadding(
+    variant: ArdttButtonVariant,
+    showsText: Boolean,
+): PaddingValues = when (variant) {
+    ArdttButtonVariant.Primary, ArdttButtonVariant.Danger ->
+        if (showsText) {
+            PaddingValues(horizontal = ArdttSpacing.Large, vertical = ArdttSpacing.Small)
+        } else {
+            PaddingValues(ArdttSpacing.None)
+        }
+    ArdttButtonVariant.Outlined ->
+        PaddingValues(horizontal = ArdttSpacing.Medium, vertical = ArdttSpacing.TinyPlus)
+    else -> PaddingValues(ArdttSpacing.Small)
+}
+
+internal data class ButtonPair(val container: Color, val content: Color)
+
+/**
+ * Label on a glass CTA. `onPrimary` / `onError` assume an opaque fill and can
+ * disappear on a light tinted shell, so a failing override yields to
+ * [ArdttSurface.contentColorOn].
+ */
+internal fun ardttFloatingContentColor(
+    container: Color,
+    contentOverride: Color?,
+): Color {
+    val readable = ArdttSurface.contentColorOn(container)
+    if (contentOverride == null) return readable
+    return if (ArdttSurface.contrastRatio(contentOverride, container) >= ArdttSurface.TextContrastMin) {
+        contentOverride
+    } else {
+        readable
+    }
+}
+
+@Composable
+private fun buttonColors(
+    variant: ArdttButtonVariant,
+    primary: Color,
+    onPrimary: Color,
+    containerOverride: Color?,
+    contentOverride: Color?,
+    floating: Boolean,
+): ButtonPair {
+    val scheme = MaterialTheme.colorScheme
+    val baseContainer = containerOverride ?: when (variant) {
+        ArdttButtonVariant.Primary -> primary
+        ArdttButtonVariant.Tonal -> scheme.secondaryContainer
+        ArdttButtonVariant.Outlined, ArdttButtonVariant.Text, ArdttButtonVariant.Icon -> Color.Transparent
+        ArdttButtonVariant.Danger -> scheme.error
+    }
+    // Glass keeps the hue at 80%. Solid primary and danger use that same color
+    // composited on the surface, so the two fills match.
+    val matchOpaqueGlass = !floating &&
+        containerOverride == null &&
+        (variant == ArdttButtonVariant.Primary || variant == ArdttButtonVariant.Danger)
+    val container = when {
+        floating -> ArdttFloatingShell.tintedShell(baseContainer)
+        matchOpaqueGlass -> ArdttFloatingShell.opaqueGlassFill(baseContainer, scheme.surface)
+        else -> baseContainer
+    }
+    val fallbackContent = when (variant) {
+        ArdttButtonVariant.Primary -> onPrimary
+        ArdttButtonVariant.Tonal -> scheme.onSecondaryContainer
+        ArdttButtonVariant.Outlined, ArdttButtonVariant.Text -> scheme.primary
+        // A bare glyph inherits the surrounding text color (header, card, banner);
+        // `contentColor` overrides it explicitly.
+        ArdttButtonVariant.Icon -> LocalContentColor.current
+        ArdttButtonVariant.Danger -> scheme.onError
+    }
+    val content = when {
+        floating || matchOpaqueGlass -> ardttFloatingContentColor(container, contentOverride)
+        contentOverride != null -> contentOverride
+        containerOverride != null && container.alpha > 0.04f ->
+            ArdttSurface.contentColorOn(container)
+        else -> fallbackContent
+    }
+    return ButtonPair(container, content)
+}

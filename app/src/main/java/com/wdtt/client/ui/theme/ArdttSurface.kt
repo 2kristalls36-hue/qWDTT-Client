@@ -1,0 +1,190 @@
+package com.wdtt.client.ui.theme
+
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.unit.Dp
+import kotlin.math.pow
+
+/**
+ * Single source of truth for "is this surface dark?" and for the fills derived
+ * from that answer.
+ *
+ * Before, four different rules coexisted — `luminance() < 0.22f` on the
+ * background, `isSystemInDarkTheme()`, and two inline copies of the card
+ * fill lerp — so a forced light theme on a dark system produced mismatched
+ * chrome. Everything now routes through [isDark].
+ */
+object ArdttSurface {
+    /** A background below this luminance is treated as dark chrome. */
+    const val DarkThreshold = 0.22f
+
+    /** A container above this luminance needs dark content on top. */
+    const val LightContainerThreshold = 0.56f
+
+    /** Content color over a light container. */
+    val DarkContent = Color(0xFF1C1B1A)
+
+    /** Content color over a dark container. */
+    val LightContent = Color(0xFFF6FAFF)
+
+    /** Secondary content over a light container. */
+    val MutedDarkContent = Color(0xFF3A4A5F)
+
+    /** Secondary content over a dark container. */
+    val MutedLightContent = Color(0xFFD6E2F0)
+
+    /** Secondary content over the illustrated wallpaper. */
+    val SoftLightContent = Color(0xFFE5EDF8)
+
+    /** Mix of `surface` into `surfaceVariant` used by every card fill. */
+    private const val CardTintDark = 0.10f
+    private const val CardTintLight = 0.28f
+
+    /** Mix used by translucent floating chrome. */
+    private const val ShellTintLight = 0.48f
+
+    /** Opacity of translucent floating chrome. */
+    const val ShellAlphaDark = 0.88f
+    const val ShellAlphaLight = 0.96f
+
+    fun isDark(background: Color): Boolean = background.luminance() < DarkThreshold
+
+    /** WCAG relative luminance of an opaque sRGB color. */
+    fun relativeLuminance(color: Color): Float {
+        fun lin(c: Float): Float {
+            val v = c.coerceIn(0f, 1f)
+            return if (v <= 0.04045f) v / 12.92f else ((v + 0.055f) / 1.055f).pow(2.4f)
+        }
+        return 0.2126f * lin(color.red) + 0.7152f * lin(color.green) + 0.0722f * lin(color.blue)
+    }
+
+    fun contrastRatio(foreground: Color, background: Color): Float {
+        val composed = compositeOver(foreground, background)
+        val l1 = relativeLuminance(composed)
+        val l2 = relativeLuminance(background.copy(alpha = 1f))
+        val lighter = maxOf(l1, l2)
+        val darker = minOf(l1, l2)
+        return (lighter + 0.05f) / (darker + 0.05f)
+    }
+
+    fun compositeOver(source: Color, destination: Color): Color {
+        val a = source.alpha
+        if (a >= 1f) return source.copy(alpha = 1f)
+        val outA = a + destination.alpha * (1f - a)
+        if (outA <= 0f) return Color.Transparent
+        fun ch(s: Float, d: Float): Float = (s * a + d * destination.alpha * (1f - a)) / outA
+        return Color(
+            red = ch(source.red, destination.red),
+            green = ch(source.green, destination.green),
+            blue = ch(source.blue, destination.blue),
+            alpha = outA,
+        )
+    }
+
+    const val TextContrastMin = 4.5f
+
+    fun contentColorOn(
+        container: Color,
+        darkContent: Color = DarkContent,
+        lightContent: Color = LightContent,
+    ): Color {
+        val darkRatio = contrastRatio(darkContent, container)
+        val lightRatio = contrastRatio(lightContent, container)
+        val darkOk = darkRatio >= TextContrastMin
+        val lightOk = lightRatio >= TextContrastMin
+        return when {
+            darkOk && !lightOk -> darkContent
+            lightOk && !darkOk -> lightContent
+            else -> if (darkRatio >= lightRatio) darkContent else lightContent
+        }
+    }
+
+    fun mutedContentColorOn(container: Color): Color = contentColorOn(
+        container = container,
+        darkContent = MutedDarkContent,
+        lightContent = MutedLightContent,
+    )
+
+    fun cardContainerColor(surface: Color, surfaceVariant: Color, dark: Boolean): Color =
+        lerp(surface, surfaceVariant, if (dark) CardTintDark else CardTintLight)
+
+    fun shellContainerColor(surface: Color, surfaceVariant: Color, dark: Boolean): Color =
+        if (dark) {
+            surface.copy(alpha = ShellAlphaDark)
+        } else {
+            lerp(surface, surfaceVariant, ShellTintLight).copy(alpha = ShellAlphaLight)
+        }
+
+    /** Flat in both themes. The contour border is the card edge. */
+    @Suppress("UNUSED_PARAMETER")
+    fun cardShadowElevation(dark: Boolean): Dp = ArdttElevation.None
+
+    /** Log surfaces use the same flat card. */
+    @Suppress("UNUSED_PARAMETER")
+    fun terminalShadowElevation(dark: Boolean): Dp = ArdttElevation.None
+}
+
+/** True when the active color scheme renders dark chrome. */
+@Composable
+@ReadOnlyComposable
+fun isDarkSurface(): Boolean = ArdttSurface.isDark(MaterialTheme.colorScheme.background)
+
+/** Default fill of a section / compact card under the active scheme. */
+@Composable
+@ReadOnlyComposable
+fun cardContainerColor(): Color {
+    val colors = MaterialTheme.colorScheme
+    return ArdttSurface.cardContainerColor(
+        surface = colors.surface,
+        surfaceVariant = colors.surfaceVariant,
+        dark = ArdttSurface.isDark(colors.background),
+    )
+}
+
+/** Default shadow of a section / compact card. Cards are flat. */
+@Composable
+@ReadOnlyComposable
+fun cardShadowElevation(): Dp = ArdttSurface.cardShadowElevation(isDarkSurface())
+
+/** Shadow of a terminal/log surface. Same flat card as the rest. */
+@Composable
+@ReadOnlyComposable
+fun terminalShadowElevation(): Dp =
+    ArdttSurface.terminalShadowElevation(isDarkSurface())
+
+/** Dialog fill under the active Material color scheme. */
+@Composable
+@ReadOnlyComposable
+fun dialogContainerColor(): Color = MaterialTheme.colorScheme.surfaceContainerHigh
+
+/** Modal sheet fill under the active Material color scheme. */
+@Composable
+@ReadOnlyComposable
+fun sheetContainerColor(): Color = MaterialTheme.colorScheme.surface
+
+/** Status text/chip accent on the current surface (not the chip fill). */
+@Composable
+@ReadOnlyComposable
+fun connectedStatusColor(): Color = ArdttColors.connectedForeground(isDarkSurface())
+
+/** Warning text/chip accent on the current surface (not the chip fill). */
+@Composable
+@ReadOnlyComposable
+fun warningStatusColor(): Color = ArdttColors.warningForeground(isDarkSurface())
+
+/** Fill of a selected segmented control, shared by the choice chips. */
+@Composable
+@ReadOnlyComposable
+fun selectedControlContainer(darkAlpha: Float = ArdttAlpha.Fill): Color {
+    val colors = MaterialTheme.colorScheme
+    return if (isDarkSurface()) {
+        colors.primary.copy(alpha = darkAlpha)
+    } else {
+        lerp(colors.primaryContainer, colors.surface, ArdttAlpha.Fill)
+            .copy(alpha = ArdttAlpha.Strong)
+    }
+}

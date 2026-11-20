@@ -19,7 +19,7 @@ android {
     compileSdk = 35
     
     defaultConfig {
-        applicationId = "net.qwdtt.client"
+        applicationId = "net.qwdtt.lite"
         minSdk = 28
         targetSdk = 35
         versionCode = 43
@@ -143,26 +143,8 @@ tasks.register<Exec>("buildNativeLibs") {
     )
 }
 
-tasks.register<Exec>("buildServerAsset") {
-    group = "build"
-    description = "Build Linux server binary and copy it into app assets"
-    workingDir = rootDir
-    environment("GOOS", "linux")
-    environment("GOARCH", "amd64")
-    environment("CGO_ENABLED", "0")
-    commandLine(
-        "go",
-        "build",
-        "-trimpath",
-        "-o",
-        rootDir.resolve("app/src/main/assets/server").absolutePath,
-        "./server",
-    )
-}
-
 tasks.named("preBuild").configure {
     dependsOn("buildNativeLibs")
-    dependsOn("buildServerAsset")
 }
 
 dependencies {
@@ -180,7 +162,6 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation("com.wireguard.android:tunnel:1.0.20230706")
-    implementation("com.github.mwiede:jsch:0.2.16")
     implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
     implementation("com.google.zxing:core:3.5.3")
     implementation("androidx.webkit:webkit:1.12.1")

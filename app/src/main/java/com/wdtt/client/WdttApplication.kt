@@ -14,6 +14,8 @@ class WdttApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         com.wdtt.client.lite.CrashLog.install(this)
+        // The crash report process needs nothing else from the app.
+        if (com.wdtt.client.lite.CrashLog.isCrashProcess(this)) return
         NotificationHelper.ensureTunnelChannel(this)
         AppShortcuts.refreshAsync(this)
         com.wdtt.client.lite.ExpiryWarningWorker.schedule(this)

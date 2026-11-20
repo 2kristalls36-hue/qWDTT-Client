@@ -10,3 +10,9 @@
 
 -dontwarn com.google.android.gms.**
 -dontwarn com.google.mlkit.**
+
+# WorkManager keeps its jobs in a Room database and creates it by class name at
+# startup (androidx.startup). R8 broke that lookup and the app crashed on launch.
+-keep class androidx.work.impl.WorkDatabase { *; }
+-keep class androidx.work.impl.WorkDatabase_Impl { *; }
+-keep class * extends androidx.room.RoomDatabase { <init>(); }

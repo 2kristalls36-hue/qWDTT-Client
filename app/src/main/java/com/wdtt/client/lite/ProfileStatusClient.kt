@@ -19,6 +19,9 @@ import javax.crypto.spec.SecretKeySpec
  * (`/api/profile/challenge` + `/api/profile/status`, HMAC proof with the profile password).
  */
 object ProfileStatusClient {
+    /** API requests go to the connection log, so a failure can be read there. */
+    private fun log(text: String) = RawLog.add("[API] $text")
+    private fun Throwable.describe() = "${javaClass.simpleName}: ${message ?: "без описания"}"
     private const val DEFAULT_DTLS_PORT = 56000
     private const val TIMEOUT_MS = 5000
 
@@ -50,7 +53,9 @@ object ProfileStatusClient {
                 setRequestProperty("Accept", "application/json")
             }
             conn.outputStream.use { it.write(proofBody("status", password, deviceId(context), nonce).toByteArray(Charsets.UTF_8)) }
-            when (conn.responseCode) {
+            val code = conn.responseCode
+            log("status → HTTP $code")
+            when (code) {
                 200 -> {
                     val json = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
                     Check.Ok(
@@ -66,7 +71,8 @@ object ProfileStatusClient {
                 401, 403 -> Check.Rejected
                 else -> Check.Unreachable
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            log("status: ${e.describe()}")
             Check.Unreachable
         } finally {
             conn?.disconnect()
@@ -91,7 +97,9 @@ object ProfileStatusClient {
                 }
                 val body = proofBody("status", password, deviceId(context), nonce)
                 conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
-                if (conn.responseCode != 200) return@withContext null
+                val code = conn.responseCode
+                log("status → HTTP $code")
+                if (code != 200) return@withContext null
                 val json = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
                 SubscriptionInfo(
                     expiresAt = json.optLong("expires_at", 0L),
@@ -99,7 +107,8 @@ object ProfileStatusClient {
                     boundDevices = json.optInt("bound_devices", 0),
                     checkedAt = System.currentTimeMillis(),
                 )
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                log("status: ${e.describe()}")
                 null
             } finally {
                 conn?.disconnect()
@@ -122,8 +131,11 @@ object ProfileStatusClient {
             }
             val body = proofBody("unbind", password, deviceId(context), nonce)
             conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
-            conn.responseCode == 200
-        } catch (_: Exception) {
+            val code = conn.responseCode
+            log("unbind → HTTP $code")
+            code == 200
+        } catch (e: Exception) {
+            log("unbind: ${e.describe()}")
             false
         } finally {
             conn?.disconnect()
@@ -131,6 +143,7 @@ object ProfileStatusClient {
     }
 
     private fun challenge(endpoint: String): String? {
+        log("challenge $endpoint")
         var conn: HttpURLConnection? = null
         return try {
             conn = (URL("$endpoint/api/profile/challenge").openConnection() as HttpURLConnection).apply {
@@ -140,10 +153,13 @@ object ProfileStatusClient {
                 doOutput = true
             }
             conn.outputStream.use { it.write(ByteArray(0)) }
-            if (conn.responseCode != 200) null
+            val code = conn.responseCode
+            log("challenge → HTTP $code")
+            if (code != 200) null
             else JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
                 .optString("nonce").takeIf { it.isNotBlank() }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            log("challenge: ${e.describe()}")
             null
         } finally {
             conn?.disconnect()

@@ -561,6 +561,10 @@ object TunnelManager {
                         rawTunSockName = TunFdBridge.newSocketName()
                         cmd.add("-tun-fd-sock")
                         cmd.add(TunFdBridge.goSockPath(rawTunSockName))
+                        // Requests to the server API go through the tunnel (see go_client/api_tunnel.go).
+                        val apiTarget = PeerAddress.host(params.peer) + ":" + com.wdtt.client.lite.ProfileStatusClient.API_PORT
+                        cmd += listOf("-api-proxy", com.wdtt.client.lite.ProfileStatusClient.TUNNEL_PROXY, "-api-target", apiTarget)
+                        com.wdtt.client.lite.ProfileStatusClient.tunnelHost = PeerAddress.host(params.peer)
                         updateLog("conn_mode", "[СЕТЬ] Режим: VPN (raw-IP, без WireGuard)", 1, false)
                     }
                     mode == SettingsStore.CONNECTION_MODE_VPN -> {

@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/netip"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -191,6 +193,8 @@ func main() {
 	noDTLS := flag.Bool("notls", false, "прямой режим: RTP-obfs AEAD без DTLS поверх TURN (нужен сервер с -listen-direct)")
 	turnTCP := flag.Bool("turn-tcp", false, "то же, что -turn-transport tcp (оставлено для совместимости)")
 	turnTransport := flag.String("turn-transport", "", "транспорт до TURN-relay VK: udp или tcp (по умолчанию udp, или tcp при -turn-tcp)")
+	apiProxy := flag.String("api-proxy", "", "rawtun: локальный адрес 127.0.0.1:порт для запросов приложения к API сервера через туннель")
+	apiTarget := flag.String("api-target", "", "rawtun: адрес HTTP API сервера ip:порт (цель прокси API)")
 	tunFdSock := flag.String("tun-fd-sock", "", "unix-сокет для получения TUN fd от Android (только -mode rawtun)")
 	diagOnly := flag.Bool("diag", false, "проверить соединение через VK (TURN, сервер, пароль, порты, MTU) и выйти")
 	diagKeyToken := flag.String("diag-key", "", "ключ диагностики сервера из ссылки (dk=)")
@@ -483,6 +487,7 @@ func main() {
 				rawDiagf("recvTunFD успешен на попытке #%d, fd=%v", attempt, tunFile.Fd())
 				disp.AttachTUN(tunFile)
 				log.Println("[RAW] TUN подключён, трафик пошёл")
+				startAPIProxy(ctx, disp, ip, mtuStr, *apiProxy, *apiTarget)
 				return
 			}
 
@@ -579,4 +584,55 @@ func main() {
 	close(configCh)
 	<-configDone
 	log.Println("[КЛИЕНТ] Все воркеры завершены")
+}
+
+// startAPIProxy поднимает стек api_tunnel.go для запросов приложения к API
+// сервера через туннель. Ошибка здесь не влияет на сам туннель.
+func startAPIProxy(ctx context.Context, disp *Dispatcher, ipStr, mtuStr, listen, target string) {
+	if listen == "" || target == "" {
+		return
+	}
+	tunIP, err := netip.ParseAddr(strings.TrimSpace(strings.SplitN(ipStr, "/", 2)[0]))
+	if err != nil {
+		log.Printf("[API] Адрес туннеля не распознан (%q): %v", ipStr, err)
+		return
+	}
+	dst, err := resolveAPITarget(ctx, target)
+	if err != nil {
+		log.Printf("[API] Адрес API сервера не распознан (%q): %v", target, err)
+		return
+	}
+	mtu, _ := strconv.Atoi(strings.TrimSpace(mtuStr))
+	t, err := newAPITunnel(ctx, tunIP, mtu, disp.injectUp)
+	if err != nil {
+		log.Printf("[API] Стек не создан: %v", err)
+		return
+	}
+	disp.AttachAPI(t)
+	go func() {
+		defer t.close()
+		if err := serveAPIProxy(ctx, listen, dst, t); err != nil {
+			log.Printf("[API] Прокси остановлен: %v", err)
+		}
+	}()
+}
+
+// resolveAPITarget принимает ip:порт или имя:порт (имя разрешается в IPv4).
+func resolveAPITarget(ctx context.Context, target string) (netip.AddrPort, error) {
+	if ap, err := netip.ParseAddrPort(target); err == nil && ap.Addr().Is4() {
+		return ap, nil
+	}
+	host, portStr, err := net.SplitHostPort(target)
+	if err != nil {
+		return netip.AddrPort{}, err
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return netip.AddrPort{}, err
+	}
+	addrs, err := net.DefaultResolver.LookupNetIP(ctx, "ip4", host)
+	if err != nil || len(addrs) == 0 {
+		return netip.AddrPort{}, fmt.Errorf("имя %s не разрешилось: %v", host, err)
+	}
+	return netip.AddrPortFrom(addrs[0].Unmap(), uint16(port)), nil
 }

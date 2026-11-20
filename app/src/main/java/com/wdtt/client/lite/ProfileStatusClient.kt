@@ -19,6 +19,36 @@ import javax.crypto.spec.SecretKeySpec
  * (`/api/profile/challenge` + `/api/profile/status`, HMAC proof with the profile password).
  */
 object ProfileStatusClient {
+    /** Port of the server HTTP API (the same TCP port as the server's main listener). */
+    const val API_PORT = 56000
+    /** Local entrance the Go client opens while the RAW tunnel is up. */
+    const val TUNNEL_PROXY = "127.0.0.1:9123"
+
+    /** Server host of the running tunnel, set when the client starts. */
+    @Volatile var tunnelHost: String = ""
+
+    /**
+     * Where to send API requests for [peer]: through the running tunnel when it leads to
+     * the same server (works on networks with whitelists), otherwise directly.
+     */
+    private fun endpoints(peer: String): List<String> {
+        // The API listens on the server's main port; a profile link may carry another
+        // port (direct or raw), which must not be used for the API.
+        val direct = "http://${PeerAddress.httpEndpoint(PeerAddress.host(peer), API_PORT)}"
+        val viaTunnel = com.wdtt.client.TunnelManager.running.value &&
+            tunnelHost.isNotBlank() && PeerAddress.host(peer) == tunnelHost
+        return if (viaTunnel) listOf("http://$TUNNEL_PROXY", direct) else listOf(direct)
+    }
+
+    /** First endpoint that answers the challenge, with its nonce. */
+    private fun open(peer: String): Pair<String, String>? {
+        for (e in endpoints(peer)) {
+            val nonce = challenge(e)
+            if (nonce != null) return e to nonce
+        }
+        return null
+    }
+
     /** API requests go to the connection log, so a failure can be read there. */
     private fun log(text: String) = RawLog.add("[API] $text")
     private fun Throwable.describe() = "${javaClass.simpleName}: ${message ?: "без описания"}"
@@ -39,8 +69,7 @@ object ProfileStatusClient {
 
     suspend fun check(context: Context, peer: String, password: String): Check = withContext(Dispatchers.IO) {
         if (peer.isBlank() || password.isBlank()) return@withContext Check.Rejected
-        val endpoint = "http://${PeerAddress.httpEndpoint(peer, DEFAULT_DTLS_PORT)}"
-        val nonce = challenge(endpoint) ?: return@withContext Check.Unreachable
+        val (endpoint, nonce) = open(peer) ?: return@withContext Check.Unreachable
         var conn: HttpURLConnection? = null
         try {
             conn = (URL("$endpoint/api/profile/status").openConnection() as HttpURLConnection).apply {
@@ -82,8 +111,7 @@ object ProfileStatusClient {
     suspend fun fetch(context: Context, peer: String, password: String): SubscriptionInfo? =
         withContext(Dispatchers.IO) {
             if (peer.isBlank() || password.isBlank()) return@withContext null
-            val endpoint = "http://${PeerAddress.httpEndpoint(peer, DEFAULT_DTLS_PORT)}"
-            val nonce = challenge(endpoint) ?: return@withContext null
+            val (endpoint, nonce) = open(peer) ?: return@withContext null
             var conn: HttpURLConnection? = null
             try {
                 conn = (URL("$endpoint/api/profile/status").openConnection() as HttpURLConnection).apply {
@@ -118,8 +146,7 @@ object ProfileStatusClient {
     /** Unbinds this device from the profile password, freeing its place for another device. */
     suspend fun unbindThisDevice(context: Context, peer: String, password: String): Boolean = withContext(Dispatchers.IO) {
         if (peer.isBlank() || password.isBlank()) return@withContext false
-        val endpoint = "http://${PeerAddress.httpEndpoint(peer, DEFAULT_DTLS_PORT)}"
-        val nonce = challenge(endpoint) ?: return@withContext false
+        val (endpoint, nonce) = open(peer) ?: return@withContext false
         var conn: HttpURLConnection? = null
         try {
             conn = (URL("$endpoint/api/profile/unbind").openConnection() as HttpURLConnection).apply {

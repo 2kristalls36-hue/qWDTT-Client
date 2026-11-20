@@ -117,6 +117,33 @@ type Dispatcher struct {
 	tunReadCount    uint64
 	tunSentCount    uint64
 	tunDroppedCount uint64
+
+	// api — стек для запросов приложения к API сервера через туннель (rawtun).
+	api atomic.Pointer[apiTunnel]
+}
+
+// AttachAPI включает разбор ответов для стека api_tunnel.go.
+func (d *Dispatcher) AttachAPI(t *apiTunnel) { d.api.Store(t) }
+
+// injectUp отправляет в туннель пакет, рождённый внутри клиента (стек API),
+// так же, как пакет из TUN. При перегрузке всех воркеров пакет теряется —
+// TCP стека повторит его сам.
+func (d *Dispatcher) injectUp(b []byte) {
+	pkt := getPktBuf(len(b))
+	copy(pkt, b)
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	nw := len(d.workers)
+	for i := 0; i < nw; i++ {
+		w := d.workers[(d.rrIndex+i)%nw]
+		select {
+		case w.SendCh <- pkt:
+			d.stats.TotalBytesUp.Add(int64(len(b)))
+			return
+		default:
+		}
+	}
+	putPktBuf(pkt)
 }
 
 func NewDispatcher(ctx context.Context, localConn net.PacketConn, stats *Stats) *Dispatcher {
@@ -414,6 +441,12 @@ func (d *Dispatcher) writeLoop() {
 		case <-d.ctx.Done():
 			return
 		case pkt := <-d.ReturnCh:
+			if api := d.api.Load(); api != nil && api.owns(pkt) {
+				api.deliver(pkt)
+				d.stats.TotalBytesDown.Add(int64(len(pkt)))
+				putPktBuf(pkt)
+				continue
+			}
 			if d.tunFile != nil {
 				if atomic.CompareAndSwapUint32(&d.firstPktDown, 0, 1) {
 					log.Printf("[ДИСП] [ДЕБАГ] Отправляем ПЕРВЫЙ пакет обратно в TUN (%d байт)", len(pkt))

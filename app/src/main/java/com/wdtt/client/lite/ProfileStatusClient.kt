@@ -59,6 +59,31 @@ object ProfileStatusClient {
             }
         }
 
+    /** Unbinds every device from the profile password, so this device can bind on connect. */
+    suspend fun unbindAll(peer: String, password: String): Boolean = withContext(Dispatchers.IO) {
+        if (peer.isBlank() || password.isBlank()) return@withContext false
+        val endpoint = "http://${PeerAddress.httpEndpoint(peer, DEFAULT_DTLS_PORT)}"
+        val nonce = challenge(endpoint) ?: return@withContext false
+        var conn: HttpURLConnection? = null
+        try {
+            conn = (URL("$endpoint/api/profile/unbind").openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = TIMEOUT_MS
+                readTimeout = TIMEOUT_MS
+                doOutput = true
+                setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+            }
+            // An empty device id means «all devices» on the server.
+            val body = proofBody("unbind", password, "", nonce)
+            conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+            conn.responseCode == 200
+        } catch (_: Exception) {
+            false
+        } finally {
+            conn?.disconnect()
+        }
+    }
+
     private fun challenge(endpoint: String): String? {
         var conn: HttpURLConnection? = null
         return try {

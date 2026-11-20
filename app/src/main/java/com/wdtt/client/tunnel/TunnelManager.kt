@@ -833,9 +833,11 @@ object TunnelManager {
                     // 0. FATAL AUTH — мгновенная остановка (пароль / срок / устройство)
                     if (lineTrim.contains("FATAL_AUTH")) {
                         val reason = when {
-                            lineTrim.contains("неверный пароль") -> "Неверный пароль подключения"
-                            lineTrim.contains("истёк") -> "Срок действия пароля истёк"
+                            // The client appends a generic hint to every reason, so the
+                            // specific reasons are checked before the generic one.
                             lineTrim.contains("другому устройству") -> "Пароль привязан к другому устройству"
+                            lineTrim.contains("срок действия пароля истёк") -> "Срок действия пароля истёк"
+                            lineTrim.contains("неверный пароль") -> "Неверный пароль подключения"
                             else -> "Ошибка авторизации"
                         }
                         handleCriticalError("\uD83D\uDD12 $reason. Воркеры остановлены.")
@@ -1417,6 +1419,7 @@ object TunnelManager {
 
     private fun handleCriticalError(message: String) {
         com.wdtt.client.lite.RawLog.marker("приложение остановило туннель: $message")
+        lastFatalError.value = message.removePrefix("\uD83D\uDD12 ").removeSuffix(" Воркеры остановлены.")
         updateLog("circuit_breaker", "[СТОП] $message", -1, true)
         stop()
     }

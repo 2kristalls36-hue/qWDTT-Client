@@ -103,7 +103,12 @@ fun HomeScreen(settingsStore: SettingsStore, onOpenProfiles: () -> Unit) {
 
     // A failed start ends quietly in the engine; show its reason once.
     val fatal by TunnelManager.lastFatalError.collectAsStateWithLifecycle()
-    LaunchedEffect(fatal) { fatal?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() } }
+    LaunchedEffect(fatal) {
+        val reason = fatal ?: return@LaunchedEffect
+        Toast.makeText(context, reason, Toast.LENGTH_LONG).show()
+        // The binding can be reset right in the profile sheet.
+        if (reason.contains("другому устройству")) sheetOpen = true
+    }
 
     // The home screen widget mirrors level, profile and state.
     LaunchedEffect(level, profile?.name, state, ping) { com.wdtt.client.TunnelWidgetProvider.refresh(context) }

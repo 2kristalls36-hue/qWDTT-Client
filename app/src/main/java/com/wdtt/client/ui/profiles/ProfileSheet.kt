@@ -75,6 +75,37 @@ fun ProfileSheet(
     val view = SubscriptionText.view(sub, warnDays)
 
     LaunchedEffect(profile.id) { TunnelActions.refreshSubscription(context, profile.id) }
+    var confirmUnbind by remember { mutableStateOf(false) }
+    var unbinding by remember { mutableStateOf(false) }
+    if (confirmUnbind) {
+        com.wdtt.client.ui.components.surface.ArdttDialog(
+            title = "Сбросить привязку устройств?",
+            onDismissRequest = { if (!unbinding) confirmUnbind = false },
+            confirmAction = com.wdtt.client.ui.components.surface.ArdttDialogAction(
+                "Сбросить", destructive = true, enabled = !unbinding,
+                onClick = {
+                    unbinding = true
+                    scope.launch {
+                        val ok = com.wdtt.client.lite.ProfileStatusClient.unbindAll(profile.peer, profile.password)
+                        unbinding = false
+                        confirmUnbind = false
+                        android.widget.Toast.makeText(
+                            context,
+                            if (ok) "Привязка устройств сброшена." else "Сервер не ответил. Привязка не сброшена.",
+                            android.widget.Toast.LENGTH_LONG,
+                        ).show()
+                        if (ok) TunnelActions.refreshSubscription(context, profile.id)
+                    }
+                },
+            ),
+            dismissAction = com.wdtt.client.ui.components.surface.ArdttDialogAction("Отмена", onClick = { confirmUnbind = false }),
+        ) {
+            Text(
+                "Пароль будет отвязан от всех устройств, в том числе от qWDTT.\nЭто устройство привяжется при следующем подключении.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+    }
 
     ArdttBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.padding(horizontal = 20.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -197,6 +228,12 @@ fun ProfileSheet(
             InfoRow("Адрес", PeerAddress.host(profile.peer))
             InfoRow("Пинг", if (ping > 0) "$ping мс" else "нет подключения", PingColors.of(ping))
             InfoRow("Устройства", sub?.let { "${it.boundDevices} из ${it.maxDevices}" } ?: "нет данных")
+            ArdttButton(
+                text = "Сбросить привязку устройств",
+                variant = ArdttButtonVariant.Outlined,
+                onClick = { confirmUnbind = true },
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
 
         if (onMakeActive != null && !isActive) {

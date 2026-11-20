@@ -26,6 +26,53 @@ object ProfileStatusClient {
     fun deviceId(context: Context): String =
         Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown"
 
+    /** Result of asking the server about a profile before it is added or connected. */
+    sealed interface Check {
+        data class Ok(val info: SubscriptionInfo, val thisDeviceBound: Boolean) : Check
+        /** The server answered but did not accept the profile: wrong password or expired. */
+        data object Rejected : Check
+        data object Unreachable : Check
+    }
+
+    suspend fun check(context: Context, peer: String, password: String): Check = withContext(Dispatchers.IO) {
+        if (peer.isBlank() || password.isBlank()) return@withContext Check.Rejected
+        val endpoint = "http://${PeerAddress.httpEndpoint(peer, DEFAULT_DTLS_PORT)}"
+        val nonce = challenge(endpoint) ?: return@withContext Check.Unreachable
+        var conn: HttpURLConnection? = null
+        try {
+            conn = (URL("$endpoint/api/profile/status").openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = TIMEOUT_MS
+                readTimeout = TIMEOUT_MS
+                useCaches = false
+                doOutput = true
+                setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+                setRequestProperty("Accept", "application/json")
+            }
+            conn.outputStream.use { it.write(proofBody("status", password, deviceId(context), nonce).toByteArray(Charsets.UTF_8)) }
+            when (conn.responseCode) {
+                200 -> {
+                    val json = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
+                    Check.Ok(
+                        SubscriptionInfo(
+                            expiresAt = json.optLong("expires_at", 0L),
+                            maxDevices = json.optInt("max_devices", 1),
+                            boundDevices = json.optInt("bound_devices", 0),
+                            checkedAt = System.currentTimeMillis(),
+                        ),
+                        thisDeviceBound = json.optBoolean("is_current_bound", false),
+                    )
+                }
+                401, 403 -> Check.Rejected
+                else -> Check.Unreachable
+            }
+        } catch (_: Exception) {
+            Check.Unreachable
+        } finally {
+            conn?.disconnect()
+        }
+    }
+
     suspend fun fetch(context: Context, peer: String, password: String): SubscriptionInfo? =
         withContext(Dispatchers.IO) {
             if (peer.isBlank() || password.isBlank()) return@withContext null
@@ -59,8 +106,8 @@ object ProfileStatusClient {
             }
         }
 
-    /** Unbinds every device from the profile password, so this device can bind on connect. */
-    suspend fun unbindAll(peer: String, password: String): Boolean = withContext(Dispatchers.IO) {
+    /** Unbinds this device from the profile password, freeing its place for another device. */
+    suspend fun unbindThisDevice(context: Context, peer: String, password: String): Boolean = withContext(Dispatchers.IO) {
         if (peer.isBlank() || password.isBlank()) return@withContext false
         val endpoint = "http://${PeerAddress.httpEndpoint(peer, DEFAULT_DTLS_PORT)}"
         val nonce = challenge(endpoint) ?: return@withContext false
@@ -73,8 +120,7 @@ object ProfileStatusClient {
                 doOutput = true
                 setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
             }
-            // An empty device id means «all devices» on the server.
-            val body = proofBody("unbind", password, "", nonce)
+            val body = proofBody("unbind", password, deviceId(context), nonce)
             conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
             conn.responseCode == 200
         } catch (_: Exception) {

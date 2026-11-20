@@ -197,28 +197,30 @@ fun ProfilesScreen(settingsStore: SettingsStore) {
     }
 
     pending?.let { parsed ->
-        val single = parsed.profiles.singleOrNull()
-        ArdttDialog(
-            title = if (single != null) "Новый профиль" else "Найдено профилей: ${parsed.profiles.size}",
-            onDismissRequest = { pending = null },
-            confirmAction = ArdttDialogAction("Добавить", onClick = {
+        ImportPreviewSheet(
+            parsed = parsed,
+            onDismiss = { pending = null },
+            onAdd = { checks ->
                 scope.launch {
-                    if (single != null) store.saveProfile(single)
-                    else store.importProfilesToGroup(parsed.suggestedName?.ifBlank { null } ?: "Импорт", parsed.profiles)
+                    val single = parsed.profiles.singleOrNull()
+                    if (single != null) {
+                        store.saveProfile(single)
+                    } else {
+                        // Same ids as in the preview, so the server answers stay attached to them.
+                        val groupId = store.resolveGroupIdForImport(parsed.suggestedName?.ifBlank { null } ?: "Импорт")
+                        parsed.profiles.forEach { store.saveProfile(it.copy(groupId = groupId)) }
+                    }
+                    // Keep what the server reported, so the profile shows its subscription right away.
+                    val lite = LiteSettings(context)
+                    checks.forEach { (id, c) ->
+                        if (c is com.wdtt.client.lite.ProfileStatusClient.Check.Ok) lite.saveSubscription(id, c.info)
+                    }
                     pending = null
                     ensureActive(context, settingsStore, store)
-                    Toast.makeText(context, "Профиль добавлен.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, if (single != null) "Профиль добавлен." else "Профили добавлены.", Toast.LENGTH_SHORT).show()
                 }
-            }),
-            dismissAction = ArdttDialogAction("Отмена", onClick = { pending = null }),
-        ) {
-            parsed.profiles.take(5).forEach { p ->
-                Text("${p.name.ifBlank { "Профиль" }} · ${PeerAddress.host(p.peer)}", style = MaterialTheme.typography.bodyMedium)
-            }
-            if (parsed.profiles.size > 5) {
-                Text("и ещё ${parsed.profiles.size - 5}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
+            },
+        )
     }
 
     details?.let { p ->

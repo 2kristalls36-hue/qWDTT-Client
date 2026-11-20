@@ -72,14 +72,6 @@ object TunnelActions {
         if (SettingsStore(context).currentProfileId.first() == profileId) store.applyProfile(context, profileId)
     }
 
-    /** Saves the connection password of a profile and re-applies it if active. */
-    suspend fun savePassword(context: Context, profileId: String, password: String) {
-        val store = ProfilesStore(context)
-        val profile = store.getProfileOnce(profileId) ?: return
-        store.saveProfile(profile.copy(password = password.trim()))
-        if (SettingsStore(context).currentProfileId.first() == profileId) store.applyProfile(context, profileId)
-    }
-
     /** Best effort: the server may be unreachable before the tunnel is up. */
     suspend fun refreshSubscription(context: Context, profileId: String) {
         val profile = ProfilesStore(context).getProfileOnce(profileId) ?: return

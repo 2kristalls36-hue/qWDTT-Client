@@ -17,8 +17,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
-import androidx.compose.material.icons.outlined.Visibility
-import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -75,36 +73,10 @@ fun ProfileSheet(
     val view = SubscriptionText.view(sub, warnDays)
 
     LaunchedEffect(profile.id) { TunnelActions.refreshSubscription(context, profile.id) }
-    var confirmUnbind by remember { mutableStateOf(false) }
-    var unbinding by remember { mutableStateOf(false) }
-    if (confirmUnbind) {
-        com.wdtt.client.ui.components.surface.ArdttDialog(
-            title = "Сбросить привязку устройств?",
-            onDismissRequest = { if (!unbinding) confirmUnbind = false },
-            confirmAction = com.wdtt.client.ui.components.surface.ArdttDialogAction(
-                "Сбросить", destructive = true, enabled = !unbinding,
-                onClick = {
-                    unbinding = true
-                    scope.launch {
-                        val ok = com.wdtt.client.lite.ProfileStatusClient.unbindAll(profile.peer, profile.password)
-                        unbinding = false
-                        confirmUnbind = false
-                        android.widget.Toast.makeText(
-                            context,
-                            if (ok) "Привязка устройств сброшена." else "Сервер не ответил. Привязка не сброшена.",
-                            android.widget.Toast.LENGTH_LONG,
-                        ).show()
-                        if (ok) TunnelActions.refreshSubscription(context, profile.id)
-                    }
-                },
-            ),
-            dismissAction = com.wdtt.client.ui.components.surface.ArdttDialogAction("Отмена", onClick = { confirmUnbind = false }),
-        ) {
-            Text(
-                "Пароль будет отвязан от всех устройств, в том числе от qWDTT.\nЭто устройство привяжется при следующем подключении.",
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
+    var transferOpen by remember { mutableStateOf(false) }
+    if (transferOpen) {
+        TransferSheet(profile = profile, onDismiss = { transferOpen = false }, onFinished = onDismiss)
+        return
     }
 
     ArdttBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.padding(horizontal = 20.dp)) {
@@ -190,51 +162,18 @@ fun ProfileSheet(
             }
         }
 
-        Block("Пароль подключения") {
-            var pass by remember(profile.id, profile.password) { mutableStateOf(profile.password) }
-            var shown by remember { mutableStateOf(false) }
-            ArdttTextField(
-                value = pass,
-                onValueChange = { pass = it },
-                placeholder = "Пароль",
-                visualTransformation = if (shown) androidx.compose.ui.text.input.VisualTransformation.None
-                    else androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Password,
-                    autoCorrectEnabled = false,
-                ),
-                trailingIcon = {
-                    androidx.compose.material3.IconButton(onClick = { shown = !shown }) {
-                        androidx.compose.material3.Icon(
-                            if (shown) androidx.compose.material.icons.Icons.Outlined.VisibilityOff
-                            else androidx.compose.material.icons.Icons.Outlined.Visibility,
-                            contentDescription = if (shown) "Скрыть пароль" else "Показать пароль",
-                        )
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-            )
-            if (pass.trim() != profile.password.trim()) {
-                ArdttButton(
-                    text = "Сохранить",
-                    onClick = { scope.launch { TunnelActions.savePassword(context, profile.id, pass) } },
-                    enabled = pass.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        }
-
         Block("Сервер") {
             InfoRow("Адрес", PeerAddress.host(profile.peer))
             InfoRow("Пинг", if (ping > 0) "$ping мс" else "нет подключения", PingColors.of(ping))
             InfoRow("Устройства", sub?.let { "${it.boundDevices} из ${it.maxDevices}" } ?: "нет данных")
-            ArdttButton(
-                text = "Сбросить привязку устройств",
-                variant = ArdttButtonVariant.Outlined,
-                onClick = { confirmUnbind = true },
-                modifier = Modifier.fillMaxWidth(),
-            )
         }
+
+        ArdttButton(
+            text = "Перенести на другое устройство",
+            variant = ArdttButtonVariant.Outlined,
+            onClick = { transferOpen = true },
+            modifier = Modifier.fillMaxWidth(),
+        )
 
         if (onMakeActive != null && !isActive) {
             ArdttButton(text = "Сделать активным", onClick = onMakeActive, modifier = Modifier.fillMaxWidth())

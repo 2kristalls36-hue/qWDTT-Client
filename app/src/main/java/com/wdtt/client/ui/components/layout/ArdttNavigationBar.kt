@@ -309,6 +309,9 @@ fun ArdttNavigationBar(
         if (!dragging) selPos.magnetTo(committedIndex.toFloat(), fullRange = range)
     }
     val currentItems by rememberUpdatedState(items)
+    // The drag handler lives across recompositions: read the selected tab through state,
+    // or it would compare against the tab that was selected when the bar first appeared.
+    val currentSelected by rememberUpdatedState(selectedRoute)
     val dragToSelect = Modifier.pointerInput(count) {
         val pad = NavBarDefaults.TrackPadding.toPx()
         fun indexAt(x: Float): Float {
@@ -328,8 +331,8 @@ fun ArdttNavigationBar(
             val target = selPos.value.roundToInt().coerceIn(0, count - 1)
             val route = currentItems[target].route
             hover = -1
-            if (route != selectedRoute) {
-                navTabPendingRoute(selectedRoute, route)?.let { pendingRoute = it }
+            if (route != currentSelected) {
+                navTabPendingRoute(currentSelected, route)?.let { pendingRoute = it }
                 selectTab.value(route)
             }
             scope.launch {

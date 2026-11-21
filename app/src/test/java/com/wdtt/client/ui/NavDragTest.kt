@@ -14,6 +14,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.geometry.Offset
 import com.wdtt.client.ui.components.layout.ArdttNavItem
@@ -52,6 +53,30 @@ class NavDragTest {
         compose.onRoot().performTouchInput { swipe(Offset(a.x, a.y), Offset(c.x + 10f, c.y), durationMillis = 400) }
         compose.waitForIdle()
         assertEquals("c", route)
+    }
+
+    @Test fun dragBackAfterSwitchingTabs() {
+        // Regression: tap to the second tab, then drag back to the first one.
+        var route by mutableStateOf("a")
+        compose.setContent {
+            ArdttTheme {
+                Box(Modifier.fillMaxWidth()) {
+                    ArdttNavigationBar(
+                        items = listOf("a", "b", "c", "d").map { ArdttNavItem(it, "Tab $it", Icons.Outlined.Home) },
+                        selectedRoute = route,
+                        onSelect = { route = it },
+                    )
+                }
+            }
+        }
+        compose.onNodeWithText("Tab b").performClick()
+        compose.waitForIdle()
+        assertEquals("b", route)
+        val a = compose.onNodeWithText("Tab a").fetchSemanticsNode().boundsInRoot.center
+        val b = compose.onNodeWithText("Tab b").fetchSemanticsNode().boundsInRoot.center
+        compose.onRoot().performTouchInput { swipe(Offset(b.x, b.y), Offset(a.x - 10f, a.y), durationMillis = 400) }
+        compose.waitForIdle()
+        assertEquals("a", route)
     }
 
     @Test fun magnetBetweenTabs() {

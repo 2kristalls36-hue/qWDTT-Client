@@ -37,6 +37,9 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.wdtt.client.ui.components.surface.glassBackdropSource
+import androidx.compose.ui.layout.layout
+import androidx.compose.animation.core.animateFloatAsState
 import com.wdtt.client.ui.motion.magnetTo
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
@@ -391,8 +394,57 @@ fun ArdttNavigationBar(
                 .then(dragToSelect),
         ) {
             CompositionLocalProvider(LocalContentColor provides colors.onSurface) {
-                SelectionDroplet(count = count, pos = selPos.value, velocity = selPos.velocity, dark = dark, glass = true)
-                tabs()
+                // While dragging, the droplet rises above the tabs as a glass lens that
+                // magnifies the icon under it and bends the neighbours along its rim.
+                val lens by animateFloatAsState(
+                    if (dragging) 1f else 0f,
+                    spring(dampingRatio = 0.6f, stiffness = 420f),
+                    label = "tabLens",
+                )
+                val tabsLayer = androidx.compose.ui.graphics.rememberGraphicsLayer()
+                val tabsGlass = remember(tabsLayer) { com.wdtt.client.ui.components.surface.GlassBackdrop(tabsLayer) }
+                Box(Modifier.matchParentSize().graphicsLayer { this.alpha = 1f - lens }) {
+                    SelectionDroplet(count = count, pos = selPos.value, velocity = selPos.velocity, dark = dark, glass = true)
+                }
+                Box(Modifier.matchParentSize().glassBackdropSource(tabsGlass)) {
+                    tabs()
+                }
+                if (lens > 0.01f) {
+                    val trackH = ArdttSize.NavTrack
+                    Box(
+                        Modifier
+                            .matchParentSize()
+                            .layout { measurable, constraints ->
+                                val pad = NavBarDefaults.TrackPadding.toPx()
+                                val slot = (constraints.maxWidth - pad * 2) / count
+                                val lh = (trackH.toPx() - 8.dp.toPx()) * (0.86f + 0.14f * lens)
+                                val lw = slot * (0.9f + 0.25f * lens)
+                                val placeable = measurable.measure(
+                                    androidx.compose.ui.unit.Constraints.fixed(lw.roundToInt(), lh.roundToInt())
+                                )
+                                layout(constraints.maxWidth, constraints.maxHeight) {
+                                    val cx = pad + slot * (selPos.value + 0.5f)
+                                    placeable.place((cx - lw / 2f).roundToInt(), ((constraints.maxHeight - lh) / 2f).roundToInt())
+                                }
+                            }
+                            .shadow((6f * lens).dp, androidx.compose.foundation.shape.RoundedCornerShape(50), ambientColor = Color.Black.copy(alpha = 0.3f), spotColor = Color.Black.copy(alpha = 0.3f)),
+                    ) {
+                        LiquidGlassPanel(
+                            backdrop = tabsGlass,
+                            cornerRadius = 40.dp,
+                            tint = Color.White.copy(alpha = if (dark) 0.06f else 0.16f),
+                            dark = dark,
+                            // Shallow bend: a deep one would mirror the label at the lower rim.
+                            bezel = 10.dp,
+                            depth = 8.dp,
+                            zoom = 0.14f,
+                            blur = 0.dp,
+                            underlay = lerp(colors.surface, Color.White, if (dark) 0.06f else 0.5f),
+                            fringe = 0.45f,
+                            modifier = Modifier.fillMaxSize().graphicsLayer { this.alpha = lens.coerceIn(0f, 1f) },
+                        ) {}
+                    }
+                }
             }
         }
         return

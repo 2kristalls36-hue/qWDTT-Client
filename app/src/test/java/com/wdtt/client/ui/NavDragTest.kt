@@ -8,6 +8,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import com.github.takahirom.roborazzi.captureRoboImage
+import androidx.compose.foundation.background
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -59,4 +61,41 @@ class NavDragTest {
         val near = tabMagnet(1.88f) - tabMagnet(1.86f)
         assert(near > far)
     }
+
+    private fun lensShot(theme: String) {
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            ArdttTheme(themeMode = theme) {
+                val glass = com.wdtt.client.ui.components.surface.GlassBackdrop(androidx.compose.ui.graphics.rememberGraphicsLayer())
+                androidx.compose.runtime.CompositionLocalProvider(com.wdtt.client.ui.components.surface.LocalGlassBackdrop provides glass) {
+                    Box(Modifier.fillMaxWidth().background(androidx.compose.material3.MaterialTheme.colorScheme.background)) {
+                        ArdttNavigationBar(
+                            items = listOf(
+                                ArdttNavItem("tunnel", "Главная", Icons.Outlined.Home, glyph = com.wdtt.client.ui.components.layout.LiteTabIcons.Power),
+                                ArdttNavItem("profiles", "Профили", Icons.Outlined.Home, glyph = com.wdtt.client.ui.components.layout.LiteTabIcons.Cards),
+                                ArdttNavItem("exceptions", "Приложения", Icons.Outlined.Home, glyph = com.wdtt.client.ui.components.layout.LiteTabIcons.Tiles),
+                                ArdttNavItem("settings", "Настройки", Icons.Outlined.Home),
+                            ),
+                            selectedRoute = "tunnel",
+                            onSelect = {},
+                        )
+                    }
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(500)
+        val a = compose.onNodeWithText("Главная").fetchSemanticsNode().boundsInRoot.center
+        val b = compose.onNodeWithText("Профили").fetchSemanticsNode().boundsInRoot.center
+        compose.onRoot().performTouchInput {
+            down(Offset(a.x, a.y))
+            moveTo(Offset(a.x + 40f, a.y)); moveTo(Offset((a.x + b.x) / 2f + 30f, a.y)); moveTo(Offset(b.x - 10f, a.y))
+        }
+        compose.mainClock.advanceTimeBy(500)
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/tab_lens_$theme.png")
+        compose.onRoot().performTouchInput { up() }
+        compose.mainClock.advanceTimeBy(800)
+    }
+
+    @Test fun tabLensLight() = lensShot("light")
+    @Test fun tabLensDark() = lensShot("dark")
 }

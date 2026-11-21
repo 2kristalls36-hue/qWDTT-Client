@@ -173,7 +173,8 @@ private object GlassShader {
             float2 n = float2(
                 sdRoundRect(p + float2(e, 0.0), half_size, radius) - sdRoundRect(p - float2(e, 0.0), half_size, radius),
                 sdRoundRect(p + float2(0.0, e), half_size, radius) - sdRoundRect(p - float2(0.0, e), half_size, radius));
-            n = n / max(length(n), 0.0001);
+            float nl = length(n);
+            n = nl > 0.0001 ? n / nl : float2(0.0, -1.0);
 
             // Convex bezel: strongest bend right at the rim, none past the bezel width.
             // Kept clear of the middle: there the rim normal flips and would tear the image.
@@ -210,7 +211,8 @@ private object GlassShader {
             float spec2 = pow(max(dot(n, -light), 0.0), 3.0) * 0.45;
 
             // Iridescent fringe inside the bezel, hue travelling along the rim.
-            float edgeAngle = atan(n.y, n.x) / 6.2831853;
+            // Guarded: at the very centre of a round panel the normal is zero and atan is undefined.
+            float edgeAngle = atan(n.y, n.x + 0.00001) / 6.2831853;
             half3 iri = 0.5 + 0.5 * cos(6.2831853 * (edgeAngle * 1.5 + time) + half3(0.0, 2.094, 4.188));
             float fringe = smoothstep(bezel * 0.7, 0.0, inside) * (dark > 0.5 ? 0.30 : 0.38);
             col += iri * fringe * fringeK * (0.45 + 0.55 * (spec + spec2));

@@ -32,6 +32,7 @@ class LiteSettings(context: Context) {
         private val POWER = intPreferencesKey("power_level")
         private val WARN_ENABLED = booleanPreferencesKey("expiry_warn_enabled")
         private val WARN_DAYS = intPreferencesKey("expiry_warn_days")
+        private val CONNECT_ON_BOOT = booleanPreferencesKey("connect_on_boot")
         const val DEFAULT_WARN_DAYS = 3
         val WARN_DAY_CHOICES = listOf(1, 3, 7)
 
@@ -50,6 +51,9 @@ class LiteSettings(context: Context) {
     val warnDays: Flow<Int> = store.data.map { it[WARN_DAYS] ?: DEFAULT_WARN_DAYS }
     suspend fun saveWarnEnabled(enabled: Boolean) = store.edit { it[WARN_ENABLED] = enabled }
     suspend fun saveWarnDays(days: Int) = store.edit { it[WARN_DAYS] = days }
+
+    val connectOnBoot: Flow<Boolean> = store.data.map { it[CONNECT_ON_BOOT] ?: false }
+    suspend fun saveConnectOnBoot(enabled: Boolean) = store.edit { it[CONNECT_ON_BOOT] = enabled }
 
     fun subscription(profileId: String): Flow<SubscriptionInfo?> = store.data.map { p ->
         val checked = p[checkedKey(profileId)] ?: return@map null

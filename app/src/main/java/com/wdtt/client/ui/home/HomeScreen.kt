@@ -39,6 +39,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.foundation.layout.width
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.infiniteRepeatable
@@ -148,12 +152,14 @@ fun HomeScreen(settingsStore: SettingsStore, onOpenProfiles: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
         Row(Modifier.fillMaxWidth().widthIn(max = 460.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(
+            com.wdtt.client.ui.components.control.FitText(
                 "qWDTT Client",
                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.onBackground,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Start,
                 modifier = Modifier
                     .weight(1f)
+                    .padding(end = 8.dp)
                     .pointerInput(Unit) { detectTapGestures(onLongPress = { logsOpen = true }) },
             )
             ProfileChip(
@@ -214,6 +220,7 @@ fun HomeScreen(settingsStore: SettingsStore, onOpenProfiles: () -> Unit) {
     }
 
     if (logsOpen) LogsSheet(onDismiss = { logsOpen = false })
+
 
     // The app crashed last time: show what happened so it can be sent to the developer.
     var crash by remember { mutableStateOf(com.wdtt.client.lite.CrashLog.read(context)) }

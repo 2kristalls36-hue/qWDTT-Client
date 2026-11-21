@@ -1,3 +1,4 @@
+import java.util.Properties
 import org.gradle.api.tasks.Exec
 
 plugins {
@@ -25,7 +26,9 @@ android {
         // so a newer APK always installs over an older one.
         val buildMinute = ((System.currentTimeMillis() - 1_577_836_800_000L) / 60_000L).toInt()
         versionCode = buildMinute
-        versionName = "1.0." + buildMinute
+        // Release version. The release workflow checks that the tag (v1.0.0) matches it;
+        // the in-app update check compares it with the latest GitHub release.
+        versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -43,23 +46,31 @@ android {
         }
     }
 
+    // Release key comes from local.properties or the environment (CI secrets), never from
+    // the repository. Without it a release build falls back to the debug key, so local
+    // builds work but do not install over published releases.
+    val signingProps = Properties().apply {
+        val f = rootProject.file("local.properties")
+        if (f.exists()) f.inputStream().use { load(it) }
+    }
+    fun signingValue(name: String): String? =
+        signingProps.getProperty(name)?.takeIf { it.isNotBlank() } ?: System.getenv(name)?.takeIf { it.isNotBlank() }
+    val releaseKeystore = signingValue("KEYSTORE_FILE")?.let { file(it) }?.takeIf { it.exists() }
+
     signingConfigs {
-        // One key for every build (local and CI), so any APK installs over another.
-        // Personal private repository: the key is kept in it on purpose.
-        create("lite") {
-            storeFile = file("signing/lite.jks")
-            storePassword = "removed"
-            keyAlias = "lite"
-            keyPassword = "removed"
-            enableV2Signing = true
-            enableV3Signing = true
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = releaseKeystore
+                storePassword = signingValue("KEYSTORE_PASSWORD")
+                keyAlias = signingValue("KEY_ALIAS")
+                keyPassword = signingValue("KEY_PASSWORD")
+                enableV2Signing = true
+                enableV3Signing = true
+            }
         }
     }
 
     buildTypes {
-        getByName("debug") {
-            signingConfig = signingConfigs.getByName("lite")
-        }
         getByName("release") {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -67,7 +78,8 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("lite")
+            signingConfig = if (releaseKeystore != null) signingConfigs.getByName("release")
+                else signingConfigs.getByName("debug")
         }
     }
 

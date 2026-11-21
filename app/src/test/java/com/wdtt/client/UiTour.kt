@@ -114,6 +114,7 @@ class UiTour {
         pressBack(); settle(8) // transfer → profile sheet
         pressBack(); settle(8) // profile sheet → home
 
+
         // Hidden log.
         compose.onNodeWithText("qWDTT Client").performTouchInput { longClick() }
         settle(8)
@@ -142,6 +143,11 @@ class UiTour {
         compose.onNodeWithText("Приложения").performClick()
         settle(14)
         shot(dir, "11_apps")
+        compose.onNodeWithText("Настройки").performClick()
+        settle(12)
+        shot(dir, "11b_settings")
+        swipeSheetUp("ОФОРМЛЕНИЕ")
+        shot(dir, "11c_settings_bottom")
         compose.onNodeWithText("Главная").performClick()
         settle(8)
         shot(dir, "12_home_again")

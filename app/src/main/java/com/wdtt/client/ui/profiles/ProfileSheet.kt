@@ -68,7 +68,6 @@ fun ProfileSheet(
     val scope = rememberCoroutineScope()
     val lite = remember { LiteSettings(context) }
     val sub by remember(profile.id) { lite.subscription(profile.id) }.collectAsState(null)
-    val warnEnabled by lite.warnEnabled.collectAsStateWithLifecycle(true)
     val warnDays by lite.warnDays.collectAsStateWithLifecycle(LiteSettings.DEFAULT_WARN_DAYS)
     val view = SubscriptionText.view(sub, warnDays)
 
@@ -111,33 +110,6 @@ fun ProfileSheet(
             }
             view.barFraction?.let { SubscriptionBar(it, view.tone) }
             Text(view.hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-
-        Block(null) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "Предупреждать об окончании",
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                    modifier = Modifier.weight(1f),
-                )
-                Switch(checked = warnEnabled, onCheckedChange = { scope.launch { lite.saveWarnEnabled(it) } })
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                LiteSettings.WARN_DAY_CHOICES.forEach { d ->
-                    ArdttChoiceChip(
-                        label = SubscriptionText.days(d.toLong()),
-                        selected = d == warnDays,
-                        enabled = warnEnabled,
-                        onClick = { scope.launch { lite.saveWarnDays(d) } },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
-            Text(
-                SubscriptionText.warnSentence(warnEnabled, warnDays),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
 
         Block("Звонок VK") {

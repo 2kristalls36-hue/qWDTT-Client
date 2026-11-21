@@ -11,6 +11,8 @@ import com.wdtt.client.ui.components.layout.LiteTabIcons
 import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.runtime.collectAsState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -28,15 +30,21 @@ internal object Routes {
     const val HOME = "tunnel"
     const val PROFILES = "profiles"
     const val APPS = "exceptions"
+    const val SETTINGS = "settings"
 }
 
 @Composable
 fun AppRoot(settingsStore: SettingsStore) {
     var route by rememberSaveable { mutableStateOf(Routes.HOME) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val update by com.wdtt.client.lite.AppUpdate.available.collectAsState()
+    androidx.compose.runtime.LaunchedEffect(Unit) { com.wdtt.client.lite.AppUpdate.checkIfDue(context) }
     val items = listOf(
         ArdttNavItem(Routes.HOME, "Главная", Icons.Outlined.Home, glyph = LiteTabIcons.Power),
         ArdttNavItem(Routes.PROFILES, "Профили", Icons.Outlined.Person, glyph = LiteTabIcons.Cards),
         ArdttNavItem(Routes.APPS, "Приложения", Icons.Outlined.Apps, glyph = LiteTabIcons.Tiles),
+        // Gear with the ARDTT half turn; a dot when a newer version is published.
+        ArdttNavItem(Routes.SETTINGS, "Настройки", Icons.Outlined.Settings, dot = update != null),
     )
     // A link or file opened from another app is imported on the profiles tab.
     val incoming by com.wdtt.client.MainActivity.pendingFileUri
@@ -58,6 +66,7 @@ fun AppRoot(settingsStore: SettingsStore) {
                     onOpenProfiles = { route = Routes.PROFILES },
                 )
                 Routes.PROFILES -> com.wdtt.client.ui.profiles.ProfilesScreen(settingsStore)
+                Routes.SETTINGS -> com.wdtt.client.ui.home.SettingsScreen()
                 else -> com.wdtt.client.ui.apps.AppsScreen(settingsStore)
             }
         }

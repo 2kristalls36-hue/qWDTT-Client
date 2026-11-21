@@ -1,0 +1,279 @@
+package com.wdtt.client.ui.home
+
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import com.wdtt.client.ui.components.layout.ArdttBottomChrome
+import com.wdtt.client.ui.components.layout.ArdttPageHeader
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
+import com.wdtt.client.lite.AppUpdate
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.wdtt.client.lite.LiteSettings
+import com.wdtt.client.lite.SubscriptionText
+import com.wdtt.client.SettingsStore
+import com.wdtt.client.ui.components.control.ArdttButton
+import com.wdtt.client.ui.components.control.ArdttButtonVariant
+import com.wdtt.client.ui.components.control.ArdttChoice
+import com.wdtt.client.ui.components.control.ArdttChoiceChip
+import com.wdtt.client.ui.components.control.ArdttChoiceChipRow
+import kotlinx.coroutines.launch
+
+/**
+ * Settings tab: theme, expiry warnings
+ * (they apply to every profile), connecting on boot, the connection log and the version.
+ */
+@Composable
+fun SettingsScreen() {
+    var logsOpen by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val lite = remember { LiteSettings(context) }
+    val settings = remember { SettingsStore(context) }
+    val theme by settings.themeMode.collectAsStateWithLifecycle("system")
+    val warnEnabled by lite.warnEnabled.collectAsStateWithLifecycle(true)
+    val warnDays by lite.warnDays.collectAsStateWithLifecycle(LiteSettings.DEFAULT_WARN_DAYS)
+    val onBoot by lite.connectOnBoot.collectAsStateWithLifecycle(false)
+
+    androidx.compose.foundation.layout.Column(
+        Modifier
+            .fillMaxSize()
+            .windowInsetsPadding(WindowInsets.statusBars)
+            .verticalScroll(rememberScrollState()),
+    ) {
+        ArdttPageHeader(title = "Настройки")
+        Column(
+            Modifier
+                .padding(horizontal = 16.dp)
+                .padding(top = 4.dp, bottom = ArdttBottomChrome.navigationReserve() + 16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+
+        Section("Оформление") {
+            ArdttChoiceChipRow(
+                choices = listOf(
+                    ArdttChoice("system", "Системная"),
+                    ArdttChoice("light", "Светлая"),
+                    ArdttChoice("dark", "Тёмная"),
+                ),
+                selected = theme,
+                onSelect = { scope.launch { settings.saveThemeMode(it) } },
+            )
+        }
+
+        Section("Подписка") {
+            SwitchLine("Предупреждать об окончании", warnEnabled) { scope.launch { lite.saveWarnEnabled(it) } }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                LiteSettings.WARN_DAY_CHOICES.forEach { d ->
+                    ArdttChoiceChip(
+                        label = SubscriptionText.days(d.toLong()),
+                        selected = d == warnDays,
+                        enabled = warnEnabled,
+                        onClick = { scope.launch { lite.saveWarnDays(d) } },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+            Hint(SubscriptionText.warnSentence(warnEnabled, warnDays))
+        }
+
+        Section("Подключение") {
+            SwitchLine("Подключаться при включении устройства", onBoot) { scope.launch { lite.saveConnectOnBoot(it) } }
+            Hint(
+                if (onBoot) "Приложение подключится к активному профилю после включения устройства."
+                else "Приложение не будет подключаться автоматически."
+            )
+        }
+
+        UpdateSection()
+
+        ArdttButton(
+            text = "Журнал подключения",
+            variant = ArdttButtonVariant.Tonal,
+            onClick = { logsOpen = true },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        }
+    }
+    if (logsOpen) LogsSheet(onDismiss = { logsOpen = false })
+}
+
+/** Version, check for a newer GitHub release, download with progress, install. */
+@Composable
+private fun UpdateSection() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val installed = remember { AppUpdate.installedVersion(context) }
+    var check by remember { mutableStateOf<AppUpdate.Check?>(null) }
+    var checking by remember { mutableStateOf(false) }
+    var progress by remember { mutableStateOf<Float?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var needsPermission by remember { mutableStateOf(false) }
+
+    fun runCheck() {
+        if (checking) return
+        checking = true
+        error = null
+        scope.launch {
+            check = AppUpdate.check(context)
+            checking = false
+        }
+    }
+    LaunchedEffect(Unit) { runCheck() }
+
+    // Coming back from the permission screen: continue only if it was granted.
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(lifecycle) {
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
+            if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME && needsPermission && AppUpdate.canInstall(context)) needsPermission = false
+        }
+        lifecycle.lifecycle.addObserver(obs)
+        onDispose { lifecycle.lifecycle.removeObserver(obs) }
+    }
+
+    fun startDownload(release: AppUpdate.Release) {
+        if (!AppUpdate.canInstall(context)) {
+            needsPermission = true
+            return
+        }
+        error = null
+        progress = 0f
+        scope.launch {
+            AppUpdate.download(context, release).collect { d ->
+                when (d) {
+                    is AppUpdate.Download.Progress -> progress = d.fraction
+                    is AppUpdate.Download.Done -> { progress = null; AppUpdate.install(context, d.file) }
+                    is AppUpdate.Download.Error -> { progress = null; error = d.message }
+                }
+            }
+        }
+    }
+
+    Section("Обновления") {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Установлена версия", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+            Text(installed, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
+        }
+        val c = check
+        val status = when {
+            checking -> "Проверка обновлений…"
+            c is AppUpdate.Check.Available -> "Доступна версия ${c.release.version}."
+            c is AppUpdate.Check.UpToDate -> "Установлена последняя версия."
+            c is AppUpdate.Check.Failed -> "Не удалось проверить обновления."
+            else -> ""
+        }
+        if (status.isNotEmpty()) Hint(status)
+        if (c is AppUpdate.Check.Available && c.release.notes.isNotBlank()) {
+            Text(
+                c.release.notes.lines().filter { it.isNotBlank() }.take(6).joinToString("\n"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        progress?.let {
+            androidx.compose.material3.LinearProgressIndicator(
+                progress = { it },
+                modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(6.dp)),
+            )
+        }
+        error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = ToneColors.Critical) }
+        if (needsPermission) {
+            Hint("Для установки обновления требуется разрешение на установку приложений.")
+            ArdttButton(
+                text = "Открыть разрешение",
+                variant = ArdttButtonVariant.Outlined,
+                onClick = { AppUpdate.openInstallPermission(context) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        when {
+            c is AppUpdate.Check.Available -> ArdttButton(
+                text = "Скачать и установить",
+                busy = progress != null,
+                enabled = progress == null && !needsPermission,
+                onClick = { startDownload(c.release) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            else -> ArdttButton(
+                text = "Проверить обновления",
+                variant = ArdttButtonVariant.Outlined,
+                busy = checking,
+                enabled = !checking,
+                onClick = { runCheck() },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
+
+@Composable
+private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            title.uppercase(),
+            style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 1.sp, fontWeight = FontWeight.SemiBold),
+            color = MaterialTheme.colorScheme.outline,
+        )
+        content()
+    }
+}
+
+@Composable
+private fun SwitchLine(title: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            title,
+            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+            modifier = Modifier.weight(1f),
+        )
+        Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
+@Composable
+private fun Hint(text: String) {
+    // The sentence changes with the switch: the old one fades out, the new one fades in.
+    AnimatedContent(text, transitionSpec = { fadeIn(tween(300, 120)) togetherWith fadeOut(tween(200)) }, label = "hint") {
+        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}

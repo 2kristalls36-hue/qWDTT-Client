@@ -69,6 +69,8 @@ data class ArdttNavItem(
     val label: String,
     val icon: ImageVector,
     val badgeCount: Int = 0,
+    /** Small dot without a number, e.g. a new app version. */
+    val dot: Boolean = false,
     /** Hand-drawn animated glyph; replaces [icon] when set. */
     val glyph: TabGlyph? = null,
 )
@@ -399,6 +401,9 @@ private fun NavBarTab(
                     tint = paint.color,
                 )
             }
+            if (item.dot && item.badgeCount == 0) {
+                Badge(modifier = Modifier.offset(x = ArdttSpacing.Tiny, y = -ArdttSpacing.Tiny))
+            }
             if (item.badgeCount > 0) {
                 Badge(
                     modifier = Modifier.offset(
@@ -411,7 +416,8 @@ private fun NavBarTab(
             }
         }
         Spacer(modifier = Modifier.height(ArdttSpacing.Hairline))
-        Text(
+        // One line; with a large system font the label shrinks instead of breaking mid-word.
+        com.wdtt.client.ui.components.control.FitText(
             text = item.label,
             modifier = Modifier.fillMaxWidth(),
             style = ArdttNavigationLabelStyle.copy(
@@ -423,10 +429,7 @@ private fun NavBarTab(
             ),
             fontWeight = if (paint.bold) FontWeight.SemiBold else FontWeight.Normal,
             color = paint.color.copy(alpha = paint.labelAlpha),
-            textAlign = TextAlign.Center,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            softWrap = true,
+            minScale = 0.55f,
         )
     }
 }

@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.isSpecified
 
 /**
  * Text for controls of fixed width: with a large system font a label that does not fit
- * is scaled down a little (to 70% at most) instead of being cut or broken mid-word.
+ * is scaled down a little (to [minScale] at most) instead of being cut or broken mid-word.
  */
 @Composable
 fun FitText(
@@ -32,6 +32,7 @@ fun FitText(
     color: Color = Color.Unspecified,
     fontWeight: FontWeight? = null,
     textAlign: TextAlign = TextAlign.Center,
+    minScale: Float = 0.62f,
 ) {
     val base: TextUnit = style.fontSize.takeIf { it.isSpecified } ?: LocalTextStyle.current.fontSize
     var scale by remember(text, base) { mutableFloatStateOf(1f) }
@@ -46,7 +47,7 @@ fun FitText(
         overflow = TextOverflow.Ellipsis,
         textAlign = textAlign,
         onTextLayout = { layout ->
-            if (doesNotFit(layout, text) && scale > 0.7f) scale -= 0.05f else ready = true
+            if (doesNotFit(layout, text) && scale > minScale) scale -= 0.05f else ready = true
         },
     )
 }

@@ -49,7 +49,7 @@ class TunnelWidgetProvider : AppWidgetProvider() {
     }
 
     companion object {
-        const val ACTION_TOGGLE = "net.qwdtt.client.ACTION_TOGGLE"
+        const val ACTION_TOGGLE = "net.qwdttclient.app.ACTION_TOGGLE"
 
         /** Kept for the tunnel service, which calls it on every state or stats change. */
         @Suppress("UNUSED_PARAMETER")

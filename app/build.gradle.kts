@@ -19,7 +19,7 @@ android {
     compileSdk = 35
     
     defaultConfig {
-        applicationId = "net.qwdtt.client"
+        applicationId = "net.qwdttclient.app"
         minSdk = 28
         targetSdk = 35
         // Minutes since 2020-01-01: grows with every build, local or CI,

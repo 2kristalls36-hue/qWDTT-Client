@@ -24,8 +24,14 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.wdtt.client.ui.theme.isDarkSurface
+import com.wdtt.client.ui.theme.ArdttRadius
+import com.wdtt.client.ui.components.surface.LiquidGlassPanel
+import com.wdtt.client.ui.components.surface.LiquidGlass
+import com.wdtt.client.ui.components.surface.LocalGlassBackdrop
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -58,21 +64,16 @@ fun ArdttSearchBar(
     val colors = MaterialTheme.colorScheme
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(ArdttBottomChrome.ButtonHeight)
-            .semantics { contentDescription = "Поиск" }
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
-                focusRequester.requestFocus()
-                keyboard?.show()
-            },
-        shape = ArdttShapes.Control,
-        color = if (keyboardVisible) colors.surface else ArdttFloatingShell.shellColor(),
-        border = ArdttFloatingShell.shellBorder(),
-        shadowElevation = ArdttElevation.None,
-        tonalElevation = ArdttElevation.None,
-    ) {
+    val backdrop = LocalGlassBackdrop.current
+    val tap = Modifier
+        .fillMaxWidth()
+        .height(ArdttBottomChrome.ButtonHeight)
+        .semantics { contentDescription = "Поиск" }
+        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+            focusRequester.requestFocus()
+            keyboard?.show()
+        }
+    val fieldRow: @Composable () -> Unit = {
         Row(
             Modifier.fillMaxSize().padding(horizontal = ArdttSpacing.Large),
             verticalAlignment = Alignment.CenterVertically,
@@ -109,4 +110,27 @@ fun ArdttSearchBar(
             }
         }
     }
+    if (backdrop != null && LiquidGlass.supported) {
+        // Same node with the keyboard open (only the veil thickens), so the field keeps focus.
+        val dark = isDarkSurface()
+        val veil by androidx.compose.animation.core.animateFloatAsState(
+            if (keyboardVisible) 0.92f else backdrop.veil(dark), label = "veil",
+        )
+        LiquidGlassPanel(
+            backdrop = backdrop,
+            cornerRadius = ArdttRadius.Control,
+            tint = colors.surface.copy(alpha = veil),
+            dark = dark,
+            modifier = modifier.then(tap),
+        ) { fieldRow() }
+        return
+    }
+    Surface(
+        modifier = modifier.then(tap),
+        shape = ArdttShapes.Control,
+        color = if (keyboardVisible) colors.surface else ArdttFloatingShell.shellColor(),
+        border = ArdttFloatingShell.shellBorder(),
+        shadowElevation = ArdttElevation.None,
+        tonalElevation = ArdttElevation.None,
+    ) { fieldRow() }
 }

@@ -34,6 +34,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.wdtt.client.ui.components.surface.glassBackdropSource
+import com.wdtt.client.ui.components.surface.GlassBackdrop
+import com.wdtt.client.ui.components.surface.LocalGlassBackdrop
 import androidx.compose.ui.zIndex
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.ime
@@ -89,8 +92,19 @@ fun AppsScreen(settingsStore: SettingsStore) {
 
     val imePad = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
     val keyboardVisible = imePad > 12.dp
+    // With liquid glass on, the list is recorded for the floating search bar to refract.
+    // A separate layer: the bar cannot sample the root one it is itself drawn into.
+    val rootGlass = LocalGlassBackdrop.current
+    val listLayer = androidx.compose.ui.graphics.rememberGraphicsLayer()
+    val listGlass = remember(listLayer) { GlassBackdrop(listLayer) }.takeIf { rootGlass != null }
+    if (listGlass != null && rootGlass != null) listGlass.transparency = rootGlass.transparency
     Box(Modifier.fillMaxSize()) {
-    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.statusBars)) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .glassBackdropSource(listGlass, fill = MaterialTheme.colorScheme.background)
+            .windowInsetsPadding(WindowInsets.statusBars)
+    ) {
         ArdttPageHeader(title = "Приложения")
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             ArdttChoiceChipRow(
@@ -128,7 +142,14 @@ fun AppsScreen(settingsStore: SettingsStore) {
                 )
             }
         } else {
+            val listState = androidx.compose.foundation.lazy.rememberLazyListState()
             LazyColumn(
+                state = listState,
+                // Magnet: after a fling the nearest row settles flush with the top.
+                flingBehavior = androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior(
+                    lazyListState = listState,
+                    snapPosition = androidx.compose.foundation.gestures.snapping.SnapPosition.Start,
+                ),
                 // The last rows can pass under the floating search bar.
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = ArdttBottomChrome.scrollContentPadding(extra = 12.dp)),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -143,6 +164,7 @@ fun AppsScreen(settingsStore: SettingsStore) {
         }
     }
     // Search floats above the tab pill, as in ARDTT; with the keyboard open it rides on top of it.
+    androidx.compose.runtime.CompositionLocalProvider(LocalGlassBackdrop provides listGlass) {
     ArdttSearchBar(
         value = query,
         onValueChange = { query = it },
@@ -153,6 +175,7 @@ fun AppsScreen(settingsStore: SettingsStore) {
             .padding(horizontal = 16.dp)
             .padding(bottom = maxOf(ArdttBottomChrome.stickyBottomPadding(), imePad + 8.dp)),
     )
+    }
     }
 }
 

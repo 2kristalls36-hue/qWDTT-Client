@@ -8,6 +8,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -22,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlin.math.roundToInt
 import com.wdtt.client.ui.components.layout.ArdttBottomChrome
 import com.wdtt.client.ui.components.layout.ArdttPageHeader
 import androidx.compose.foundation.rememberScrollState
@@ -68,64 +70,139 @@ fun SettingsScreen() {
     val warnDays by lite.warnDays.collectAsStateWithLifecycle(LiteSettings.DEFAULT_WARN_DAYS)
     val onBoot by lite.connectOnBoot.collectAsStateWithLifecycle(false)
 
-    androidx.compose.foundation.layout.Column(
+    // Blocks settle with their top under the header after a fling (magnet snapping).
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val snap = androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior(
+        lazyListState = listState,
+        snapPosition = androidx.compose.foundation.gestures.snapping.SnapPosition.Start,
+    )
+    Column(
         Modifier
             .fillMaxSize()
-            .windowInsetsPadding(WindowInsets.statusBars)
-            .verticalScroll(rememberScrollState()),
+            .windowInsetsPadding(WindowInsets.statusBars),
     ) {
         ArdttPageHeader(title = "Настройки")
-        Column(
-            Modifier
-                .padding(horizontal = 16.dp)
-                .padding(top = 4.dp, bottom = ArdttBottomChrome.navigationReserve() + 16.dp),
+        androidx.compose.foundation.lazy.LazyColumn(
+            state = listState,
+            flingBehavior = snap,
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                top = 4.dp, bottom = ArdttBottomChrome.navigationReserve() + 16.dp,
+            ),
             verticalArrangement = Arrangement.spacedBy(14.dp),
+            modifier = Modifier.fillMaxSize(),
         ) {
-
-        Section("Оформление") {
-            ArdttChoiceChipRow(
-                choices = listOf(
-                    ArdttChoice("system", "Системная"),
-                    ArdttChoice("light", "Светлая"),
-                    ArdttChoice("dark", "Тёмная"),
-                ),
-                selected = theme,
-                onSelect = { scope.launch { settings.saveThemeMode(it) } },
-            )
-        }
-
-        Section("Подписка") {
-            SwitchLine("Предупреждать об окончании", warnEnabled) { scope.launch { lite.saveWarnEnabled(it) } }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                LiteSettings.WARN_DAY_CHOICES.forEach { d ->
-                    ArdttChoiceChip(
-                        label = SubscriptionText.days(d.toLong()),
-                        selected = d == warnDays,
-                        enabled = warnEnabled,
-                        onClick = { scope.launch { lite.saveWarnDays(d) } },
-                        modifier = Modifier.weight(1f),
+            item {
+                Box(Modifier.padding(horizontal = 16.dp)) {
+                Section("Оформление") {
+                    ArdttChoiceChipRow(
+                        choices = listOf(
+                            ArdttChoice("system", "Системная"),
+                            ArdttChoice("light", "Светлая"),
+                            ArdttChoice("dark", "Тёмная"),
+                        ),
+                        selected = theme,
+                        onSelect = { scope.launch { settings.saveThemeMode(it) } },
+                    )
+                    val glass by lite.liquidGlass.collectAsStateWithLifecycle(false)
+                    val glassSupported = com.wdtt.client.ui.components.surface.LiquidGlass.supported
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Жидкое стекло", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold))
+                            Text(
+                                "Бета",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .background(MaterialTheme.colorScheme.primaryContainer)
+                                    .padding(horizontal = 8.dp, vertical = 2.dp),
+                            )
+                        }
+                        Switch(
+                            checked = glass && glassSupported,
+                            enabled = glassSupported,
+                            onCheckedChange = { scope.launch { lite.saveLiquidGlass(it) } },
+                        )
+                    }
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = glass && glassSupported,
+                        enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.expandVertically(),
+                        exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.shrinkVertically(),
+                    ) {
+                        val saved by lite.glassTransparency.collectAsStateWithLifecycle(LiteSettings.DEFAULT_GLASS_TRANSPARENCY)
+                        var value by remember { mutableStateOf<Float?>(null) }
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Прозрачность", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                                Text(
+                                    "${((value ?: saved) * 100).roundToInt()}%",
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            // Applies live while dragging: the tab bar below changes at once.
+                            androidx.compose.material3.Slider(
+                                value = value ?: saved,
+                                onValueChange = { v -> value = v; scope.launch { lite.saveGlassTransparency(v) } },
+                                onValueChangeFinished = { value = null },
+                            )
+                        }
+                    }
+                    Hint(
+                        when {
+                            !glassSupported -> "Эффект доступен на Android 13 и новее."
+                            glass -> "Панель навигации отображается в виде стекла."
+                            else -> "Панель навигации отображается в стандартном виде."
+                        }
                     )
                 }
+                }
             }
-            Hint(SubscriptionText.warnSentence(warnEnabled, warnDays))
-        }
-
-        Section("Подключение") {
-            SwitchLine("Подключаться при включении устройства", onBoot) { scope.launch { lite.saveConnectOnBoot(it) } }
-            Hint(
-                if (onBoot) "Приложение подключится к активному профилю после включения устройства."
-                else "Приложение не будет подключаться автоматически."
-            )
-        }
-
-        UpdateSection()
-
-        ArdttButton(
-            text = "Журнал подключения",
-            variant = ArdttButtonVariant.Tonal,
-            onClick = { logsOpen = true },
-            modifier = Modifier.fillMaxWidth(),
-        )
+            item {
+                Box(Modifier.padding(horizontal = 16.dp)) {
+                Section("Подписка") {
+                    SwitchLine("Предупреждать об окончании", warnEnabled) { scope.launch { lite.saveWarnEnabled(it) } }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        LiteSettings.WARN_DAY_CHOICES.forEach { d ->
+                            ArdttChoiceChip(
+                                label = SubscriptionText.days(d.toLong()),
+                                selected = d == warnDays,
+                                enabled = warnEnabled,
+                                onClick = { scope.launch { lite.saveWarnDays(d) } },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                    Hint(SubscriptionText.warnSentence(warnEnabled, warnDays))
+                }
+                }
+            }
+            item {
+                Box(Modifier.padding(horizontal = 16.dp)) {
+                Section("Подключение") {
+                    SwitchLine("Подключаться при включении устройства", onBoot) { scope.launch { lite.saveConnectOnBoot(it) } }
+                    Hint(
+                        if (onBoot) "Приложение подключится к активному профилю после включения устройства."
+                        else "Приложение не будет подключаться автоматически."
+                    )
+                }
+                }
+            }
+            item {
+                Box(Modifier.padding(horizontal = 16.dp)) {
+                UpdateSection()
+                }
+            }
+            item {
+                Box(Modifier.padding(horizontal = 16.dp)) {
+                ArdttButton(
+                    text = "Журнал подключения",
+                    variant = ArdttButtonVariant.Tonal,
+                    onClick = { logsOpen = true },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                }
+            }
         }
     }
     if (logsOpen) LogsSheet(onDismiss = { logsOpen = false })

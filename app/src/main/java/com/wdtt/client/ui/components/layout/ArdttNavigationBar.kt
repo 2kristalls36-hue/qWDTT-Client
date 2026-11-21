@@ -37,6 +37,22 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.wdtt.client.ui.theme.isDarkSurface
+import com.wdtt.client.ui.components.surface.LiquidGlassPanel
+import com.wdtt.client.ui.components.surface.LiquidGlass
+import com.wdtt.client.ui.components.surface.LocalGlassBackdrop
+import androidx.compose.ui.unit.dp
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.foundation.Canvas
+import androidx.compose.animation.core.spring
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.withTransform
@@ -81,6 +97,7 @@ internal object ArdttNavChrome {
 }
 
 private object NavBarDefaults {
+    val GlassCorner = com.wdtt.client.ui.theme.ArdttRadius.Section
     val OuterPadding = ArdttSpacing.SmallPlus
     val TrackPadding = ArdttSpacing.Small
 
@@ -264,6 +281,65 @@ fun ArdttNavigationBar(
         pendingRoute = null
     }
 
+    val outer = modifier
+        .fillMaxWidth()
+        .windowInsetsPadding(WindowInsets.navigationBars)
+        .padding(
+            horizontal = NavBarDefaults.OuterPadding,
+            vertical = NavBarDefaults.TrackPadding,
+        )
+    val tabs: @Composable () -> Unit = {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .selectableGroup()
+                .padding(
+                    horizontal = NavBarDefaults.TrackPadding,
+                    vertical = ArdttSpacing.Tiny,
+                ),
+        ) {
+            items.forEach { item ->
+                NavBarTab(
+                    item = item,
+                    selected = item.route == selectedRoute,
+                    pending = item.route == pendingRoute,
+                    emphasis = 0f,
+                    selectedColor = selectedColor,
+                    unselectedColor = unselectedColor,
+                    onSelect = {
+                        navTabPendingRoute(selectedRoute, item.route)?.let { pendingRoute = it }
+                        selectTab.value(item.route)
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+
+    val backdrop = LocalGlassBackdrop.current
+    if (backdrop != null && LiquidGlass.supported) {
+        val dark = isDarkSurface()
+        LiquidGlassPanel(
+            backdrop = backdrop,
+            cornerRadius = NavBarDefaults.GlassCorner,
+            tint = colors.surface.copy(alpha = backdrop.veil(dark)),
+            dark = dark,
+            modifier = outer
+                .shadow(18.dp, ArdttShapes.Section, ambientColor = Color.Black.copy(alpha = 0.25f), spotColor = Color.Black.copy(alpha = 0.25f))
+                .height(ArdttSize.NavTrack),
+        ) {
+            CompositionLocalProvider(LocalContentColor provides colors.onSurface) {
+                GlassSelection(
+                    count = items.size,
+                    selected = items.indexOfFirst { it.route == (pendingRoute ?: selectedRoute) },
+                    dark = dark,
+                )
+                tabs()
+            }
+        }
+        return
+    }
+
     Surface(
         shape = ArdttShapes.Section,
         color = shell,
@@ -272,45 +348,56 @@ fun ArdttNavigationBar(
         tonalElevation = ArdttElevation.None,
         // A shadow graphics layer paints this translucent shell opaque for a frame.
         shadowElevation = ArdttElevation.None,
-        modifier = modifier
-            .fillMaxWidth()
-            .windowInsetsPadding(WindowInsets.navigationBars)
-            .padding(
-                horizontal = NavBarDefaults.OuterPadding,
-                vertical = NavBarDefaults.TrackPadding,
-            ),
+        modifier = outer,
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(ArdttSize.NavTrack),
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .selectableGroup()
-                    .padding(
-                        horizontal = NavBarDefaults.TrackPadding,
-                        vertical = ArdttSpacing.Tiny,
-                    ),
-            ) {
-                items.forEach { item ->
-                    NavBarTab(
-                        item = item,
-                        selected = item.route == selectedRoute,
-                        pending = item.route == pendingRoute,
-                        emphasis = 0f,
-                        selectedColor = selectedColor,
-                        unselectedColor = unselectedColor,
-                        onSelect = {
-                            navTabPendingRoute(selectedRoute, item.route)?.let { pendingRoute = it }
-                            selectTab.value(item.route)
-                        },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
-        }
+        ) { tabs() }
+    }
+}
+
+/**
+ * Glass droplet under the selected tab. It glides to the new tab on a spring and
+ * stretches along the way, like a drop of liquid, then settles round again.
+ */
+@Composable
+private fun BoxScope.GlassSelection(count: Int, selected: Int, dark: Boolean) {
+    if (count <= 0 || selected < 0) return
+    val pos = remember { Animatable(selected.toFloat()) }
+    LaunchedEffect(selected) {
+        pos.animateTo(selected.toFloat(), spring(dampingRatio = 0.72f, stiffness = 380f))
+    }
+    val primary = MaterialTheme.colorScheme.primary
+    Canvas(Modifier.matchParentSize()) {
+        val pad = NavBarDefaults.TrackPadding.toPx()
+        val slot = (size.width - pad * 2) / count
+        val stretch = (kotlin.math.abs(pos.velocity) * 0.10f).coerceAtMost(0.45f)
+        val w = slot * (0.86f + stretch)
+        val h = size.height - 10.dp.toPx() - stretch * 6.dp.toPx()
+        val cx = pad + slot * (pos.value + 0.5f)
+        val left = cx - w / 2f
+        val top = (size.height - h) / 2f
+        val r = CornerRadius(h / 2f)
+        // Body: a light, slightly brighter glass with a soft primary tint.
+        drawRoundRect(
+            Brush.verticalGradient(
+                listOf(Color.White.copy(alpha = if (dark) 0.16f else 0.55f), Color.White.copy(alpha = if (dark) 0.06f else 0.22f)),
+                startY = top, endY = top + h,
+            ),
+            Offset(left, top), Size(w, h), r,
+        )
+        drawRoundRect(primary.copy(alpha = if (dark) 0.16f else 0.10f), Offset(left, top), Size(w, h), r)
+        // Rim: bright on top, fading down, with a faint colored edge.
+        drawRoundRect(
+            Brush.verticalGradient(
+                listOf(Color.White.copy(alpha = if (dark) 0.55f else 0.95f), Color.White.copy(alpha = 0.05f), primary.copy(alpha = 0.35f)),
+                startY = top, endY = top + h,
+            ),
+            Offset(left, top), Size(w, h), r,
+            style = Stroke(width = 1.2.dp.toPx()),
+        )
     }
 }
 

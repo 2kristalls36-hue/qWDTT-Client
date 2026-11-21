@@ -75,6 +75,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.wdtt.client.lite.PowerLevel
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 private const val LOCK_HINT = "Изменение мощности доступно после отключения."
@@ -230,6 +231,22 @@ private fun androidx.compose.foundation.layout.BoxScope.NeonAura(neon: List<Colo
     }
 }
 
+/** Reach of each stop's pull, as a share of the track. */
+private const val MAGNET_RADIUS = 0.13f
+
+/**
+ * Magnet: near a stop the thumb lags behind the finger and clings to the stop,
+ * then catches up as the finger leaves; outside the reach it follows exactly.
+ */
+internal fun magnet(f: Float): Float {
+    val stop = (f * 2f).roundToInt() / 2f
+    val d = f - stop
+    val reach = MAGNET_RADIUS
+    if (abs(d) >= reach) return f
+    val k = abs(d) / reach
+    return stop + d * k * k
+}
+
 /**
  * Three-stop slider. The thumb follows the finger exactly while dragging, the level
  * (title, colors) switches when the nearest stop changes, and on release the thumb
@@ -250,6 +267,7 @@ private fun PowerSlider(
     val balanced = levelColors(PowerLevel.Balanced).accent
     val surface = MaterialTheme.colorScheme.surface
     var dragging by remember { mutableStateOf(false) }
+    var caught by remember { mutableStateOf(-1) }
     LaunchedEffect(level, dragging) {
         if (!dragging) pos.animateTo(level.ordinal / 2f, spring(dampingRatio = 0.8f, stiffness = 400f))
     }
@@ -310,7 +328,16 @@ private fun PowerSlider(
                             onDragCancel = { settle() },
                         ) { change, _ ->
                             val f = fracAt(change.position.x)
-                            scope.launch { pos.snapTo(f) }
+                            val shown = magnet(f)
+                            // A light tick when the thumb catches a stop.
+                            val stop = (f * 2).roundToInt()
+                            if (abs(f - stop / 2f) < MAGNET_RADIUS * 0.3f && caught != stop) {
+                                caught = stop
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            } else if (abs(f - stop / 2f) > MAGNET_RADIUS) {
+                                caught = -1
+                            }
+                            scope.launch { pos.snapTo(shown) }
                             select(f)
                         }
                     }

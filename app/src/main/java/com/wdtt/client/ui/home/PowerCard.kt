@@ -55,6 +55,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.TileMode
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -91,11 +92,18 @@ fun PowerCard(
     modifier: Modifier = Modifier,
 ) {
     val colors = levelColors(level)
-    val isMax = level == PowerLevel.Maximum
     val scheme = MaterialTheme.colorScheme
-    val cardColor by animateColorAsState(if (isMax) Neon.Night else scheme.surface, tween(450), label = "card")
-    val textMuted by animateColorAsState(if (isMax) Neon.NightMuted else scheme.onSurfaceVariant, tween(400), label = "t2")
-    val textFaint by animateColorAsState(if (isMax) Neon.NightFaint else scheme.outline, tween(400), label = "t3")
+    // Thumb position 0..1 drives every color, so dragging blends them continuously:
+    // green → blue on the first half, blue → neon night panel on the second.
+    val pos = remember { Animatable(level.ordinal / 2f) }
+    val k = ((pos.value - 0.5f) * 2f).coerceIn(0f, 1f)
+    val titleBlend = lerp(levelColors(PowerLevel.Stable).accent, levelColors(PowerLevel.Balanced).accent, (pos.value * 2f).coerceIn(0f, 1f))
+    val cardColor = lerp(scheme.surface, Neon.Night, k)
+    // Text switches to night colors faster than the panel darkens, so it never sits
+    // grey-on-grey in the middle of the blend.
+    val tk = ((k - 0.3f) / 0.2f).coerceIn(0f, 1f)
+    val textMuted = lerp(scheme.onSurfaceVariant, Neon.NightMuted, tk)
+    val textFaint = lerp(scheme.outline, Neon.NightFaint, tk)
     val shape = RoundedCornerShape(24.dp)
 
     Box(
@@ -103,9 +111,9 @@ fun PowerCard(
             .fillMaxWidth()
             .clip(shape)
             .background(cardColor)
-            .then(if (isMax) Modifier.border(1.dp, colors.neon[1].copy(alpha = 0.45f), shape) else Modifier),
+            .then(if (k > 0.01f) Modifier.border(1.dp, colors.neon[1].copy(alpha = 0.45f * k), shape) else Modifier),
     ) {
-        if (isMax) NeonAura(colors.neon)
+        if (k > 0.01f) NeonAura(colors.neon, k)
         Column(
             Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -127,12 +135,19 @@ fun PowerCard(
                 else Text(
                     l.title,
                     style = TextStyle(fontSize = 26.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.4).sp),
-                    color = levelColors(l).accent,
+                    color = titleBlend,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            PowerSlider(level = level, colors = colors, locked = locked, trackColor = if (isMax) Neon.NightTrack else scheme.surfaceVariant, onLevelChange = onLevelChange)
+            PowerSlider(
+                level = level,
+                pos = pos,
+                neon = colors.neon,
+                locked = locked,
+                trackColor = lerp(scheme.surfaceVariant, Neon.NightTrack, k),
+                onLevelChange = onLevelChange,
+            )
             AnimatedVisibility(
                 visible = locked,
                 enter = fadeIn() + expandVertically(),
@@ -199,13 +214,13 @@ private fun NeonTitle(text: String, neon: List<Color>) {
 
 /** Slowly turning blurred neon wash behind the card content. */
 @Composable
-private fun androidx.compose.foundation.layout.BoxScope.NeonAura(neon: List<Color>) {
+private fun androidx.compose.foundation.layout.BoxScope.NeonAura(neon: List<Color>, strength: Float) {
     val motion = rememberMotionScale()
     val t = rememberInfiniteTransition(label = "aura")
     val angle by t.animateFloat(
         0f, 360f, infiniteRepeatable(tween((9000 / motion).toInt(), easing = LinearEasing)), label = "a",
     )
-    Canvas(Modifier.matchParentSize().alpha(0.22f)) {
+    Canvas(Modifier.matchParentSize().alpha(0.22f * strength)) {
         val c = center
         rotate(angle, c) {
             drawCircle(Brush.sweepGradient(neon + neon.first(), c), radius = size.maxDimension, center = c)
@@ -221,19 +236,21 @@ private fun androidx.compose.foundation.layout.BoxScope.NeonAura(neon: List<Colo
 @Composable
 private fun PowerSlider(
     level: PowerLevel,
-    colors: LevelColors,
+    pos: Animatable<Float, androidx.compose.animation.core.AnimationVector1D>,
+    neon: List<Color>,
     locked: Boolean,
     trackColor: Color,
     onLevelChange: (PowerLevel) -> Unit,
 ) {
     val haptics = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
-    val pos = remember { Animatable(level.ordinal / 2f) }
+    val stable = levelColors(PowerLevel.Stable).accent
+    val balanced = levelColors(PowerLevel.Balanced).accent
+    val surface = MaterialTheme.colorScheme.surface
     var dragging by remember { mutableStateOf(false) }
     LaunchedEffect(level, dragging) {
         if (!dragging) pos.animateTo(level.ordinal / 2f, spring(dampingRatio = 0.8f, stiffness = 400f))
     }
-    val isMax = level == PowerLevel.Maximum
     val motion = rememberMotionScale()
     val t = rememberInfiniteTransition(label = "slider")
     val flow by t.animateFloat(
@@ -241,7 +258,6 @@ private fun PowerSlider(
     )
     val halo by t.animateFloat(0.85f, 1.1f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "halo")
     val alpha by animateFloatAsState(if (locked) 0.45f else 1f, tween(300), label = "lock")
-    val thumbFill = if (isMax) Neon.NightText else MaterialTheme.colorScheme.surface
     var widthPx by remember { mutableFloatStateOf(1f) }
     val pad = with(LocalDensity.current) { 14.dp.toPx() }
 
@@ -299,41 +315,46 @@ private fun PowerSlider(
             ),
     ) {
         Canvas(Modifier.matchParentSize()) {
+            val p = pos.value
+            val g = (p * 2f).coerceIn(0f, 1f)
+            val k = ((p - 0.5f) * 2f).coerceIn(0f, 1f)
+            val base = lerp(stable, balanced, g)
+            val blended = neon.map { lerp(balanced, it, k) }
             val cy = size.height / 2f
             val trackH = 10.dp.toPx()
             val left = pad
             val right = size.width - pad
-            val x = left + (right - left) * pos.value
+            val x = left + (right - left) * p
             val r = CornerRadius(trackH / 2f)
             drawRoundRect(trackColor, Offset(left, cy - trackH / 2f), Size(right - left, trackH), r)
-            val fillBrush = if (isMax) {
+            val fillBrush = if (k > 0f) {
                 val period = (right - left).coerceAtLeast(1f)
                 Brush.linearGradient(
-                    colors.neon + colors.neon.first(),
+                    blended + blended.first(),
                     start = Offset(left + flow * period, 0f),
                     end = Offset(left + flow * period + period, 0f),
                     tileMode = TileMode.Repeated,
                 )
-            } else Brush.linearGradient(listOf(colors.accent, colors.accent))
-            if (isMax) {
-                drawRoundRect(colors.neon[0].copy(alpha = 0.35f), Offset(left, cy - trackH), Size(x - left, trackH * 2), CornerRadius(trackH))
+            } else Brush.linearGradient(listOf(base, base))
+            if (k > 0f) {
+                drawRoundRect(neon[0].copy(alpha = 0.35f * k), Offset(left, cy - trackH), Size(x - left, trackH * 2), CornerRadius(trackH))
             }
             drawRoundRect(fillBrush, Offset(left, cy - trackH / 2f), Size((x - left).coerceAtLeast(trackH), trackH), r)
             for (i in 0..2) {
                 val sx = left + (right - left) * i / 2f
-                val passed = i / 2f < pos.value - 0.01f
+                val passed = i / 2f < p - 0.01f
                 drawCircle(if (passed) Color.White else trackColor.copy(alpha = 1f), 6.dp.toPx(), Offset(sx, cy), alpha = if (passed) 0.9f else 1f)
                 if (!passed) drawCircle(Color.Gray, 6.dp.toPx(), Offset(sx, cy), alpha = 0.35f)
             }
-            if (isMax) {
+            if (k > 0f) {
                 drawCircle(
-                    Brush.radialGradient(listOf(colors.neon[0].copy(alpha = 0.55f), colors.neon[1].copy(alpha = 0.2f), Color.Transparent), Offset(x, cy), 32.dp.toPx() * halo),
+                    Brush.radialGradient(listOf(neon[0].copy(alpha = 0.55f * k), neon[1].copy(alpha = 0.2f * k), Color.Transparent), Offset(x, cy), 32.dp.toPx() * halo),
                     32.dp.toPx() * halo, Offset(x, cy),
                 )
             }
             drawCircle(Color.Black.copy(alpha = 0.12f), 15.dp.toPx(), Offset(x, cy + 1.5.dp.toPx()))
-            drawCircle(thumbFill, 14.dp.toPx(), Offset(x, cy))
-            val ring = if (isMax) Brush.sweepGradient(colors.neon + colors.neon.first(), Offset(x, cy)) else Brush.linearGradient(listOf(colors.accent, colors.accent))
+            drawCircle(lerp(surface, Neon.NightText, k), 14.dp.toPx(), Offset(x, cy))
+            val ring = if (k > 0f) Brush.sweepGradient(blended + blended.first(), Offset(x, cy)) else Brush.linearGradient(listOf(base, base))
             drawCircle(ring, 12.5.dp.toPx(), Offset(x, cy), style = Stroke(3.dp.toPx()))
         }
     }

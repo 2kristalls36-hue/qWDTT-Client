@@ -27,6 +27,9 @@ object ProfileStatusClient {
     /** Server host of the running tunnel, set when the client starts. */
     @Volatile var tunnelHost: String = ""
 
+    /** The client reported that its local entrance into the tunnel is open. */
+    @Volatile var tunnelReady: Boolean = false
+
     /**
      * Where to send API requests for [peer]: through the running tunnel when it leads to
      * the same server (works on networks with whitelists), otherwise directly.
@@ -35,7 +38,7 @@ object ProfileStatusClient {
         // The API listens on the server's main port; a profile link may carry another
         // port (direct or raw), which must not be used for the API.
         val direct = "http://${PeerAddress.httpEndpoint(PeerAddress.host(peer), API_PORT)}"
-        val viaTunnel = com.wdtt.client.TunnelManager.running.value &&
+        val viaTunnel = tunnelReady && com.wdtt.client.TunnelManager.running.value &&
             tunnelHost.isNotBlank() && PeerAddress.host(peer) == tunnelHost
         return if (viaTunnel) listOf("http://$TUNNEL_PROXY", direct) else listOf(direct)
     }

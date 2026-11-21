@@ -148,7 +148,10 @@ object TunnelManager {
     private fun markRunning(value: Boolean) {
         running.value = value
         connectedSinceMs.value = if (value) System.currentTimeMillis() else 0L
-        if (!value) resetLiveStats()
+        if (!value) {
+            resetLiveStats()
+            com.wdtt.client.lite.ProfileStatusClient.tunnelReady = false
+        }
     }
     
     val cooldownSeconds = MutableStateFlow(0)
@@ -565,6 +568,7 @@ object TunnelManager {
                         val apiTarget = PeerAddress.host(params.peer) + ":" + com.wdtt.client.lite.ProfileStatusClient.API_PORT
                         cmd += listOf("-api-proxy", com.wdtt.client.lite.ProfileStatusClient.TUNNEL_PROXY, "-api-target", apiTarget)
                         com.wdtt.client.lite.ProfileStatusClient.tunnelHost = PeerAddress.host(params.peer)
+                        com.wdtt.client.lite.ProfileStatusClient.tunnelReady = false
                         updateLog("conn_mode", "[СЕТЬ] Режим: VPN (raw-IP, без WireGuard)", 1, false)
                     }
                     mode == SettingsStore.CONNECTION_MODE_VPN -> {
@@ -801,6 +805,9 @@ object TunnelManager {
 
                 reader.forEachLine { line ->
                     com.wdtt.client.lite.RawLog.add(line)
+                    if (line.contains("[API] Запросы к серверу через туннель")) {
+                        com.wdtt.client.lite.ProfileStatusClient.tunnelReady = true
+                    }
                     // Периодический сброс счетчиков ошибок (раз в 60 сек)
                     val now = System.currentTimeMillis()
                     if (now - lastResetTime > 60000) {

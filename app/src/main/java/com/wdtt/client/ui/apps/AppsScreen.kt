@@ -93,67 +93,80 @@ fun AppsScreen(settingsStore: SettingsStore) {
 
     val imePad = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
     val keyboardVisible = imePad > 12.dp
-    // With liquid glass on, the list is recorded for the floating search bar to refract.
-    // A separate layer: the bar cannot sample the root one it is itself drawn into.
-    val rootGlass = LocalGlassBackdrop.current
-    val listLayer = androidx.compose.ui.graphics.rememberGraphicsLayer()
-    val listGlass = remember(listLayer) { GlassBackdrop(listLayer) }.takeIf { rootGlass != null }
-    if (listGlass != null && rootGlass != null) listGlass.transparency = rootGlass.transparency
-    Box(Modifier.fillMaxSize()) {
-    Column(
-        Modifier
-            .fillMaxSize()
-            .glassBackdropSource(listGlass, fill = MaterialTheme.colorScheme.background)
-            .windowInsetsPadding(WindowInsets.statusBars)
-    ) {
-        ArdttPageHeader(title = "Приложения")
-        Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            ArdttChoiceChipRow(
-                choices = listOf(
-                    ArdttChoice(false, "Мимо туннеля"),
-                    ArdttChoice(true, "Только выбранные"),
-                ),
-                selected = onlySelected,
-                onSelect = { scope.launch { settingsStore.saveExceptionsMode(it) } },
-            )
-            Text(
-                if (onlySelected) "Через туннель работают только выбранные приложения."
-                else "Выбранные приложения работают вне туннеля.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (running) {
-                Text(
-                    "Изменения применяются при следующем подключении.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
+    // With liquid glass on, the screen content is recorded for the floating header and
+    // search bar to refract (they cannot sample the root layer they are drawn into).
+    val screenGlass = com.wdtt.client.ui.components.surface.rememberScreenGlass()
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    com.wdtt.client.ui.motion.MagnetSnapTick(listState)
+    com.wdtt.client.ui.components.layout.GlassHeaderPage(
+        title = "Приложения",
+        scrolled = listState.canScrollBackward,
+        backdrop = screenGlass,
+        overlay = {
+            // Search floats above the tab pill, as in ARDTT; with the keyboard open it rides on top of it.
+            androidx.compose.runtime.CompositionLocalProvider(LocalGlassBackdrop provides screenGlass) {
+                ArdttSearchBar(
+                    value = query,
+                    onValueChange = { query = it },
+                    keyboardVisible = keyboardVisible,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .zIndex(2f)
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = maxOf(ArdttBottomChrome.stickyBottomPadding(), imePad + 8.dp)),
                 )
             }
-            ArdttSwitchRow(title = "Системные приложения", checked = showSystem, onCheckedChange = { showSystem = it })
-        }
-
-        if (apps == null) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-        } else if (visible.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-                Text(
-                    if (query.isNotBlank()) "Нет совпадений." else "Нет приложений.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+        },
+    ) { top ->
+        LazyColumn(
+            state = listState,
+            // Magnet: after a fling the nearest row settles flush with the top.
+            flingBehavior = com.wdtt.client.ui.motion.rememberMagnetSnapFling(listState),
+            // The last rows can pass under the floating search bar.
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = top, bottom = ArdttBottomChrome.scrollContentPadding(extra = 12.dp)),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            item(key = "controls") {
+                Column(Modifier.padding(bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ArdttChoiceChipRow(
+                        choices = listOf(
+                            ArdttChoice(false, "Мимо туннеля"),
+                            ArdttChoice(true, "Только выбранные"),
+                        ),
+                        selected = onlySelected,
+                        onSelect = { scope.launch { settingsStore.saveExceptionsMode(it) } },
+                    )
+                    Text(
+                        if (onlySelected) "Через туннель работают только выбранные приложения."
+                        else "Выбранные приложения работают вне туннеля.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (running) {
+                        Text(
+                            "Изменения применяются при следующем подключении.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                    ArdttSwitchRow(title = "Системные приложения", checked = showSystem, onCheckedChange = { showSystem = it })
+                }
             }
-        } else {
-            val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-            com.wdtt.client.ui.motion.MagnetSnapTick(listState)
-            LazyColumn(
-                state = listState,
-                // Magnet: after a fling the nearest row settles flush with the top.
-                flingBehavior = com.wdtt.client.ui.motion.rememberMagnetSnapFling(listState),
-                // The last rows can pass under the floating search bar.
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = ArdttBottomChrome.scrollContentPadding(extra = 12.dp)),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                items(visible, key = { it.packageName }) { app ->
+            when {
+                apps == null -> item(key = "loading") {
+                    Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                }
+                visible.isEmpty() -> item(key = "empty") {
+                    Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
+                        Text(
+                            if (query.isNotBlank()) "Нет совпадений." else "Нет приложений.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                else -> items(visible, key = { it.packageName }) { app ->
                     AppRow(app, checked = app.packageName in selected) { on ->
                         haptics.toggle(on)
                         val next = if (on) selected + app.packageName else selected - app.packageName
@@ -162,20 +175,6 @@ fun AppsScreen(settingsStore: SettingsStore) {
                 }
             }
         }
-    }
-    // Search floats above the tab pill, as in ARDTT; with the keyboard open it rides on top of it.
-    androidx.compose.runtime.CompositionLocalProvider(LocalGlassBackdrop provides listGlass) {
-    ArdttSearchBar(
-        value = query,
-        onValueChange = { query = it },
-        keyboardVisible = keyboardVisible,
-        modifier = Modifier
-            .align(Alignment.BottomCenter)
-            .zIndex(2f)
-            .padding(horizontal = 16.dp)
-            .padding(bottom = maxOf(ArdttBottomChrome.stickyBottomPadding(), imePad + 8.dp)),
-    )
-    }
     }
 }
 
@@ -209,7 +208,7 @@ private fun AppRow(app: AppItem, checked: Boolean, onToggle: (Boolean) -> Unit) 
             Text(app.name, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(app.packageName, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Switch(checked = checked, onCheckedChange = null)
+        com.wdtt.client.ui.components.control.LiteSwitch(checked = checked, onCheckedChange = null)
     }
 }
 

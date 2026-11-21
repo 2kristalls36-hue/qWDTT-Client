@@ -76,7 +76,7 @@ fun ArdttSwitchRow(
                 )
             }
         }
-        Switch(checked = checked, onCheckedChange = null, enabled = enabled)
+        LiteSwitch(checked = checked, onCheckedChange = null, enabled = enabled)
     }
 }
 

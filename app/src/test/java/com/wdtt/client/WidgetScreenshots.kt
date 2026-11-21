@@ -82,4 +82,20 @@ class WidgetScreenshots {
         java.io.File("build/outputs/roborazzi").mkdirs()
         java.io.FileOutputStream("build/outputs/roborazzi/launcher_icon.png").use { out.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
     }
+
+    @Test fun tileIcon() {
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        val out = android.graphics.Bitmap.createBitmap(420, 240, android.graphics.Bitmap.Config.ARGB_8888)
+        val c = android.graphics.Canvas(out)
+        c.drawColor(0xFF20242C.toInt())
+        val circle = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF1565C0.toInt() }
+        listOf(Triple(120f, 120f, 160), Triple(330f, 120f, 48)).forEach { (cx, cy, s) ->
+            c.drawCircle(cx, cy, s * 0.75f, circle)
+            ctx.getDrawable(R.drawable.ic_tile_lite)!!.apply {
+                setBounds((cx - s / 2).toInt(), (cy - s / 2).toInt(), (cx + s / 2).toInt(), (cy + s / 2).toInt())
+            }.draw(c)
+        }
+        java.io.File("build/outputs/roborazzi").mkdirs()
+        java.io.FileOutputStream("build/outputs/roborazzi/tile_icon.png").use { out.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+    }
 }

@@ -44,6 +44,17 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.layout.onSizeChanged
@@ -294,6 +305,16 @@ private fun PowerSlider(
     val surface = MaterialTheme.colorScheme.surface
     var dragging by remember { mutableStateOf(false) }
     var caught by remember { mutableStateOf(-1) }
+    var pressed by remember { mutableStateOf(false) }
+    // Liquid glass on: while held, the thumb swells into a lens that magnifies the track.
+    val glassOn = com.wdtt.client.ui.components.surface.LocalGlassBackdrop.current != null
+    val trackLayer = androidx.compose.ui.graphics.rememberGraphicsLayer()
+    val trackGlass = remember(trackLayer) { com.wdtt.client.ui.components.surface.GlassBackdrop(trackLayer) }
+    val lens by animateFloatAsState(
+        if (glassOn && !locked && (pressed || dragging)) 1f else 0f,
+        spring(dampingRatio = 0.62f, stiffness = 420f),
+        label = "lens",
+    )
     LaunchedEffect(level, dragging) {
         if (!dragging) pos.magnetTo(level.ordinal / 2f)
     }
@@ -332,6 +353,7 @@ private fun PowerSlider(
             .fillMaxWidth()
             .height(44.dp)
             .onSizeChanged { widthPx = it.width.toFloat() }
+            .onGloballyPositioned { trackGlass.origin = it.positionInRoot() }
             .alpha(alpha)
             .semantics {
                 stateDescription = level.title
@@ -341,7 +363,13 @@ private fun PowerSlider(
             .then(
                 if (locked) Modifier else Modifier
                     .pointerInput(Unit) {
-                        detectTapGestures { o ->
+                        detectTapGestures(
+                            onPress = {
+                                pressed = true
+                                tryAwaitRelease()
+                                pressed = false
+                            },
+                        ) { o ->
                             val f = fracAt(o.x)
                             select(f)
                             scope.launch {
@@ -383,53 +411,106 @@ private fun PowerSlider(
             val right = size.width - pad
             val x = left + (right - left) * p
             val r = CornerRadius(trackH / 2f)
-            drawRoundRect(trackColor, Offset(left, cy - trackH / 2f), Size(right - left, trackH), r)
-            val fillBrush = if (k > 0f) {
-                val period = (right - left).coerceAtLeast(1f)
-                Brush.linearGradient(
-                    blended + blended.first(),
-                    start = Offset(left + flow * period, 0f),
-                    end = Offset(left + flow * period + period, 0f),
-                    tileMode = TileMode.Repeated,
-                )
-            } else Brush.linearGradient(listOf(base, base))
-            if (k > 0f) {
-                drawRoundRect(neon[0].copy(alpha = 0.35f * k), Offset(left, cy - trackH), Size(x - left, trackH * 2), CornerRadius(trackH))
+            val drawTrack: androidx.compose.ui.graphics.drawscope.DrawScope.(Boolean) -> Unit = { withStops ->
+                drawRoundRect(trackColor, Offset(left, cy - trackH / 2f), Size(right - left, trackH), r)
+                val fillBrush = if (k > 0f) {
+                    val period = (right - left).coerceAtLeast(1f)
+                    Brush.linearGradient(
+                        blended + blended.first(),
+                        start = Offset(left + flow * period, 0f),
+                        end = Offset(left + flow * period + period, 0f),
+                        tileMode = TileMode.Repeated,
+                    )
+                } else Brush.linearGradient(listOf(base, base))
+                if (k > 0f) {
+                    drawRoundRect(neon[0].copy(alpha = 0.35f * k), Offset(left, cy - trackH), Size(x - left, trackH * 2), CornerRadius(trackH))
+                }
+                drawRoundRect(fillBrush, Offset(left, cy - trackH / 2f), Size((x - left).coerceAtLeast(trackH), trackH), r)
+                // Balanced: a faint light band running along the fill.
+                val bal = (1f - abs(p - 0.5f) * 2f).coerceIn(0f, 1f)
+                if (bal > 0.01f && x - left > trackH) {
+                    val fillW = x - left
+                    val bx = left + ((flow * 1.6f) % 1.6f - 0.3f) * fillW
+                    drawRoundRect(
+                        Brush.horizontalGradient(
+                            listOf(Color.Transparent, Color.White.copy(alpha = 0.38f * bal), Color.Transparent),
+                            startX = bx - 28.dp.toPx(), endX = bx + 28.dp.toPx(),
+                        ),
+                        Offset(left, cy - trackH / 2f), Size(fillW, trackH), r,
+                    )
+                }
+                if (withStops) for (i in 0..2) {
+                    val sx = left + (right - left) * i / 2f
+                    val passed = i / 2f <= p + 0.01f
+                    drawCircle(if (passed) Color.White else trackColor.copy(alpha = 1f), 6.dp.toPx(), Offset(sx, cy), alpha = if (passed) 0.9f else 1f)
+                    if (!passed) drawCircle(Color.Gray, 6.dp.toPx(), Offset(sx, cy), alpha = 0.35f)
+                }
             }
-            drawRoundRect(fillBrush, Offset(left, cy - trackH / 2f), Size((x - left).coerceAtLeast(trackH), trackH), r)
-            // Balanced: a faint light band running along the fill.
-            val bal = (1f - abs(p - 0.5f) * 2f).coerceIn(0f, 1f)
-            if (bal > 0.01f && x - left > trackH) {
-                val fillW = x - left
-                val bx = left + ((flow * 1.6f) % 1.6f - 0.3f) * fillW
-                drawRoundRect(
-                    Brush.horizontalGradient(
-                        listOf(Color.Transparent, Color.White.copy(alpha = 0.38f * bal), Color.Transparent),
-                        startX = bx - 28.dp.toPx(), endX = bx + 28.dp.toPx(),
-                    ),
-                    Offset(left, cy - trackH / 2f), Size(fillW, trackH), r,
-                )
+            // While held with glass on, the track is also recorded for the lens to refract.
+            // Explicit density and size: recording through this Canvas's own draw scope
+            // would make it reference itself.
+            val recDensity = androidx.compose.ui.unit.Density(density, fontScale)
+            if (lens > 0.01f) {
+                // The lens bends an opaque picture: the track over the card color.
+                val cardBehind = lerp(surface, Neon.Night, k)
+                trackLayer.record(recDensity, layoutDirection, androidx.compose.ui.unit.IntSize(size.width.toInt(), size.height.toInt())) {
+                    drawRect(cardBehind)
+                    // Without the stop dots: through the glass only the bar is seen.
+                    drawTrack(false)
+                }
             }
-            for (i in 0..2) {
-                val sx = left + (right - left) * i / 2f
-                val passed = i / 2f < p - 0.01f
-                drawCircle(if (passed) Color.White else trackColor.copy(alpha = 1f), 6.dp.toPx(), Offset(sx, cy), alpha = if (passed) 0.9f else 1f)
-                if (!passed) drawCircle(Color.Gray, 6.dp.toPx(), Offset(sx, cy), alpha = 0.35f)
-            }
+            drawTrack(true)
             if (k > 0f) {
                 drawCircle(
                     Brush.radialGradient(listOf(neon[0].copy(alpha = 0.55f * k), neon[1].copy(alpha = 0.2f * k), Color.Transparent), Offset(x, cy), 32.dp.toPx() * halo),
                     32.dp.toPx() * halo, Offset(x, cy),
                 )
             }
-            drawCircle(Color.Black.copy(alpha = 0.12f), 15.dp.toPx(), Offset(x, cy + 1.5.dp.toPx()))
-            // The thumb itself takes the level color: blue → green, then a light core in a neon ring.
-            drawCircle(lerp(base, Neon.NightText, k), 14.dp.toPx(), Offset(x, cy))
-            drawCircle(Color.White, 12.5.dp.toPx(), Offset(x, cy), alpha = 0.9f * (1f - k), style = Stroke(2.dp.toPx()))
-            if (k > 0f) {
-                drawCircle(Brush.sweepGradient(blended + blended.first(), Offset(x, cy)), 12.5.dp.toPx(), Offset(x, cy), alpha = k, style = Stroke(3.dp.toPx()))
+            val solid = 1f - lens
+            if (solid > 0.01f) {
+                drawCircle(Color.Black.copy(alpha = 0.12f * solid), 15.dp.toPx(), Offset(x, cy + 1.5.dp.toPx()))
+                // The thumb itself takes the level color: blue → green, then a light core in a neon ring.
+                drawCircle(lerp(base, Neon.NightText, k), 14.dp.toPx(), Offset(x, cy), alpha = solid)
+                drawCircle(Color.White, 12.5.dp.toPx(), Offset(x, cy), alpha = 0.9f * (1f - k) * solid, style = Stroke(2.dp.toPx()))
+                if (k > 0f) {
+                    drawCircle(Brush.sweepGradient(blended + blended.first(), Offset(x, cy)), 12.5.dp.toPx(), Offset(x, cy), alpha = k * solid, style = Stroke(3.dp.toPx()))
+                }
+                drawCircle(Color.White, 4.dp.toPx(), Offset(x, cy), alpha = 0.85f * (1f - k) * solid)
             }
-            drawCircle(Color.White, 4.dp.toPx(), Offset(x, cy), alpha = 0.85f * (1f - k))
+        }
+        // Liquid glass lens: a capsule that bends the track along its rim (the fill wraps
+        // around the edge, the background is squeezed into a bright band) and magnifies the middle.
+        if (lens > 0.01f) {
+            val dark = com.wdtt.client.ui.theme.isDarkSurface()
+            val h = (26f + 16f * lens).dp
+            val w = h * (1f + 0.62f * lens)
+            val density = LocalDensity.current
+            Box(
+                Modifier
+                    .offset {
+                        val track = widthPx - 2 * pad
+                        val cx = pad + track * pos.value
+                        IntOffset((cx - w.toPx() / 2f).roundToInt(), ((constraints.maxHeight - h.toPx()) / 2f).roundToInt())
+                    }
+                    .size(w, h)
+                    .shadow((6f * lens).dp, RoundedCornerShape(50), ambientColor = Color.Black.copy(alpha = 0.3f), spotColor = Color.Black.copy(alpha = 0.3f)),
+            ) {
+                com.wdtt.client.ui.components.surface.LiquidGlassPanel(
+                    backdrop = trackGlass,
+                    cornerRadius = h / 2,
+                    tint = (if (dark) Color.White.copy(alpha = 0.04f) else Color.White.copy(alpha = 0.10f)),
+                    dark = dark,
+                    // A narrow rim that bends steeply: right at the edge the glass reaches the
+                    // track in the middle and smears its color along the rim; the middle stays flat.
+                    bezel = h * 0.22f,
+                    depth = h * 0.42f,
+                    zoom = 0.04f,
+                    fringe = 0.3f,
+                    blur = 0.dp,
+                    underlay = lerp(surface, Neon.Night, ((pos.value - 0.5f) * 2f).coerceIn(0f, 1f)),
+                    modifier = Modifier.fillMaxSize().graphicsLayer { this.alpha = lens.coerceIn(0f, 1f) },
+                ) {}
+            }
         }
     }
 }

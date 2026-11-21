@@ -75,17 +75,16 @@ fun SettingsScreen() {
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     com.wdtt.client.ui.motion.MagnetSnapTick(listState)
     val snap = com.wdtt.client.ui.motion.rememberMagnetSnapFling(listState)
-    Column(
-        Modifier
-            .fillMaxSize()
-            .windowInsetsPadding(WindowInsets.statusBars),
-    ) {
-        ArdttPageHeader(title = "Настройки")
+    com.wdtt.client.ui.components.layout.GlassHeaderPage(
+        title = "Настройки",
+        scrolled = listState.canScrollBackward,
+        backdrop = com.wdtt.client.ui.components.surface.rememberScreenGlass(),
+    ) { top ->
         androidx.compose.foundation.lazy.LazyColumn(
             state = listState,
             flingBehavior = snap,
             contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                top = 4.dp, bottom = ArdttBottomChrome.navigationReserve() + 16.dp,
+                top = top + 4.dp, bottom = ArdttBottomChrome.navigationReserve() + 16.dp,
             ),
             verticalArrangement = Arrangement.spacedBy(14.dp),
             modifier = Modifier.fillMaxSize(),
@@ -117,7 +116,7 @@ fun SettingsScreen() {
                                     .padding(horizontal = 8.dp, vertical = 2.dp),
                             )
                         }
-                        Switch(
+                        com.wdtt.client.ui.components.control.LiteSwitch(
                             checked = glass && glassSupported,
                             enabled = glassSupported,
                             onCheckedChange = { haptics.toggle(it); scope.launch { lite.saveLiquidGlass(it) } },
@@ -364,7 +363,7 @@ private fun SwitchLine(title: String, checked: Boolean, onChange: (Boolean) -> U
             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
             modifier = Modifier.weight(1f),
         )
-        Switch(checked = checked, onCheckedChange = { haptics.toggle(it); onChange(it) })
+        com.wdtt.client.ui.components.control.LiteSwitch(checked = checked, onCheckedChange = { haptics.toggle(it); onChange(it) })
     }
 }
 

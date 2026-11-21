@@ -32,6 +32,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 
 /**
  * Liquid glass (beta). The screen content is recorded into a [GraphicsLayer] by
@@ -87,6 +88,17 @@ fun LiquidGlassPanel(
     tint: Color,
     dark: Boolean,
     modifier: Modifier = Modifier,
+    /** Width of the refracting rim. */
+    bezel: Dp = 22.dp,
+    /** How far the rim pulls the image inward. */
+    depth: Dp = 26.dp,
+    /** Magnification of the middle, 0 — none. */
+    zoom: Float = 0f,
+    blur: Dp = 4.dp,
+    /** Painted under the backdrop, for parts of the panel that reach past the recorded area. */
+    underlay: Color? = null,
+    /** Strength of the rainbow edge and color split, 1 — panel default. */
+    fringe: Float = 1f,
     content: @Composable BoxScope.() -> Unit,
 ) {
     var position by remember { mutableStateOf(Offset.Zero) }
@@ -105,10 +117,16 @@ fun LiquidGlassPanel(
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         renderEffect = GlassShader.effect(
                             s, size.width, size.height, radiusPx, density.density, time, tint, dark,
+                            bezelPx = with(density) { bezel.toPx() },
+                            depthPx = with(density) { depth.toPx() },
+                            zoom = zoom,
+                            blurPx = with(density) { blur.toPx() },
+                            fringeK = fringe,
                         ).asComposeRenderEffect()
                     }
                 }
                 .drawBehind {
+                    if (underlay != null) drawRect(underlay)
                     val offset = position - backdrop.origin
                     translate(-offset.x, -offset.y) { drawLayer(backdrop.layer) }
                 },
@@ -128,6 +146,10 @@ private object GlassShader {
         uniform float time;
         uniform half4 tint;
         uniform float dark;
+        uniform float bezelPx;
+        uniform float depthPx;
+        uniform float zoom;
+        uniform float fringeK;
 
         float sdRoundRect(float2 p, float2 b, float r) {
             float2 q = abs(p) - b + r;
@@ -154,15 +176,16 @@ private object GlassShader {
             n = n / max(length(n), 0.0001);
 
             // Convex bezel: strongest bend right at the rim, none past the bezel width.
-            float bezel = min(22.0 * dp, min(half_size.x, half_size.y) * 0.9);
+            // Kept clear of the middle: there the rim normal flips and would tear the image.
+            float bezel = min(bezelPx, min(half_size.x, half_size.y) * 0.7);
             float x = clamp(1.0 - inside / bezel, 0.0, 1.0);
             float bend = 1.0 - sqrt(1.0 - x * x);
             // Pull samples inward (the rim magnifies what lies under the middle) and add a
             // little overall magnification so even a calm backdrop visibly bends.
-            float2 off = -n * bend * 26.0 * dp - p * 0.04 * x;
+            float2 off = -n * bend * depthPx - p * (zoom + 0.04 * x);
 
             // Chromatic split grows toward the edge.
-            float disp = 0.32 * bend;
+            float disp = 0.32 * bend * fringeK;
             half4 cg = content.eval(coord + off);
             half r = content.eval(coord + off * (1.0 + disp)).r;
             half b = content.eval(coord + off * (1.0 - disp)).b;
@@ -190,7 +213,7 @@ private object GlassShader {
             float edgeAngle = atan(n.y, n.x) / 6.2831853;
             half3 iri = 0.5 + 0.5 * cos(6.2831853 * (edgeAngle * 1.5 + time) + half3(0.0, 2.094, 4.188));
             float fringe = smoothstep(bezel * 0.7, 0.0, inside) * (dark > 0.5 ? 0.30 : 0.38);
-            col += iri * fringe * (0.45 + 0.55 * (spec + spec2));
+            col += iri * fringe * fringeK * (0.45 + 0.55 * (spec + spec2));
 
             // Thin bright rim, stronger on the lit side.
             float rimLine = smoothstep(1.6 * dp, 0.0, inside);
@@ -207,6 +230,7 @@ private object GlassShader {
     fun effect(
         shader: RuntimeShader,
         w: Float, h: Float, radius: Float, dp: Float, time: Float, tint: Color, dark: Boolean,
+        bezelPx: Float, depthPx: Float, zoom: Float, blurPx: Float, fringeK: Float,
     ): RenderEffect {
         shader.setFloatUniform("size", w, h)
         shader.setFloatUniform("radius", radius.coerceAtMost(minOf(w, h) / 2f))
@@ -214,8 +238,28 @@ private object GlassShader {
         shader.setFloatUniform("time", time)
         shader.setFloatUniform("tint", tint.red, tint.green, tint.blue, tint.alpha)
         shader.setFloatUniform("dark", if (dark) 1f else 0f)
+        shader.setFloatUniform("bezelPx", bezelPx)
+        shader.setFloatUniform("depthPx", depthPx)
+        shader.setFloatUniform("zoom", zoom)
+        shader.setFloatUniform("fringeK", fringeK)
         val lens = RenderEffect.createRuntimeShaderEffect(shader, "content")
-        val blur = RenderEffect.createBlurEffect(4f * dp, 4f * dp, Shader.TileMode.CLAMP)
+        if (blurPx < 0.5f) return lens
+        val blur = RenderEffect.createBlurEffect(blurPx, blurPx, Shader.TileMode.CLAMP)
         return RenderEffect.createChainEffect(lens, blur)
     }
+}
+
+/**
+ * A backdrop of a screen's own content, for glass that floats inside that screen (header,
+ * search bar). Such glass cannot sample the root layer: it is itself drawn into it.
+ * Null when liquid glass is off.
+ */
+@Composable
+fun rememberScreenGlass(): GlassBackdrop? {
+    val root = LocalGlassBackdrop.current
+    val layer = androidx.compose.ui.graphics.rememberGraphicsLayer()
+    val local = remember(layer) { GlassBackdrop(layer) }
+    if (root == null) return null
+    local.transparency = root.transparency
+    return local
 }

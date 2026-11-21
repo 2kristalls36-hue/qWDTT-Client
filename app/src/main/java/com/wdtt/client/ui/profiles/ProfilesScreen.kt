@@ -46,6 +46,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -117,23 +118,26 @@ fun ProfilesScreen(settingsStore: SettingsStore) {
         if (uri != null) scope.launch { offer(ProfileImport.readUri(context, uri), "Файл не содержит профиля.") }
     }
 
-    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.statusBars)) {
-        ArdttPageHeader(
-            title = "Профили",
-            actions = {
-                ArdttButton(
-                    icon = Icons.Outlined.Add,
-                    contentDescription = "Добавить профиль",
-                    variant = ArdttButtonVariant.Icon,
-                    onClick = { addOpen = true },
-                )
-            },
-        )
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    com.wdtt.client.ui.components.layout.GlassHeaderPage(
+        title = "Профили",
+        scrolled = profiles.isNotEmpty() && listState.canScrollBackward,
+        backdrop = com.wdtt.client.ui.components.surface.rememberScreenGlass(),
+        actions = {
+            ArdttButton(
+                icon = Icons.Outlined.Add,
+                contentDescription = "Добавить профиль",
+                variant = ArdttButtonVariant.Icon,
+                onClick = { addOpen = true },
+            )
+        },
+    ) { top ->
         if (profiles.isEmpty()) {
-            EmptyProfiles(onAdd = { addOpen = true })
+            Box(Modifier.fillMaxSize().padding(top = top)) { EmptyProfiles(onAdd = { addOpen = true }) }
         } else {
             LazyColumn(
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = ArdttBottomChrome.navigationReserve() + 16.dp),
+                state = listState,
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = top + 4.dp, bottom = ArdttBottomChrome.navigationReserve() + 16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 items(profiles, key = { it.id }) { p ->

@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
@@ -70,12 +71,20 @@ enum class TunnelUiState { Off, Connecting, On }
 @Composable
 fun ConnectButton(
     state: TunnelUiState,
-    level: PowerLevel,
+    blend: Float,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val colors = levelColors(level)
-    val isMax = level == PowerLevel.Maximum
+    // blend is the power thumb position 0..1: green → blue on the first half,
+    // blue → neon on the second. Every layer mixes by it, so dragging the slider
+    // repaints the button continuously.
+    val g = (blend * 2f).coerceIn(0f, 1f)
+    val k = ((blend - 0.5f) * 2f).coerceIn(0f, 1f)
+    val stableColors = levelColors(PowerLevel.Stable)
+    val balancedColors = levelColors(PowerLevel.Balanced)
+    val neon = levelColors(PowerLevel.Maximum).neon
+    val accent = lerp(stableColors.accent, balancedColors.accent, g)
+    val onAccent = lerp(stableColors.onAccent, balancedColors.onAccent, g)
     val live = state != TunnelUiState.Off
     val on = state == TunnelUiState.On
     val motion = rememberMotionScale()
@@ -99,25 +108,11 @@ fun ConnectButton(
     }
 
     val surface = MaterialTheme.colorScheme.surface
-    val core by animateColorAsState(
-        targetValue = when {
-            isMax -> Neon.Night
-            on -> colors.accent
-            else -> surface
-        },
-        animationSpec = tween(400), label = "core",
-    )
-    val glyph by animateColorAsState(
-        targetValue = when {
-            isMax && on -> Neon.NightText
-            isMax -> Neon.NightFaint
-            on -> colors.onAccent
-            else -> colors.accent
-        },
-        animationSpec = tween(400), label = "glyph",
-    )
-    val neonGlow by animateFloatAsState(if (!isMax) 0f else if (on) 0.9f else 0.3f, tween(500), label = "glow")
-    val sparks by animateFloatAsState(if (isMax) 1f else 0f, tween(500), label = "sparks")
+    val onF by animateFloatAsState(if (on) 1f else 0f, tween(400), label = "on")
+    val core = lerp(lerp(surface, Neon.Night, k), lerp(accent, Neon.Night, k), onF)
+    val glyph = lerp(lerp(accent, Neon.NightFaint, k), lerp(onAccent, Neon.NightText, k), onF)
+    val neonGlow = k * (0.3f + 0.6f * onF)
+    val sparks = k
 
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
@@ -156,7 +151,7 @@ fun ConnectButton(
                     val p = (ripplePhase + i / 3f) % 1f
                     val r = size.minDimension / 2f * (0.71f + 0.29f * p)
                     drawCircle(
-                        color = if (isMax) colors.neon[1] else colors.accent,
+                        color = lerp(accent, neon[1], k),
                         radius = r,
                         alpha = 0.7f * (1f - p),
                         style = Stroke(width = 2.dp.toPx()),
@@ -175,7 +170,7 @@ fun ConnectButton(
             ) {
                 val r = size.minDimension / 2f
                 rotate(phase * 120f) {
-                    drawCircle(Brush.sweepGradient(colors.neon + colors.neon.first()), radius = r * 0.83f, style = Stroke(width = r * 0.34f))
+                    drawCircle(Brush.sweepGradient(neon + neon.first()), radius = r * 0.83f, style = Stroke(width = r * 0.34f))
                 }
                 drawCircle(
                     Brush.radialGradient(
@@ -192,22 +187,21 @@ fun ConnectButton(
         Canvas(Modifier.size(196.dp)) {
             val w = 7.dp.toPx()
             val r = size.minDimension / 2f - w / 2f
-            if (isMax) {
+            if (k < 1f) drawCircle(color = accent, radius = r, alpha = 0.16f * (1f - k), style = Stroke(width = w))
+            if (k > 0f) {
                 rotate(phase * 120f) {
                     drawCircle(
-                        brush = Brush.sweepGradient(colors.neon + colors.neon.first()),
+                        brush = Brush.sweepGradient(neon + neon.first()),
                         radius = r,
-                        alpha = if (on) 1f else 0.7f,
+                        alpha = k * (0.7f + 0.3f * onF),
                         style = Stroke(width = 3.dp.toPx()),
                     )
                 }
-            } else {
-                drawCircle(color = colors.accent, radius = r, alpha = 0.16f, style = Stroke(width = w))
             }
             if (arc.value > 0f) {
                 rotate(-90f + phase * 360f * 0.6f) {
                     drawArc(
-                        color = if (isMax) Neon.NightText else colors.accent,
+                        color = lerp(accent, Neon.NightText, k),
                         startAngle = 0f,
                         sweepAngle = 360f * arc.value,
                         useCenter = false,
@@ -233,7 +227,7 @@ fun ConnectButton(
                     val twinkle = 0.5f + 0.5f * sin((phase * (2.2f + i * 0.4f) + i) * 2f * Math.PI.toFloat())
                     val base = if (i == 1) 2.5.dp.toPx() else 3.5.dp.toPx()
                     val p = c + Offset((radius * cos(rad)).toFloat(), (radius * sin(rad)).toFloat())
-                    val color = if (radius == inner) Color.White else colors.neon[colorIndex]
+                    val color = if (radius == inner) Color.White else neon[colorIndex]
                     drawCircle(color.copy(alpha = 0.35f), radius = base * (1.4f + 1.6f * twinkle), center = p)
                     drawCircle(color, radius = base * (0.6f + 0.9f * twinkle), center = p, alpha = 0.45f + 0.55f * twinkle)
                 }
@@ -244,17 +238,14 @@ fun ConnectButton(
             Modifier
                 .size(156.dp)
                 .scale(press)
-                .shadow(if (on && !isMax) 14.dp else 0.dp, CircleShape, ambientColor = colors.accent, spotColor = colors.accent)
+                .shadow((14f * onF * (1f - k)).dp, CircleShape, ambientColor = accent, spotColor = accent)
                 .background(core, CircleShape)
-                .then(
-                    if (!on && !isMax) Modifier.border(2.dp, colors.accent.copy(alpha = 0.35f), CircleShape)
-                    else Modifier
-                )
+                .border(2.dp, accent.copy(alpha = 0.35f * (1f - onF) * (1f - k)), CircleShape)
                 .clickable(interactionSource = interaction, indication = null, onClick = onClick)
                 .semantics { contentDescription = label },
             contentAlignment = Alignment.Center,
         ) {
-            val glow = isMax && on
+            val glow = k > 0.5f && on
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Icon(
                     Icons.Rounded.PowerSettingsNew,
@@ -270,7 +261,7 @@ fun ConnectButton(
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = glyph,
-                        shadow = if (glow) Shadow(colors.neon[1], blurRadius = 16f) else null,
+                        shadow = if (glow) Shadow(neon[1].copy(alpha = k), blurRadius = 16f) else null,
                     ),
                 )
             }

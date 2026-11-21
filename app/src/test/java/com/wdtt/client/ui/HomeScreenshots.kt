@@ -40,7 +40,7 @@ class HomeScreenshots {
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(20.dp),
                 ) {
-                    ConnectButton(state = state, level = level, onClick = {})
+                    ConnectButton(state = state, blend = level.ordinal / 2f, onClick = {})
                     PowerCard(level = level, locked = state != TunnelUiState.Off, onLevelChange = {})
                 }
             }

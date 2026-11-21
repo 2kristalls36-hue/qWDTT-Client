@@ -39,6 +39,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -89,7 +90,12 @@ fun HomeScreen(settingsStore: SettingsStore, onOpenProfiles: () -> Unit) {
         else -> TunnelUiState.Off
     }
 
-    val level by lite.powerLevel.collectAsStateWithLifecycle(PowerLevel.Default)
+    // Null until the saved level is read: the card and the button appear with the right
+    // colors at once instead of sliding over from the default level.
+    val levelLoaded by lite.powerLevel.collectAsStateWithLifecycle(null)
+    val level = levelLoaded ?: PowerLevel.Default
+    // Slider thumb position, shared by the power card and the connect button.
+    val powerPos = remember(levelLoaded != null) { androidx.compose.animation.core.Animatable(level.ordinal / 2f) }
     val warnDays by lite.warnDays.collectAsStateWithLifecycle(LiteSettings.DEFAULT_WARN_DAYS)
     val profileId by settingsStore.currentProfileId.collectAsStateWithLifecycle("")
     val profiles by profilesStore.profiles.collectAsStateWithLifecycle(emptyList())
@@ -149,7 +155,7 @@ fun HomeScreen(settingsStore: SettingsStore, onOpenProfiles: () -> Unit) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
             ConnectButton(
                 state = state,
-                level = level,
+                blend = powerPos.value,
                 onClick = {
                     when (state) {
                         TunnelUiState.Off -> {
@@ -180,6 +186,7 @@ fun HomeScreen(settingsStore: SettingsStore, onOpenProfiles: () -> Unit) {
             locked = state != TunnelUiState.Off,
             onLevelChange = { scope.launch { lite.savePowerLevel(it) } },
             modifier = Modifier.widthIn(max = 460.dp),
+            pos = powerPos,
         )
     }
 
@@ -294,7 +301,13 @@ private fun StatsRow(visible: Boolean, sinceMs: Long, mbps: Double?, ping: Long)
         if (s >= 3600) "%d:%02d:%02d".format(s / 3600, (s % 3600) / 60, s % 60) else "%02d:%02d".format(s / 60, s % 60)
     } else "00:00"
     Row(
-        Modifier.widthIn(max = 340.dp).fillMaxWidth().alpha(alpha),
+        Modifier
+            .widthIn(max = 340.dp)
+            .fillMaxWidth()
+            .graphicsLayer {
+                this.alpha = alpha
+                translationY = (1f - alpha) * 10.dp.toPx()
+            },
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         StatTile("Время", uptime, null, Modifier.weight(1f))

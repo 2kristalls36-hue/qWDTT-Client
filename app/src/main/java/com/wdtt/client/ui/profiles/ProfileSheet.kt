@@ -129,6 +129,7 @@ fun ProfileSheet(
                         selected = d == warnDays,
                         enabled = warnEnabled,
                         onClick = { scope.launch { lite.saveWarnDays(d) } },
+                        modifier = Modifier.weight(1f),
                     )
                 }
             }
@@ -226,7 +227,11 @@ private fun SubscriptionBar(fraction: Float, tone: SubscriptionTone) {
         else -> Color(0xFF22C55E)
     }
     val color by animateColorAsState(target, tween(300), label = "bar")
-    val width by animateFloatAsState(fraction, tween(400), label = "barw")
+    // Grows from zero when the sheet opens, then follows changes.
+    val width = remember { androidx.compose.animation.core.Animatable(0f) }
+    LaunchedEffect(fraction) {
+        width.animateTo(fraction, tween(700, delayMillis = 150, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+    }
     Box(
         Modifier
             .fillMaxWidth()
@@ -234,7 +239,7 @@ private fun SubscriptionBar(fraction: Float, tone: SubscriptionTone) {
             .clip(RoundedCornerShape(8.dp))
             .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
     ) {
-        Box(Modifier.fillMaxWidth(width).height(8.dp).clip(RoundedCornerShape(8.dp)).background(color))
+        Box(Modifier.fillMaxWidth(width.value).height(8.dp).clip(RoundedCornerShape(8.dp)).background(color))
     }
 }
 

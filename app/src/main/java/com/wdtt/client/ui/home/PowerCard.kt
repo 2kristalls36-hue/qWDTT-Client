@@ -90,12 +90,13 @@ fun PowerCard(
     locked: Boolean,
     onLevelChange: (PowerLevel) -> Unit,
     modifier: Modifier = Modifier,
+    // Thumb position 0..1 drives every color, so dragging blends them continuously:
+    // green → blue on the first half, blue → neon night panel on the second.
+    // Hoisted so the connect button can blend with it.
+    pos: Animatable<Float, androidx.compose.animation.core.AnimationVector1D> = remember { Animatable(level.ordinal / 2f) },
 ) {
     val colors = levelColors(level)
     val scheme = MaterialTheme.colorScheme
-    // Thumb position 0..1 drives every color, so dragging blends them continuously:
-    // green → blue on the first half, blue → neon night panel on the second.
-    val pos = remember { Animatable(level.ordinal / 2f) }
     val k = ((pos.value - 0.5f) * 2f).coerceIn(0f, 1f)
     val titleBlend = lerp(levelColors(PowerLevel.Stable).accent, levelColors(PowerLevel.Balanced).accent, (pos.value * 2f).coerceIn(0f, 1f))
     val cardColor = lerp(scheme.surface, Neon.Night, k)

@@ -154,5 +154,6 @@ dependencies {
     testImplementation("io.github.takahirom.roborazzi:roborazzi:1.39.0")
     testImplementation("io.github.takahirom.roborazzi:roborazzi-compose:1.39.0")
     testImplementation("androidx.compose.ui:ui-test-junit4")
+    testImplementation("androidx.test.espresso:espresso-core:3.6.1")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

@@ -51,7 +51,7 @@ private object ChoiceChipDefaults {
     const val SelectedBorderAlphaLight = 0.25f
     const val UnselectedBorderAlpha = 0.45f
     const val DimmedBorderAlpha = ArdttAlpha.Outline
-    val ContentPadding = PaddingValues(horizontal = ArdttSpacing.XLarge)
+    val ContentPadding = PaddingValues(horizontal = ArdttSpacing.Medium)
 }
 
 /**
@@ -141,7 +141,7 @@ fun ArdttChoiceChip(
             ),
             contentPadding = ChoiceChipDefaults.ContentPadding,
         ) {
-            Text(label, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            FitText(label, fontWeight = FontWeight.Medium)
         }
         return
     }
@@ -186,11 +186,9 @@ fun ArdttChoiceChip(
         },
         contentPadding = ChoiceChipDefaults.ContentPadding,
     ) {
-        Text(
+        FitText(
             label,
             fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
             color = if (dimmed) {
                 (accentContent ?: colors.primary).copy(alpha = ArdttAlpha.Subtle)
             } else {

@@ -389,6 +389,7 @@ fun ArdttNavigationBar(
             cornerRadius = NavBarDefaults.GlassCorner,
             tint = colors.surface.copy(alpha = backdrop.veil(dark)),
             dark = dark,
+            blur = backdrop.frost(),
             modifier = outer
                 .shadow(18.dp, ArdttShapes.Section, ambientColor = Color.Black.copy(alpha = 0.25f), spotColor = Color.Black.copy(alpha = 0.25f))
                 .height(ArdttSize.NavTrack)

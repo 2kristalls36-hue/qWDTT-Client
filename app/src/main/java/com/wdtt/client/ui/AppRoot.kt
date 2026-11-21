@@ -48,6 +48,14 @@ fun AppRoot(settingsStore: SettingsStore) {
     val appHaptics = com.wdtt.client.ui.motion.rememberAppHaptics(hapticsOn)
     val glassTransparency by lite.glassTransparency.collectAsState(com.wdtt.client.lite.LiteSettings.DEFAULT_GLASS_TRANSPARENCY)
     backdrop?.transparency = glassTransparency
+    // The glass rim takes the colour of the power level, like the connect button;
+    // only the maximum level keeps the rainbow.
+    val power by lite.powerLevel.collectAsState(com.wdtt.client.lite.PowerLevel.Default)
+    val rimTarget = com.wdtt.client.ui.home.levelColors(
+        if (power == com.wdtt.client.lite.PowerLevel.Maximum) com.wdtt.client.lite.PowerLevel.Balanced else power,
+    ).accent
+    val rimColor by androidx.compose.animation.animateColorAsState(rimTarget, label = "rim")
+    backdrop?.rim = if (power == com.wdtt.client.lite.PowerLevel.Maximum) null else rimColor
     val items = listOf(
         // Same icons as ARDTT; the motions follow the routes (key turn, folder lift,
         // filter slide, gear half turn).

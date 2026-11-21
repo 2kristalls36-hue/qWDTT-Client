@@ -51,12 +51,17 @@ object LiquidGlass {
 /** Where the backdrop layer was recorded, in root coordinates. */
 class GlassBackdrop(val layer: GraphicsLayer) {
     var origin by mutableStateOf(Offset.Zero)
-    /** User setting: 0 — frosted, 1 — almost clear. */
+    /** User setting: 0 — frosted, 1 — clear. */
     var transparency by mutableStateOf(0.5f)
+    /** Colour of the rim fringe (the power level); null — the rainbow of the maximum level. */
+    var rim by mutableStateOf<Color?>(null)
 
-    /** Veil strength over the glass; 0.5 gives the tuned default (0.34 light, 0.55 dark). */
-    fun veil(dark: Boolean): Float = if (dark) (1.1f * (1f - transparency)).coerceIn(0.04f, 0.95f)
-        else (0.68f * (1f - transparency)).coerceIn(0.03f, 0.9f)
+    /** Veil strength over the glass; 0.5 gives the tuned default (0.34 light, 0.55 dark), 1 — none. */
+    fun veil(dark: Boolean): Float = if (dark) (1.1f * (1f - transparency)).coerceIn(0f, 0.95f)
+        else (0.68f * (1f - transparency)).coerceIn(0f, 0.9f)
+
+    /** Frost (blur) of what is behind; gone at full transparency. */
+    fun frost(): Dp = (7f * (1f - transparency)).coerceIn(0f, 7f).dp
 }
 
 val LocalGlassBackdrop = compositionLocalOf<GlassBackdrop?> { null }
@@ -122,6 +127,7 @@ fun LiquidGlassPanel(
                             zoom = zoom,
                             blurPx = with(density) { blur.toPx() },
                             fringeK = fringe,
+                            rim = backdrop.rim,
                         ).asComposeRenderEffect()
                     }
                 }
@@ -150,6 +156,8 @@ private object GlassShader {
         uniform float depthPx;
         uniform float zoom;
         uniform float fringeK;
+        uniform half4 rimColor;
+        uniform float rimMix;
 
         float sdRoundRect(float2 p, float2 b, float r) {
             float2 q = abs(p) - b + r;
@@ -186,7 +194,8 @@ private object GlassShader {
             float2 off = -n * bend * depthPx - p * (zoom + 0.04 * x);
 
             // Chromatic split grows toward the edge.
-            float disp = 0.32 * bend * fringeK;
+            // A coloured rim keeps the colour split faint, so no rainbow shows at the edge.
+            float disp = 0.32 * bend * fringeK * (1.0 - 0.8 * rimMix);
             half4 cg = content.eval(coord + off);
             half r = content.eval(coord + off * (1.0 + disp)).r;
             half b = content.eval(coord + off * (1.0 - disp)).b;
@@ -213,7 +222,8 @@ private object GlassShader {
             // Iridescent fringe inside the bezel, hue travelling along the rim.
             // Guarded: at the very centre of a round panel the normal is zero and atan is undefined.
             float edgeAngle = atan(n.y, n.x + 0.00001) / 6.2831853;
-            half3 iri = 0.5 + 0.5 * cos(6.2831853 * (edgeAngle * 1.5 + time) + half3(0.0, 2.094, 4.188));
+            half3 rainbow = 0.5 + 0.5 * cos(6.2831853 * (edgeAngle * 1.5 + time) + half3(0.0, 2.094, 4.188));
+            half3 iri = mix(rainbow, rimColor.rgb, rimMix);
             float fringe = smoothstep(bezel * 0.7, 0.0, inside) * (dark > 0.5 ? 0.30 : 0.38);
             col += iri * fringe * fringeK * (0.45 + 0.55 * (spec + spec2));
 
@@ -232,7 +242,7 @@ private object GlassShader {
     fun effect(
         shader: RuntimeShader,
         w: Float, h: Float, radius: Float, dp: Float, time: Float, tint: Color, dark: Boolean,
-        bezelPx: Float, depthPx: Float, zoom: Float, blurPx: Float, fringeK: Float,
+        bezelPx: Float, depthPx: Float, zoom: Float, blurPx: Float, fringeK: Float, rim: Color?,
     ): RenderEffect {
         shader.setFloatUniform("size", w, h)
         shader.setFloatUniform("radius", radius.coerceAtMost(minOf(w, h) / 2f))
@@ -244,6 +254,9 @@ private object GlassShader {
         shader.setFloatUniform("depthPx", depthPx)
         shader.setFloatUniform("zoom", zoom)
         shader.setFloatUniform("fringeK", fringeK)
+        val rc = rim ?: Color.White
+        shader.setFloatUniform("rimColor", rc.red, rc.green, rc.blue, 1f)
+        shader.setFloatUniform("rimMix", if (rim == null) 0f else 1f)
         val lens = RenderEffect.createRuntimeShaderEffect(shader, "content")
         if (blurPx < 0.5f) return lens
         val blur = RenderEffect.createBlurEffect(blurPx, blurPx, Shader.TileMode.CLAMP)
@@ -263,5 +276,6 @@ fun rememberScreenGlass(): GlassBackdrop? {
     val local = remember(layer) { GlassBackdrop(layer) }
     if (root == null) return null
     local.transparency = root.transparency
+    local.rim = root.rim
     return local
 }

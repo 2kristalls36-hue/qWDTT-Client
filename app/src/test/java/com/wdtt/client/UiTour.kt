@@ -40,7 +40,7 @@ class UiTour {
 
     private val ctx get() = ApplicationProvider.getApplicationContext<android.content.Context>()
 
-    private fun seed(level: PowerLevel, daysLeft: Long, glass: Boolean = false) = runBlocking {
+    private fun seed(level: PowerLevel, daysLeft: Long, glass: Boolean = false, clear: Float = 0.5f) = runBlocking {
         FakeAndroidKeyStore.install()
         val store = ProfilesStore(ctx)
         // The DataStore instance lives for the whole test process: start from an empty list.
@@ -51,6 +51,7 @@ class UiTour {
         val lite = LiteSettings(ctx)
         lite.savePowerLevel(level)
         lite.saveLiquidGlass(glass)
+        lite.saveGlassTransparency(clear)
         lite.saveSubscription(
             home.id,
             SubscriptionInfo(
@@ -172,7 +173,7 @@ class UiTour {
     fun lightBalanced() { seed(PowerLevel.Balanced, 23, glass = true); tour("light_411", connected = false) }
 
     @Test @Config(sdk = [35], qualifiers = "w411dp-h891dp-night-xxhdpi")
-    fun darkMaxConnected() { seed(PowerLevel.Maximum, 3, glass = true); tour("dark_411_max_on", connected = true) }
+    fun darkMaxConnected() { seed(PowerLevel.Maximum, 3, glass = true, clear = 1f); tour("dark_411_max_on", connected = true) }
 
     @Test @Config(sdk = [35], qualifiers = "w360dp-h740dp-xhdpi")
     fun smallStable() { seed(PowerLevel.Stable, 1); tour("light_360_stable", connected = true) }

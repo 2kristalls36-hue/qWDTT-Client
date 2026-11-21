@@ -48,6 +48,7 @@ class SliderLensScreenshots {
             }
         }
         compose.mainClock.advanceTimeBy(800)
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/lens_rest_$name.png")
         val node = compose.onNodeWithTag("power-slider")
         node.performTouchInput {
             val pad = 14.dp.toPx()

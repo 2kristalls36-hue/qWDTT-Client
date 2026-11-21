@@ -121,6 +121,7 @@ fun ArdttSearchBar(
             cornerRadius = ArdttRadius.Control,
             tint = colors.surface.copy(alpha = veil),
             dark = dark,
+            blur = backdrop.frost(),
             modifier = modifier.then(tap),
         ) { fieldRow() }
         return

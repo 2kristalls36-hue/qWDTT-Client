@@ -310,10 +310,12 @@ private fun PowerSlider(
     val glassOn = com.wdtt.client.ui.components.surface.LocalGlassBackdrop.current != null
     val trackLayer = androidx.compose.ui.graphics.rememberGraphicsLayer()
     val trackGlass = remember(trackLayer) { com.wdtt.client.ui.components.surface.GlassBackdrop(trackLayer) }
-    val lens by animateFloatAsState(
+    // With glass on the thumb is always a glass capsule; holding it lifts and enlarges it.
+    val lens by animateFloatAsState(if (glassOn) 1f else 0f, spring(dampingRatio = 0.62f, stiffness = 420f), label = "lens")
+    val lift by animateFloatAsState(
         if (glassOn && !locked && (pressed || dragging)) 1f else 0f,
         spring(dampingRatio = 0.62f, stiffness = 420f),
-        label = "lens",
+        label = "lift",
     )
     LaunchedEffect(level, dragging) {
         if (!dragging) pos.magnetTo(level.ordinal / 2f)
@@ -482,8 +484,8 @@ private fun PowerSlider(
         // around the edge, the background is squeezed into a bright band) and magnifies the middle.
         if (lens > 0.01f) {
             val dark = com.wdtt.client.ui.theme.isDarkSurface()
-            val h = (26f + 16f * lens).dp
-            val w = h * (1f + 0.62f * lens)
+            val h = (30f + 12f * lift).dp
+            val w = h * (1.4f + 0.22f * lift)
             val density = LocalDensity.current
             Box(
                 Modifier
@@ -493,7 +495,7 @@ private fun PowerSlider(
                         IntOffset((cx - w.toPx() / 2f).roundToInt(), ((constraints.maxHeight - h.toPx()) / 2f).roundToInt())
                     }
                     .size(w, h)
-                    .shadow((6f * lens).dp, RoundedCornerShape(50), ambientColor = Color.Black.copy(alpha = 0.3f), spotColor = Color.Black.copy(alpha = 0.3f)),
+                    .shadow((2f + 5f * lift).dp * lens, RoundedCornerShape(50), ambientColor = Color.Black.copy(alpha = 0.3f), spotColor = Color.Black.copy(alpha = 0.3f)),
             ) {
                 com.wdtt.client.ui.components.surface.LiquidGlassPanel(
                     backdrop = trackGlass,

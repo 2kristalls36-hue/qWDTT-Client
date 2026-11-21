@@ -97,6 +97,7 @@ private fun BoxScope.HeaderPlate(backdrop: GlassBackdrop?, alpha: Float) {
             // Thicker veil than the tab bar: the title sits right over scrolling text.
             tint = colors.surface.copy(alpha = (backdrop.veil(dark) + 0.25f).coerceAtMost(0.92f)),
             dark = dark,
+            blur = backdrop.frost(),
             modifier = m,
         ) {}
     } else {

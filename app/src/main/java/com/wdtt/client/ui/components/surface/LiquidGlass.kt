@@ -154,13 +154,15 @@ private object GlassShader {
             n = n / max(length(n), 0.0001);
 
             // Convex bezel: strongest bend right at the rim, none past the bezel width.
-            float bezel = 16.0 * dp;
+            float bezel = min(22.0 * dp, min(half_size.x, half_size.y) * 0.9);
             float x = clamp(1.0 - inside / bezel, 0.0, 1.0);
             float bend = 1.0 - sqrt(1.0 - x * x);
-            float2 off = -n * bend * 13.0 * dp;
+            // Pull samples inward (the rim magnifies what lies under the middle) and add a
+            // little overall magnification so even a calm backdrop visibly bends.
+            float2 off = -n * bend * 26.0 * dp - p * 0.04 * x;
 
             // Chromatic split grows toward the edge.
-            float disp = 0.22 * bend;
+            float disp = 0.32 * bend;
             half4 cg = content.eval(coord + off);
             half r = content.eval(coord + off * (1.0 + disp)).r;
             half b = content.eval(coord + off * (1.0 - disp)).b;
@@ -169,6 +171,14 @@ private object GlassShader {
 
             // Veil for legibility.
             col = mix(col, tint.rgb, tint.a);
+
+            // Thickness: the bezel catches light on the upper side and darkens a bit on the
+            // lower one, so the edge reads as a rounded slab even over a flat backdrop.
+            float slope = bend;
+            float up = clamp(-n.y, 0.0, 1.0);
+            float down = clamp(n.y, 0.0, 1.0);
+            col += half3(1.0) * slope * up * (dark > 0.5 ? 0.10 : 0.22);
+            col -= half3(1.0) * slope * down * (dark > 0.5 ? 0.10 : 0.07);
 
             // Light drifts around slowly; specular is brightest where the rim faces it.
             float ang = 6.2831853 * time;
@@ -179,7 +189,7 @@ private object GlassShader {
             // Iridescent fringe inside the bezel, hue travelling along the rim.
             float edgeAngle = atan(n.y, n.x) / 6.2831853;
             half3 iri = 0.5 + 0.5 * cos(6.2831853 * (edgeAngle * 1.5 + time) + half3(0.0, 2.094, 4.188));
-            float fringe = smoothstep(bezel * 0.75, 0.0, inside) * (dark > 0.5 ? 0.24 : 0.30);
+            float fringe = smoothstep(bezel * 0.7, 0.0, inside) * (dark > 0.5 ? 0.30 : 0.38);
             col += iri * fringe * (0.45 + 0.55 * (spec + spec2));
 
             // Thin bright rim, stronger on the lit side.

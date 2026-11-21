@@ -37,6 +37,12 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.wdtt.client.ui.motion.magnetTo
+import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import com.wdtt.client.ui.theme.isDarkSurface
 import com.wdtt.client.ui.components.surface.LiquidGlassPanel
 import com.wdtt.client.ui.components.surface.LiquidGlass
@@ -288,6 +294,61 @@ fun ArdttNavigationBar(
             horizontal = NavBarDefaults.OuterPadding,
             vertical = NavBarDefaults.TrackPadding,
         )
+    // Selection droplet: follows the finger when dragged across the bar, then is pulled
+    // into the nearest tab by the magnet and that tab opens. A plain tap works as before.
+    val count = items.size
+    val committedIndex = items.indexOfFirst { it.route == (pendingRoute ?: selectedRoute) }.coerceAtLeast(0)
+    val selPos = remember { Animatable(committedIndex.toFloat()) }
+    var dragging by remember { mutableStateOf(false) }
+    var hover by remember { mutableIntStateOf(-1) }
+    val scope = rememberCoroutineScope()
+    val haptics = com.wdtt.client.ui.motion.LocalAppHaptics.current
+    val range = (count - 1).coerceAtLeast(1).toFloat()
+    LaunchedEffect(committedIndex, dragging) {
+        if (!dragging) selPos.magnetTo(committedIndex.toFloat(), fullRange = range)
+    }
+    val currentItems by rememberUpdatedState(items)
+    val dragToSelect = Modifier.pointerInput(count) {
+        val pad = NavBarDefaults.TrackPadding.toPx()
+        fun indexAt(x: Float): Float {
+            val slot = (size.width - pad * 2) / count
+            return ((x - pad) / slot - 0.5f).coerceIn(0f, (count - 1).toFloat())
+        }
+        fun follow(x: Float) {
+            val raw = indexAt(x)
+            val near = raw.roundToInt()
+            if (near != hover) {
+                hover = near
+                haptics.perform(com.wdtt.client.ui.motion.Haptic.Tick)
+            }
+            scope.launch { selPos.snapTo(tabMagnet(raw)) }
+        }
+        fun release() {
+            val target = selPos.value.roundToInt().coerceIn(0, count - 1)
+            val route = currentItems[target].route
+            hover = -1
+            if (route != selectedRoute) {
+                navTabPendingRoute(selectedRoute, route)?.let { pendingRoute = it }
+                selectTab.value(route)
+            }
+            scope.launch {
+                selPos.magnetTo(target.toFloat(), fullRange = range, onContact = {
+                    haptics.perform(com.wdtt.client.ui.motion.Haptic.Click)
+                })
+                dragging = false
+            }
+        }
+        detectHorizontalDragGestures(
+            onDragStart = { o -> dragging = true; hover = -1; follow(o.x) },
+            onDragEnd = { release() },
+            onDragCancel = { release() },
+        ) { change, _ ->
+            change.consume()
+            follow(change.position.x)
+        }
+    }
+    val shownIndex = if (dragging && hover >= 0) hover else -1
+
     val tabs: @Composable () -> Unit = {
         Row(
             modifier = Modifier
@@ -298,11 +359,11 @@ fun ArdttNavigationBar(
                     vertical = ArdttSpacing.Tiny,
                 ),
         ) {
-            items.forEach { item ->
+            items.forEachIndexed { index, item ->
                 NavBarTab(
                     item = item,
-                    selected = item.route == selectedRoute,
-                    pending = item.route == pendingRoute,
+                    selected = if (shownIndex >= 0) index == shownIndex else item.route == selectedRoute,
+                    pending = shownIndex < 0 && item.route == pendingRoute,
                     emphasis = 0f,
                     selectedColor = selectedColor,
                     unselectedColor = unselectedColor,
@@ -326,14 +387,11 @@ fun ArdttNavigationBar(
             dark = dark,
             modifier = outer
                 .shadow(18.dp, ArdttShapes.Section, ambientColor = Color.Black.copy(alpha = 0.25f), spotColor = Color.Black.copy(alpha = 0.25f))
-                .height(ArdttSize.NavTrack),
+                .height(ArdttSize.NavTrack)
+                .then(dragToSelect),
         ) {
             CompositionLocalProvider(LocalContentColor provides colors.onSurface) {
-                GlassSelection(
-                    count = items.size,
-                    selected = items.indexOfFirst { it.route == (pendingRoute ?: selectedRoute) },
-                    dark = dark,
-                )
+                SelectionDroplet(count = count, pos = selPos.value, velocity = selPos.velocity, dark = dark, glass = true)
                 tabs()
             }
         }
@@ -353,34 +411,51 @@ fun ArdttNavigationBar(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(ArdttSize.NavTrack),
-        ) { tabs() }
+                .height(ArdttSize.NavTrack)
+                .then(dragToSelect),
+        ) {
+            SelectionDroplet(count = count, pos = selPos.value, velocity = selPos.velocity, dark = isDarkSurface(), glass = false)
+            tabs()
+        }
     }
 }
 
 /**
- * Glass droplet under the selected tab. It glides to the new tab on a spring and
- * stretches along the way, like a drop of liquid, then settles round again.
+ * Magnet between tabs while dragging: near a tab the droplet is drawn in faster the
+ * closer it gets and is caught on it; between tabs it follows the finger.
+ */
+internal fun tabMagnet(v: Float, reach: Float = 0.34f, capture: Float = 0.08f): Float {
+    val stop = v.roundToInt().toFloat()
+    val d = v - stop
+    val x = kotlin.math.abs(d)
+    if (x >= reach) return v
+    if (x <= capture) return stop
+    val u = (x - capture) / (reach - capture)
+    return stop + kotlin.math.sign(d) * reach * kotlin.math.sqrt(u)
+}
+
+/**
+ * Droplet under the selected tab. Moving fast it stretches like a drop of liquid,
+ * then settles round. Glass mode: light glass body with a bright rim; plain mode: a soft tint.
  */
 @Composable
-private fun BoxScope.GlassSelection(count: Int, selected: Int, dark: Boolean) {
-    if (count <= 0 || selected < 0) return
-    val pos = remember { Animatable(selected.toFloat()) }
-    LaunchedEffect(selected) {
-        pos.animateTo(selected.toFloat(), spring(dampingRatio = 0.72f, stiffness = 380f))
-    }
+private fun BoxScope.SelectionDroplet(count: Int, pos: Float, velocity: Float, dark: Boolean, glass: Boolean) {
+    if (count <= 0) return
     val primary = MaterialTheme.colorScheme.primary
     Canvas(Modifier.matchParentSize()) {
         val pad = NavBarDefaults.TrackPadding.toPx()
         val slot = (size.width - pad * 2) / count
-        val stretch = (kotlin.math.abs(pos.velocity) * 0.10f).coerceAtMost(0.45f)
+        val stretch = (kotlin.math.abs(velocity) * 0.10f).coerceAtMost(0.45f)
         val w = slot * (0.86f + stretch)
         val h = size.height - 10.dp.toPx() - stretch * 6.dp.toPx()
-        val cx = pad + slot * (pos.value + 0.5f)
+        val cx = pad + slot * (pos + 0.5f)
         val left = cx - w / 2f
         val top = (size.height - h) / 2f
         val r = CornerRadius(h / 2f)
-        // Body: a light, slightly brighter glass with a soft primary tint.
+        if (!glass) {
+            drawRoundRect(primary.copy(alpha = if (dark) 0.18f else 0.10f), Offset(left, top), Size(w, h), r)
+            return@Canvas
+        }
         drawRoundRect(
             Brush.verticalGradient(
                 listOf(Color.White.copy(alpha = if (dark) 0.16f else 0.55f), Color.White.copy(alpha = if (dark) 0.06f else 0.22f)),
@@ -389,7 +464,6 @@ private fun BoxScope.GlassSelection(count: Int, selected: Int, dark: Boolean) {
             Offset(left, top), Size(w, h), r,
         )
         drawRoundRect(primary.copy(alpha = if (dark) 0.16f else 0.10f), Offset(left, top), Size(w, h), r)
-        // Rim: bright on top, fading down, with a faint colored edge.
         drawRoundRect(
             Brush.verticalGradient(
                 listOf(Color.White.copy(alpha = if (dark) 0.55f else 0.95f), Color.White.copy(alpha = 0.05f), primary.copy(alpha = 0.35f)),

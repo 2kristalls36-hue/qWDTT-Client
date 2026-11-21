@@ -71,9 +71,9 @@ class NavDragTest {
                     Box(Modifier.fillMaxWidth().background(androidx.compose.material3.MaterialTheme.colorScheme.background)) {
                         ArdttNavigationBar(
                             items = listOf(
-                                ArdttNavItem("tunnel", "Главная", Icons.Outlined.Home, glyph = com.wdtt.client.ui.components.layout.LiteTabIcons.Power),
-                                ArdttNavItem("profiles", "Профили", Icons.Outlined.Home, glyph = com.wdtt.client.ui.components.layout.LiteTabIcons.Cards),
-                                ArdttNavItem("exceptions", "Приложения", Icons.Outlined.Home, glyph = com.wdtt.client.ui.components.layout.LiteTabIcons.Tiles),
+                                ArdttNavItem("tunnel", "Главная", Icons.Outlined.Home),
+                                ArdttNavItem("profiles", "Профили", Icons.Outlined.Home),
+                                ArdttNavItem("exceptions", "Приложения", Icons.Outlined.Home),
                                 ArdttNavItem("settings", "Настройки", Icons.Outlined.Home),
                             ),
                             selectedRoute = "tunnel",

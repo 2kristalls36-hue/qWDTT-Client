@@ -8,10 +8,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
 import com.wdtt.client.ui.components.surface.glassBackdropSource
-import com.wdtt.client.ui.components.layout.LiteTabIcons
-import androidx.compose.material.icons.outlined.Apps
-import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material.icons.outlined.VpnKey
+import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.runtime.collectAsState
 import androidx.compose.material3.Text
@@ -50,10 +49,11 @@ fun AppRoot(settingsStore: SettingsStore) {
     val glassTransparency by lite.glassTransparency.collectAsState(com.wdtt.client.lite.LiteSettings.DEFAULT_GLASS_TRANSPARENCY)
     backdrop?.transparency = glassTransparency
     val items = listOf(
-        ArdttNavItem(Routes.HOME, "Главная", Icons.Outlined.Home, glyph = LiteTabIcons.Power),
-        ArdttNavItem(Routes.PROFILES, "Профили", Icons.Outlined.Person, glyph = LiteTabIcons.Cards),
-        ArdttNavItem(Routes.APPS, "Приложения", Icons.Outlined.Apps, glyph = LiteTabIcons.Tiles),
-        // Gear with the ARDTT half turn; a dot when a newer version is published.
+        // Same icons as ARDTT; the motions follow the routes (key turn, folder lift,
+        // filter slide, gear half turn).
+        ArdttNavItem(Routes.HOME, "Главная", Icons.Outlined.VpnKey),
+        ArdttNavItem(Routes.PROFILES, "Профили", Icons.Outlined.Folder),
+        ArdttNavItem(Routes.APPS, "Приложения", Icons.Outlined.FilterList),
         ArdttNavItem(Routes.SETTINGS, "Настройки", Icons.Outlined.Settings, dot = update != null),
     )
     // A link or file opened from another app is imported on the profiles tab.

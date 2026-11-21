@@ -7,6 +7,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
+import com.wdtt.client.ui.components.layout.LiteTabIcons
 import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Person
@@ -33,9 +34,9 @@ internal object Routes {
 fun AppRoot(settingsStore: SettingsStore) {
     var route by rememberSaveable { mutableStateOf(Routes.HOME) }
     val items = listOf(
-        ArdttNavItem(Routes.HOME, "Главная", Icons.Outlined.Home),
-        ArdttNavItem(Routes.PROFILES, "Профили", Icons.Outlined.Person),
-        ArdttNavItem(Routes.APPS, "Приложения", Icons.Outlined.Apps),
+        ArdttNavItem(Routes.HOME, "Главная", Icons.Outlined.Home, glyph = LiteTabIcons.Power),
+        ArdttNavItem(Routes.PROFILES, "Профили", Icons.Outlined.Person, glyph = LiteTabIcons.Cards),
+        ArdttNavItem(Routes.APPS, "Приложения", Icons.Outlined.Apps, glyph = LiteTabIcons.Tiles),
     )
     // A link or file opened from another app is imported on the profiles tab.
     val incoming by com.wdtt.client.MainActivity.pendingFileUri

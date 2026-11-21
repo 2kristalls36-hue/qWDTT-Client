@@ -52,7 +52,7 @@ fun TransferSheet(profile: ConnectionProfile, onDismiss: () -> Unit, onFinished:
     ArdttBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.padding(horizontal = 20.dp)) {
         Text("Перенос на другое устройство", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold))
         Text(
-            "Отсканируйте QR-код в qWDTT Lite на новом устройстве или передайте ссылку.\n" +
+            "Отсканируйте QR-код в qWDTT Client на новом устройстве или передайте ссылку.\n" +
                 "Ссылка на звонок VK переносится вместе с профилем.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -66,7 +66,7 @@ fun TransferSheet(profile: ConnectionProfile, onDismiss: () -> Unit, onFinished:
             enabled = link != null,
             onClick = {
                 val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                cm.setPrimaryClip(ClipData.newPlainText("Профиль qWDTT Lite", link))
+                cm.setPrimaryClip(ClipData.newPlainText("Профиль qWDTT Client", link))
                 Toast.makeText(context, "Ссылка скопирована.", Toast.LENGTH_SHORT).show()
             },
             modifier = Modifier.fillMaxWidth(),

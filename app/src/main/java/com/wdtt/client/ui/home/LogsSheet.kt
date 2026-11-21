@@ -83,7 +83,7 @@ fun LogsSheet(onDismiss: () -> Unit) {
                 enabled = lines.isNotEmpty(),
                 onClick = {
                     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    cm.setPrimaryClip(ClipData.newPlainText("Журнал qWDTT Lite", lines.joinToString("\n")))
+                    cm.setPrimaryClip(ClipData.newPlainText("Журнал qWDTT Client", lines.joinToString("\n")))
                     Toast.makeText(context, "Журнал скопирован.", Toast.LENGTH_SHORT).show()
                 },
                 modifier = Modifier.weight(1f),

@@ -15,7 +15,7 @@
         android:name=".WdttApplication"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
-        android:label="qWDTT Lite"
+        android:label="qWDTT Client"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
@@ -130,7 +130,7 @@
 
         <receiver
             android:name=".TunnelWidgetProvider"
-            android:label="qWDTT Lite"
+            android:label="qWDTT Client"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -143,7 +143,7 @@
 
         <service
             android:name=".QuickToggleTileService"
-            android:label="qWDTT Lite"
+            android:label="qWDTT Client"
             android:icon="@drawable/ic_tile_lite"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
             android:exported="true">

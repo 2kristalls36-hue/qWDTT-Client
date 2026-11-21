@@ -1,4 +1,4 @@
-# qWDTT Lite
+# qWDTT Client
 
 Личный Android-клиент на базе qWDTT (RAW через VK TURN), интерфейс в стиле ARDTT.
 

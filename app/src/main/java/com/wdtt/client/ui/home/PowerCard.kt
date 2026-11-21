@@ -158,9 +158,10 @@ fun PowerCard(
             }
             AnimatedContent(
                 targetState = level,
+                // The old description dissolves, then the new one fades in; the height eases.
                 transitionSpec = {
-                    (fadeIn(tween(200)) + slideInVertically(tween(200)) { -it / 6 }) togetherWith
-                        fadeOut(tween(140))
+                    (fadeIn(tween(420, delayMillis = 180)) togetherWith fadeOut(tween(260)))
+                        .using(androidx.compose.animation.SizeTransform(clip = false) { _, _ -> tween(380) })
                 },
                 label = "desc",
             ) { l ->
@@ -354,9 +355,13 @@ private fun PowerSlider(
                 )
             }
             drawCircle(Color.Black.copy(alpha = 0.12f), 15.dp.toPx(), Offset(x, cy + 1.5.dp.toPx()))
-            drawCircle(lerp(surface, Neon.NightText, k), 14.dp.toPx(), Offset(x, cy))
-            val ring = if (k > 0f) Brush.sweepGradient(blended + blended.first(), Offset(x, cy)) else Brush.linearGradient(listOf(base, base))
-            drawCircle(ring, 12.5.dp.toPx(), Offset(x, cy), style = Stroke(3.dp.toPx()))
+            // The thumb itself takes the level color: green → blue, then a light core in a neon ring.
+            drawCircle(lerp(base, Neon.NightText, k), 14.dp.toPx(), Offset(x, cy))
+            drawCircle(Color.White, 12.5.dp.toPx(), Offset(x, cy), alpha = 0.9f * (1f - k), style = Stroke(2.dp.toPx()))
+            if (k > 0f) {
+                drawCircle(Brush.sweepGradient(blended + blended.first(), Offset(x, cy)), 12.5.dp.toPx(), Offset(x, cy), alpha = k, style = Stroke(3.dp.toPx()))
+            }
+            drawCircle(Color.White, 4.dp.toPx(), Offset(x, cy), alpha = 0.85f * (1f - k))
         }
     }
 }

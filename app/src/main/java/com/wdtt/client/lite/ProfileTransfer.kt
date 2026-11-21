@@ -12,7 +12,7 @@ import java.net.URLEncoder
 object ProfileTransfer {
     private const val DEFAULT_DTLS_PORT = 56000
 
-    /** Same format as qWDTT export, so the link opens in qWDTT and qWDTT Lite. Carries the VK call link. */
+    /** Same format as qWDTT export, so the link opens in qWDTT and qWDTT Client. Carries the VK call link. */
     suspend fun link(context: Context, profile: ConnectionProfile): String {
         val hashes = profile.vkHashes.ifBlank { SettingsStore(context).globalVkHashes.first() }
         fun enc(v: String) = URLEncoder.encode(v, "UTF-8")

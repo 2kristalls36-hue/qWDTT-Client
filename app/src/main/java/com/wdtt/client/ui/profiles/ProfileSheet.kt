@@ -79,7 +79,7 @@ fun ProfileSheet(
         return
     }
 
-    ArdttBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.padding(horizontal = 20.dp)) {
+    ArdttBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.padding(horizontal = 20.dp), maxHeightFraction = 0.82f) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(
                 profile.name.ifBlank { "Профиль" },

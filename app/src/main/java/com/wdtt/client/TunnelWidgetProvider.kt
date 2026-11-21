@@ -90,7 +90,7 @@ class TunnelWidgetProvider : AppWidgetProvider() {
             views.setInt(R.id.widget_button_icon, "setColorFilter", iconColor)
             views.setContentDescription(R.id.widget_button_icon, if (running || connecting) "Отключиться" else "Подключиться")
 
-            views.setTextViewText(R.id.widget_title, profileName.ifBlank { "qWDTT Lite" })
+            views.setTextViewText(R.id.widget_title, profileName.ifBlank { "qWDTT Client" })
             views.setTextViewText(
                 R.id.widget_status,
                 when {

@@ -109,18 +109,23 @@ object TunnelManager {
     val activeWorkers = MutableStateFlow(0)
     /** Server round trip from tunnel keepalives, ms; 0 — no data yet. */
     val pingMs = MutableStateFlow(0L)
-    /** Download speed over the last stats window, Mbit/s; null — not measured yet. */
-    val downlinkMbps = MutableStateFlow<Double?>(null)
-    private var speedSampleMb = -1.0
-    private var speedSampleAtMs = 0L
+    /** Session traffic in MB, down and up; null — no stats yet. */
+    val trafficDownMb = MutableStateFlow<Double?>(null)
+    val trafficUpMb = MutableStateFlow<Double?>(null)
+    /** Data moved in that direction during the last stats window (beyond keepalives). */
+    val downActive = MutableStateFlow(false)
+    val upActive = MutableStateFlow(false)
 
     /** Clears live numbers when the tunnel goes down. */
     fun resetLiveStats() {
         pingMs.value = 0L
-        downlinkMbps.value = null
-        speedSampleMb = -1.0
-        speedSampleAtMs = 0L
+        trafficDownMb.value = null
+        trafficUpMb.value = null
+        downActive.value = false
+        upActive.value = false
     }
+    /** Traffic per stats window (3 s) that counts as activity: more than keepalives make. */
+    private const val ACTIVITY_MB = 0.01
     val isReconnecting = MutableStateFlow(false)
     val connectionPipeline = MutableStateFlow(ConnectionPipelineState())
     /** Проверка соединения через VK (см. ConnectionDiagnostics, go_client/netdiag.go). */
@@ -1006,16 +1011,18 @@ object TunnelManager {
                             ?.groupValues?.getOrNull(1)?.replace(",", ".")?.toDoubleOrNull()
                         pingMs.value = Regex("Пинг:\\s*(\\d+)").find(msg)
                             ?.groupValues?.getOrNull(1)?.toLongOrNull() ?: 0L
-                        if (downlinkMb != null) {
-                            if (speedSampleMb >= 0 && downlinkMb >= speedSampleMb && now > speedSampleAtMs) {
-                                val seconds = (now - speedSampleAtMs) / 1000.0
-                                downlinkMbps.value = (downlinkMb - speedSampleMb) * 8.0 * 1.048576 / seconds
-                            }
-                            speedSampleMb = downlinkMb
-                            speedSampleAtMs = now
-                        }
                         val uplinkMb = Regex("↑\\s*([\\d.,]+)").find(msg)
                             ?.groupValues?.getOrNull(1)?.replace(",", ".")?.toDoubleOrNull()
+                        if (downlinkMb != null) {
+                            val prev = trafficDownMb.value
+                            downActive.value = prev != null && downlinkMb - prev >= ACTIVITY_MB
+                            trafficDownMb.value = downlinkMb
+                        }
+                        if (uplinkMb != null) {
+                            val prev = trafficUpMb.value
+                            upActive.value = prev != null && uplinkMb - prev >= ACTIVITY_MB
+                            trafficUpMb.value = uplinkMb
+                        }
                         if (downlinkMb != null && uplinkMb != null) {
                             if (downlinkMb > lastDownlinkMb) lastDownlinkChangedAtMs = now
                             if (uplinkMb > lastUplinkMb) lastUplinkChangedAtMs = now

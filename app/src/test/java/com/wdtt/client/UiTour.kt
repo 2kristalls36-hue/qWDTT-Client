@@ -83,7 +83,9 @@ class UiTour {
             TunnelManager.running.value = true
             TunnelManager.connectedSinceMs.value = System.currentTimeMillis() - 754_000
             TunnelManager.pingMs.value = 34
-            TunnelManager.downlinkMbps.value = 23.4
+            TunnelManager.trafficDownMb.value = 312.4
+            TunnelManager.trafficUpMb.value = 41.2
+            TunnelManager.downActive.value = true
             settle(8)
         }
         shot(dir, "01_home")
@@ -113,7 +115,7 @@ class UiTour {
         pressBack(); settle(8) // profile sheet → home
 
         // Hidden log.
-        compose.onNodeWithText("qWDTT Lite").performTouchInput { longClick() }
+        compose.onNodeWithText("qWDTT Client").performTouchInput { longClick() }
         settle(8)
         shot(dir, "06_logs")
         pressBack(); settle(8)

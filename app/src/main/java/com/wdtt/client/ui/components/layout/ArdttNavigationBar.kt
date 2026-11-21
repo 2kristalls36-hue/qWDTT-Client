@@ -69,6 +69,8 @@ data class ArdttNavItem(
     val label: String,
     val icon: ImageVector,
     val badgeCount: Int = 0,
+    /** Hand-drawn animated glyph; replaces [icon] when set. */
+    val glyph: TabGlyph? = null,
 )
 
 internal object ArdttNavChrome {
@@ -365,7 +367,15 @@ private fun NavBarTab(
     ) {
         Box(contentAlignment = Alignment.TopEnd) {
             val glyph = Modifier.size(ArdttSize.Icon)
-            if (iconMotion == TabIconMotion.ServerLights) {
+            val custom = item.glyph
+            if (custom != null) {
+                val sel by androidx.compose.animation.core.animateFloatAsState(
+                    if (selected) 1f else 0f,
+                    androidx.compose.animation.core.spring(dampingRatio = 0.6f, stiffness = 300f),
+                    label = "glyphSel",
+                )
+                custom(iconProgress.value, sel, paint.color, glyph)
+            } else if (iconMotion == TabIconMotion.ServerLights) {
                 ArdttServersTabIcon(
                     lightAlpha = tabIconServerLightAlpha(iconProgress.value),
                     tint = paint.color,

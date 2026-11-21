@@ -24,7 +24,7 @@ data class SubscriptionInfo(
     val checkedAt: Long,
 )
 
-/** Settings that exist only in qWDTT Lite: power level, expiry warnings, cached subscription data. */
+/** Settings that exist only in qWDTT Client: power level, expiry warnings, cached subscription data. */
 class LiteSettings(context: Context) {
     private val store = context.applicationContext.liteStore
 

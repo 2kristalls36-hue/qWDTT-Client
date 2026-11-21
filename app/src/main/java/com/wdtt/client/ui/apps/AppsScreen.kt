@@ -34,6 +34,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.zIndex
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.ime
+import com.wdtt.client.ui.components.control.ArdttSearchBar
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -49,7 +53,6 @@ import com.wdtt.client.TunnelManager
 import com.wdtt.client.ui.components.control.ArdttChoice
 import com.wdtt.client.ui.components.control.ArdttChoiceChipRow
 import com.wdtt.client.ui.components.control.ArdttSwitchRow
-import com.wdtt.client.ui.components.control.ArdttTextField
 import com.wdtt.client.ui.components.layout.ArdttBottomChrome
 import com.wdtt.client.ui.components.layout.ArdttPageHeader
 import kotlinx.coroutines.Dispatchers
@@ -84,6 +87,9 @@ fun AppsScreen(settingsStore: SettingsStore) {
             .sortedWith(compareByDescending<AppItem> { it.packageName in selected }.thenBy { it.name.lowercase(Locale.getDefault()) })
     }
 
+    val imePad = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+    val keyboardVisible = imePad > 12.dp
+    Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.statusBars)) {
         ArdttPageHeader(title = "Приложения")
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -108,7 +114,6 @@ fun AppsScreen(settingsStore: SettingsStore) {
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
-            ArdttTextField(value = query, onValueChange = { query = it }, placeholder = "Поиск", modifier = Modifier.fillMaxWidth())
             ArdttSwitchRow(title = "Системные приложения", checked = showSystem, onCheckedChange = { showSystem = it })
         }
 
@@ -124,7 +129,8 @@ fun AppsScreen(settingsStore: SettingsStore) {
             }
         } else {
             LazyColumn(
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = ArdttBottomChrome.navigationReserve() + 16.dp),
+                // The last rows can pass under the floating search bar.
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = ArdttBottomChrome.scrollContentPadding(extra = 12.dp)),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 items(visible, key = { it.packageName }) { app ->
@@ -135,6 +141,18 @@ fun AppsScreen(settingsStore: SettingsStore) {
                 }
             }
         }
+    }
+    // Search floats above the tab pill, as in ARDTT; with the keyboard open it rides on top of it.
+    ArdttSearchBar(
+        value = query,
+        onValueChange = { query = it },
+        keyboardVisible = keyboardVisible,
+        modifier = Modifier
+            .align(Alignment.BottomCenter)
+            .zIndex(2f)
+            .padding(horizontal = 16.dp)
+            .padding(bottom = maxOf(ArdttBottomChrome.stickyBottomPadding(), imePad + 8.dp)),
+    )
     }
 }
 

@@ -13,6 +13,8 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.unit.Dp
 import com.wdtt.client.ui.theme.ArdttLayout
 import com.wdtt.client.ui.theme.ArdttShapes
@@ -40,6 +42,8 @@ fun ArdttBottomSheet(
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
     scrollable: Boolean = true,
+    /** Caps the sheet at this share of the screen height; null — up to the full screen. */
+    maxHeightFraction: Float? = null,
     verticalArrangement: Arrangement.Vertical =
         Arrangement.spacedBy(ArdttSheetDefaults.ItemSpacing),
     content: @Composable ColumnScope.() -> Unit,
@@ -54,6 +58,11 @@ fun ArdttBottomSheet(
         Column(
             modifier = modifier
                 .fillMaxWidth()
+                .then(
+                    if (maxHeightFraction != null) {
+                        Modifier.heightIn(max = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * maxHeightFraction).dp)
+                    } else Modifier
+                )
                 .navigationBarsPadding()
                 .then(if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier)
                 .padding(bottom = ArdttSheetDefaults.BottomPadding),

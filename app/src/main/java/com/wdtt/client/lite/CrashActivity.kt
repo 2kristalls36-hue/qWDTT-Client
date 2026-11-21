@@ -52,7 +52,7 @@ class CrashActivity : Activity() {
             this.text = "Скопировать"
             setOnClickListener {
                 val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
-                cm.setPrimaryClip(ClipData.newPlainText("Ошибка qWDTT Lite", text))
+                cm.setPrimaryClip(ClipData.newPlainText("Ошибка qWDTT Client", text))
                 Toast.makeText(this@CrashActivity, "Текст ошибки скопирован.", Toast.LENGTH_SHORT).show()
             }
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { gravity = Gravity.CENTER })

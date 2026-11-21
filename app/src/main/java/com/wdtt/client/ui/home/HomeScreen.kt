@@ -39,6 +39,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.rounded.ArrowUpward
+import androidx.compose.material.icons.rounded.ArrowDownward
+import androidx.compose.material.icons.Icons
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
@@ -83,7 +93,10 @@ fun HomeScreen(settingsStore: SettingsStore, onOpenProfiles: () -> Unit) {
     val reconnecting by TunnelManager.isReconnecting.collectAsStateWithLifecycle()
     val since by TunnelManager.connectedSinceMs.collectAsStateWithLifecycle()
     val ping by TunnelManager.pingMs.collectAsStateWithLifecycle()
-    val speed by TunnelManager.downlinkMbps.collectAsStateWithLifecycle()
+    val downMb by TunnelManager.trafficDownMb.collectAsStateWithLifecycle()
+    val upMb by TunnelManager.trafficUpMb.collectAsStateWithLifecycle()
+    val downActive by TunnelManager.downActive.collectAsStateWithLifecycle()
+    val upActive by TunnelManager.upActive.collectAsStateWithLifecycle()
     val state = when {
         connecting || reconnecting -> TunnelUiState.Connecting
         running -> TunnelUiState.On
@@ -136,7 +149,7 @@ fun HomeScreen(settingsStore: SettingsStore, onOpenProfiles: () -> Unit) {
     ) {
         Row(Modifier.fillMaxWidth().widthIn(max = 460.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "qWDTT Lite",
+                "qWDTT Client",
                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.onBackground,
                 modifier = Modifier
@@ -178,7 +191,17 @@ fun HomeScreen(settingsStore: SettingsStore, onOpenProfiles: () -> Unit) {
                 },
             )
             StatusLine(state, level)
-            StatsRow(state == TunnelUiState.On, since, speed, ping)
+            StatsRow(
+                visible = state == TunnelUiState.On,
+                sinceMs = since,
+                traffic = Traffic(downMb, upMb, downActive, upActive),
+                arrowColor = lerp(
+                    lerp(levelColors(PowerLevel.Stable).accent, levelColors(PowerLevel.Balanced).accent, (powerPos.value * 2f).coerceIn(0f, 1f)),
+                    levelColors(PowerLevel.Maximum).neon[1],
+                    ((powerPos.value - 0.5f) * 2f).coerceIn(0f, 1f),
+                ),
+                ping = ping,
+            )
         }
 
         PowerCard(
@@ -200,7 +223,7 @@ fun HomeScreen(settingsStore: SettingsStore, onOpenProfiles: () -> Unit) {
             onDismissRequest = { com.wdtt.client.lite.CrashLog.clear(context); crash = null },
             confirmAction = com.wdtt.client.ui.components.surface.ArdttDialogAction("Скопировать", onClick = {
                 val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                cm.setPrimaryClip(android.content.ClipData.newPlainText("Ошибка qWDTT Lite", text))
+                cm.setPrimaryClip(android.content.ClipData.newPlainText("Ошибка qWDTT Client", text))
                 Toast.makeText(context, "Текст ошибки скопирован.", Toast.LENGTH_SHORT).show()
                 com.wdtt.client.lite.CrashLog.clear(context)
                 crash = null
@@ -285,9 +308,12 @@ private fun StatusLine(state: TunnelUiState, level: PowerLevel) {
     }
 }
 
-/** Uptime, speed, ping. Space is reserved even when hidden, so the screen does not jump. */
+/** Session traffic for the middle tile. */
+private data class Traffic(val downMb: Double?, val upMb: Double?, val downActive: Boolean, val upActive: Boolean)
+
+/** Uptime, traffic, ping. Space is reserved even when hidden, so the screen does not jump. */
 @Composable
-private fun StatsRow(visible: Boolean, sinceMs: Long, mbps: Double?, ping: Long) {
+private fun StatsRow(visible: Boolean, sinceMs: Long, traffic: Traffic, arrowColor: Color, ping: Long) {
     val alpha by animateFloatAsState(if (visible) 1f else 0f, tween(400), label = "stats")
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(visible) {
@@ -311,12 +337,74 @@ private fun StatsRow(visible: Boolean, sinceMs: Long, mbps: Double?, ping: Long)
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         StatTile("Время", uptime, null, Modifier.weight(1f))
-        StatTile("Скорость", mbps?.let { "↓ ${formatMbps(it)} Мбит/с" } ?: "—", null, Modifier.weight(1f))
+        TrafficTile(traffic, arrowColor, Modifier.weight(1f))
         StatTile("Пинг", if (ping > 0) "$ping мс" else "—", PingColors.of(ping), Modifier.weight(1f))
     }
 }
 
-private fun formatMbps(v: Double): String = if (v < 10) "%.1f".format(v).replace('.', ',') else v.toInt().toString()
+private fun formatMb(mb: Double): String = when {
+    mb >= 1024 -> "%.1f ГБ".format(mb / 1024).replace('.', ',')
+    mb >= 10 -> "${mb.toInt()} МБ"
+    else -> "%.1f МБ".format(mb).replace('.', ',')
+}
+
+/**
+ * Total session traffic with two arrows. An arrow lights up and keeps drifting in its
+ * direction while data moves that way; idle, it fades back.
+ */
+@Composable
+private fun TrafficTile(traffic: Traffic, accent: Color, modifier: Modifier) {
+    val scheme = MaterialTheme.colorScheme
+    val total = traffic.downMb?.let { it + (traffic.upMb ?: 0.0) }
+    val motion = rememberMotionScale()
+    val t = rememberInfiniteTransition(label = "traffic")
+    val drift by t.animateFloat(
+        0f, 1f,
+        infiniteRepeatable(tween((900 / motion.coerceAtLeast(0.01f)).toInt(), easing = LinearEasing), RepeatMode.Restart),
+        label = "drift",
+    )
+    Column(
+        modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(scheme.surfaceVariant)
+            .padding(vertical = 8.dp, horizontal = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text("Трафик", fontSize = 11.sp, color = scheme.onSurfaceVariant)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy((-3).dp)) {
+                FlowArrow(down = true, active = traffic.downActive, accent = accent, drift = drift)
+                FlowArrow(down = false, active = traffic.upActive, accent = accent, drift = drift)
+            }
+            Text(
+                total?.let { formatMb(it) } ?: "—",
+                fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = scheme.onSurface, maxLines = 1,
+            )
+        }
+    }
+}
+
+@Composable
+private fun FlowArrow(down: Boolean, active: Boolean, accent: Color, drift: Float) {
+    val idle = MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
+    val on by animateFloatAsState(if (active) 1f else 0f, tween(500), label = "arrow")
+    val color = lerp(idle, accent, on)
+    // Moves a few px in its direction and fades at the end of each stroke, like a stream.
+    val shift = (drift - 0.5f) * 5f * on * (if (down) 1f else -1f)
+    val a = 1f - on * 0.55f * kotlin.math.abs(drift - 0.5f) * 2f
+    Icon(
+        if (down) Icons.Rounded.ArrowDownward else Icons.Rounded.ArrowUpward,
+        contentDescription = if (down) "Загрузка" else "Отдача",
+        tint = color,
+        modifier = Modifier
+            .size(15.dp)
+            .graphicsLayer {
+                translationY = shift.dp.toPx()
+                alpha = a
+            },
+    )
+}
 
 @Composable
 private fun StatTile(label: String, value: String, dot: Color?, modifier: Modifier) {

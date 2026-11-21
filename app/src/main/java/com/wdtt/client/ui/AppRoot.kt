@@ -45,6 +45,8 @@ fun AppRoot(settingsStore: SettingsStore) {
     val glassLayer = androidx.compose.ui.graphics.rememberGraphicsLayer()
     val backdrop = androidx.compose.runtime.remember(glassLayer) { com.wdtt.client.ui.components.surface.GlassBackdrop(glassLayer) }
         .takeIf { glassOn && com.wdtt.client.ui.components.surface.LiquidGlass.supported }
+    val hapticsOn by lite.haptics.collectAsState(true)
+    val appHaptics = com.wdtt.client.ui.motion.rememberAppHaptics(hapticsOn)
     val glassTransparency by lite.glassTransparency.collectAsState(com.wdtt.client.lite.LiteSettings.DEFAULT_GLASS_TRANSPARENCY)
     backdrop?.transparency = glassTransparency
     val items = listOf(
@@ -60,7 +62,11 @@ fun AppRoot(settingsStore: SettingsStore) {
     androidx.compose.runtime.CompositionLocalProvider(
         androidx.compose.material3.LocalContentColor provides androidx.compose.material3.MaterialTheme.colorScheme.onBackground,
     ) {
-    androidx.compose.runtime.CompositionLocalProvider(com.wdtt.client.ui.components.surface.LocalGlassBackdrop provides backdrop) {
+    androidx.compose.runtime.CompositionLocalProvider(
+        com.wdtt.client.ui.components.surface.LocalGlassBackdrop provides backdrop,
+        com.wdtt.client.ui.motion.LocalAppHaptics provides appHaptics,
+        androidx.compose.ui.platform.LocalHapticFeedback provides androidx.compose.runtime.remember(appHaptics) { com.wdtt.client.ui.motion.SettingAwareHapticFeedback(appHaptics) },
+    ) {
     Box(Modifier.fillMaxSize()) {
         // Everything under the tab bar is recorded once per frame for the glass to refract.
         Box(Modifier.fillMaxSize().glassBackdropSource(backdrop)) {

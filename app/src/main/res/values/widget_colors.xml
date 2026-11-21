@@ -4,8 +4,8 @@
     <color name="widget_outline">#1A1565C0</color>
     <color name="widget_text">#1C1B1A</color>
     <color name="widget_muted">#3A4A5F</color>
-    <color name="widget_stable">#1B9E45</color>
-    <color name="widget_balanced">#1565C0</color>
+    <color name="widget_stable">#1565C0</color>
+    <color name="widget_balanced">#1B9E45</color>
     <color name="widget_on_level">#FFFFFF</color>
     <color name="widget_night">#0C1020</color>
     <color name="widget_night_text">#F4F7FF</color>

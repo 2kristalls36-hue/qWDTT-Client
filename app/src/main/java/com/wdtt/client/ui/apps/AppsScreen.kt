@@ -72,6 +72,7 @@ private data class AppItem(val packageName: String, val name: String, val system
 @Composable
 fun AppsScreen(settingsStore: SettingsStore) {
     val context = LocalContext.current
+    val haptics = com.wdtt.client.ui.motion.LocalAppHaptics.current
     val scope = rememberCoroutineScope()
     val savedRaw by settingsStore.excludedApps.collectAsStateWithLifecycle("")
     val selected = remember(savedRaw) { savedRaw.split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet() }
@@ -143,19 +144,18 @@ fun AppsScreen(settingsStore: SettingsStore) {
             }
         } else {
             val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+            com.wdtt.client.ui.motion.MagnetSnapTick(listState)
             LazyColumn(
                 state = listState,
                 // Magnet: after a fling the nearest row settles flush with the top.
-                flingBehavior = androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior(
-                    lazyListState = listState,
-                    snapPosition = androidx.compose.foundation.gestures.snapping.SnapPosition.Start,
-                ),
+                flingBehavior = com.wdtt.client.ui.motion.rememberMagnetSnapFling(listState),
                 // The last rows can pass under the floating search bar.
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = ArdttBottomChrome.scrollContentPadding(extra = 12.dp)),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 items(visible, key = { it.packageName }) { app ->
                     AppRow(app, checked = app.packageName in selected) { on ->
+                        haptics.toggle(on)
                         val next = if (on) selected + app.packageName else selected - app.packageName
                         scope.launch { settingsStore.saveExcludedApps(next.joinToString(",")) }
                     }

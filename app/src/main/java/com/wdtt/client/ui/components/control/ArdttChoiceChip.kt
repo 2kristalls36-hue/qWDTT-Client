@@ -106,6 +106,8 @@ fun ArdttChoiceChip(
     height: Dp = ArdttSize.Chip,
 ) {
     val colors = MaterialTheme.colorScheme
+    val haptics = com.wdtt.client.ui.motion.LocalAppHaptics.current
+    val tapped = { if (!selected) haptics.perform(com.wdtt.client.ui.motion.Haptic.Tick); onClick() }
     // Announced as one option of a group («выбрано» / «не выбрано»), not as a
     // plain button whose state the user has to infer from the fill.
     val sizeModifier = modifier
@@ -118,7 +120,7 @@ fun ArdttChoiceChip(
 
     if (!selected) {
         OutlinedButton(
-            onClick = onClick,
+            onClick = tapped,
             enabled = enabled,
             modifier = sizeModifier,
             shape = ArdttShapes.Chip,

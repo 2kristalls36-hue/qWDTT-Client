@@ -41,6 +41,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun TransferSheet(profile: ConnectionProfile, onDismiss: () -> Unit, onFinished: () -> Unit) {
     val context = LocalContext.current
+    val haptics = com.wdtt.client.ui.motion.LocalAppHaptics.current
     val scope = rememberCoroutineScope()
     val link by produceState<String?>(null, profile) { value = ProfileTransfer.link(context, profile) }
     val running by TunnelManager.running.collectAsStateWithLifecycle()
@@ -67,6 +68,7 @@ fun TransferSheet(profile: ConnectionProfile, onDismiss: () -> Unit, onFinished:
             onClick = {
                 val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 cm.setPrimaryClip(ClipData.newPlainText("Профиль qWDTT Client", link))
+                haptics.perform(com.wdtt.client.ui.motion.Haptic.Confirm)
                 Toast.makeText(context, "Ссылка скопирована.", Toast.LENGTH_SHORT).show()
             },
             modifier = Modifier.fillMaxWidth(),
@@ -98,9 +100,11 @@ fun TransferSheet(profile: ConnectionProfile, onDismiss: () -> Unit, onFinished:
                     busy = false
                     confirm = false
                     if (ok) {
+                        haptics.perform(com.wdtt.client.ui.motion.Haptic.Confirm)
                         Toast.makeText(context, "Перенос завершён. Профиль удалён с этого устройства.", Toast.LENGTH_LONG).show()
                         onFinished()
                     } else {
+                        haptics.perform(com.wdtt.client.ui.motion.Haptic.Reject)
                         Toast.makeText(context, "Сервер не ответил. Перенос не завершён.", Toast.LENGTH_LONG).show()
                     }
                 }

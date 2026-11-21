@@ -414,6 +414,7 @@ private fun NavBarTab(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
+    val haptics = com.wdtt.client.ui.motion.LocalAppHaptics.current
     val iconMotion = tabIconMotionFor(item.route)
     val iconProgress = remember { Animatable(0f) }
     var iconPlay by remember { mutableIntStateOf(0) }
@@ -446,6 +447,7 @@ private fun NavBarTab(
                 indication = null,
                 role = Role.Tab,
                 onClick = {
+                    if (!selected) haptics.perform(com.wdtt.client.ui.motion.Haptic.Click)
                     if (!iconProgress.isRunning) iconPlay++
                     onSelect()
                 },

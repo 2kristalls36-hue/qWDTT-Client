@@ -34,6 +34,7 @@ class LiteSettings(context: Context) {
         private val WARN_DAYS = intPreferencesKey("expiry_warn_days")
         private val CONNECT_ON_BOOT = booleanPreferencesKey("connect_on_boot")
         private val LIQUID_GLASS = booleanPreferencesKey("liquid_glass")
+        private val HAPTICS = booleanPreferencesKey("haptics")
         private val GLASS_TRANSPARENCY = androidx.datastore.preferences.core.floatPreferencesKey("glass_transparency")
         const val DEFAULT_GLASS_TRANSPARENCY = 0.5f
         const val DEFAULT_WARN_DAYS = 3
@@ -61,6 +62,10 @@ class LiteSettings(context: Context) {
     /** 0 — frosted, 1 — almost clear. */
     val glassTransparency: Flow<Float> = store.data.map { it[GLASS_TRANSPARENCY] ?: DEFAULT_GLASS_TRANSPARENCY }
     suspend fun saveGlassTransparency(value: Float) = store.edit { it[GLASS_TRANSPARENCY] = value.coerceIn(0f, 1f) }
+
+    /** Vibration on presses, switches and results; on by default. */
+    val haptics: Flow<Boolean> = store.data.map { it[HAPTICS] ?: true }
+    suspend fun saveHaptics(enabled: Boolean) = store.edit { it[HAPTICS] = enabled }
 
     val connectOnBoot: Flow<Boolean> = store.data.map { it[CONNECT_ON_BOOT] ?: false }
     suspend fun saveConnectOnBoot(enabled: Boolean) = store.edit { it[CONNECT_ON_BOOT] = enabled }

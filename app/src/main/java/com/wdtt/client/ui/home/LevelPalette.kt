@@ -33,17 +33,18 @@ internal fun levelColors(level: PowerLevel): LevelColors {
     val dark = isSystemInDarkTheme() || MaterialTheme.colorScheme.background.luminanceIsDark()
     val neon = if (dark) Neon.Dark else Neon.Light
     return when (level) {
-        PowerLevel.Stable -> if (dark) {
-            LevelColors(Color(0xFF4ADE80), Color(0xFF08131F), Color(0xFF173A26), neon)
-        } else {
-            LevelColors(Color(0xFF1B9E45), Color.White, Color(0xFFD3F2DD), neon)
-        }
-        PowerLevel.Balanced -> LevelColors(
+        // Stable is the calm blue of the theme, balanced is green.
+        PowerLevel.Stable -> LevelColors(
             MaterialTheme.colorScheme.primary,
             MaterialTheme.colorScheme.onPrimary,
             MaterialTheme.colorScheme.primaryContainer,
             neon,
         )
+        PowerLevel.Balanced -> if (dark) {
+            LevelColors(Color(0xFF4ADE80), Color(0xFF08131F), Color(0xFF173A26), neon)
+        } else {
+            LevelColors(Color(0xFF1B9E45), Color.White, Color(0xFFD3F2DD), neon)
+        }
         PowerLevel.Maximum -> LevelColors(neon[1], Neon.NightText, Neon.Night, neon)
     }
 }

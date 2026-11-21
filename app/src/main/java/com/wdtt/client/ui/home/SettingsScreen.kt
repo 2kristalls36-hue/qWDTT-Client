@@ -63,6 +63,7 @@ fun SettingsScreen() {
     var logsOpen by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val haptics = com.wdtt.client.ui.motion.LocalAppHaptics.current
     val lite = remember { LiteSettings(context) }
     val settings = remember { SettingsStore(context) }
     val theme by settings.themeMode.collectAsStateWithLifecycle("system")
@@ -72,10 +73,8 @@ fun SettingsScreen() {
 
     // Blocks settle with their top under the header after a fling (magnet snapping).
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-    val snap = androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior(
-        lazyListState = listState,
-        snapPosition = androidx.compose.foundation.gestures.snapping.SnapPosition.Start,
-    )
+    com.wdtt.client.ui.motion.MagnetSnapTick(listState)
+    val snap = com.wdtt.client.ui.motion.rememberMagnetSnapFling(listState)
     Column(
         Modifier
             .fillMaxSize()
@@ -121,7 +120,7 @@ fun SettingsScreen() {
                         Switch(
                             checked = glass && glassSupported,
                             enabled = glassSupported,
-                            onCheckedChange = { scope.launch { lite.saveLiquidGlass(it) } },
+                            onCheckedChange = { haptics.toggle(it); scope.launch { lite.saveLiquidGlass(it) } },
                         )
                     }
                     androidx.compose.animation.AnimatedVisibility(
@@ -156,6 +155,18 @@ fun SettingsScreen() {
                         }
                     )
                 }
+                }
+            }
+            item {
+                Box(Modifier.padding(horizontal = 16.dp)) {
+                    val vibration by lite.haptics.collectAsStateWithLifecycle(true)
+                    Section("Отклик") {
+                        SwitchLine("Вибрация", vibration) { scope.launch { lite.saveHaptics(it) } }
+                        Hint(
+                            if (vibration) "Приложение подтверждает нажатия, переключения и результаты действий вибрацией."
+                            else "Приложение не использует вибрацию."
+                        )
+                    }
                 }
             }
             item {
@@ -213,6 +224,7 @@ fun SettingsScreen() {
 private fun UpdateSection() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val haptics = com.wdtt.client.ui.motion.LocalAppHaptics.current
     val installed = remember { AppUpdate.installedVersion(context) }
     var check by remember { mutableStateOf<AppUpdate.Check?>(null) }
     var checking by remember { mutableStateOf(false) }
@@ -252,8 +264,16 @@ private fun UpdateSection() {
             AppUpdate.download(context, release).collect { d ->
                 when (d) {
                     is AppUpdate.Download.Progress -> progress = d.fraction
-                    is AppUpdate.Download.Done -> { progress = null; AppUpdate.install(context, d.file) }
-                    is AppUpdate.Download.Error -> { progress = null; error = d.message }
+                    is AppUpdate.Download.Done -> {
+                        progress = null
+                        haptics.perform(com.wdtt.client.ui.motion.Haptic.Confirm)
+                        AppUpdate.install(context, d.file)
+                    }
+                    is AppUpdate.Download.Error -> {
+                        progress = null
+                        error = d.message
+                        haptics.perform(com.wdtt.client.ui.motion.Haptic.Reject)
+                    }
                 }
             }
         }
@@ -337,13 +357,14 @@ private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) 
 
 @Composable
 private fun SwitchLine(title: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    val haptics = com.wdtt.client.ui.motion.LocalAppHaptics.current
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
             title,
             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
             modifier = Modifier.weight(1f),
         )
-        Switch(checked = checked, onCheckedChange = onChange)
+        Switch(checked = checked, onCheckedChange = { haptics.toggle(it); onChange(it) })
     }
 }
 

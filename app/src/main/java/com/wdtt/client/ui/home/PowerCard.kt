@@ -76,6 +76,8 @@ import androidx.compose.ui.unit.sp
 import com.wdtt.client.lite.PowerLevel
 import kotlinx.coroutines.launch
 import kotlin.math.abs
+import kotlin.math.sqrt
+import com.wdtt.client.ui.motion.magnetTo
 import kotlin.math.roundToInt
 
 private const val LOCK_HINT = "Изменение мощности доступно после отключения."
@@ -92,7 +94,7 @@ fun PowerCard(
     onLevelChange: (PowerLevel) -> Unit,
     modifier: Modifier = Modifier,
     // Thumb position 0..1 drives every color, so dragging blends them continuously:
-    // green → blue on the first half, blue → neon night panel on the second.
+    // blue → green on the first half, green → neon night panel on the second.
     // Hoisted so the connect button can blend with it.
     pos: Animatable<Float, androidx.compose.animation.core.AnimationVector1D> = remember { Animatable(level.ordinal / 2f) },
 ) {
@@ -134,13 +136,7 @@ fun PowerCard(
                 label = "title",
             ) { l ->
                 if (l == PowerLevel.Maximum) NeonTitle(l.title, colors.neon)
-                else Text(
-                    l.title,
-                    style = TextStyle(fontSize = 26.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.4).sp),
-                    color = titleBlend,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                else SheenTitle(l.title, titleBlend, (1f - abs(pos.value - 0.5f) * 2f).coerceIn(0f, 1f))
             }
             PowerSlider(
                 level = level,
@@ -174,6 +170,31 @@ fun PowerCard(
             }
         }
     }
+}
+
+/**
+ * Level title; at the balanced level a soft light sheen passes over it now and then
+ * ([strength] 0..1 fades it in as the thumb nears the middle).
+ */
+@Composable
+private fun SheenTitle(text: String, color: Color, strength: Float) {
+    val style = TextStyle(fontSize = 26.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.4).sp)
+    if (strength <= 0.01f) {
+        Text(text, style = style, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        return
+    }
+    val motion = rememberMotionScale()
+    val t = rememberInfiniteTransition(label = "sheen")
+    // One pass every ~4 s: the band crosses in the first 40%, then rests.
+    val p by t.animateFloat(0f, 1f, infiniteRepeatable(tween((4200 / motion.coerceAtLeast(0.05f)).toInt(), easing = LinearEasing)), label = "p")
+    val width = with(LocalDensity.current) { 260.dp.toPx() }
+    val x = (p / 0.4f).coerceAtMost(1.2f) * width * 1.6f - width * 0.4f
+    val light = lerp(color, Color.White, 0.55f * strength)
+    val brush = Brush.linearGradient(
+        0f to color, 0.42f to color, 0.5f to light, 0.58f to color, 1f to color,
+        start = Offset(x - width * 0.5f, 0f), end = Offset(x + width * 0.5f, 0f),
+    )
+    Text(text, style = style.copy(brush = brush), maxLines = 1, overflow = TextOverflow.Ellipsis)
 }
 
 /** Near-white title with a thin flowing neon outline and a soft glow. */
@@ -234,17 +255,22 @@ private fun androidx.compose.foundation.layout.BoxScope.NeonAura(neon: List<Colo
 /** Reach of each stop's pull, as a share of the track. */
 private const val MAGNET_RADIUS = 0.13f
 
+/** Inside this the thumb is caught and stays on the stop. */
+private const val MAGNET_CAPTURE = 0.035f
+
 /**
- * Magnet: near a stop the thumb lags behind the finger and clings to the stop,
- * then catches up as the finger leaves; outside the reach it follows exactly.
+ * Magnet while dragging. Entering the reach, the thumb lags the finger a little; the
+ * closer it gets, the faster it is drawn in (distance ~ sqrt), until it is caught on
+ * the stop. Leaving, the same curve: it holds, then breaks free.
  */
 internal fun magnet(f: Float): Float {
     val stop = (f * 2f).roundToInt() / 2f
     val d = f - stop
-    val reach = MAGNET_RADIUS
-    if (abs(d) >= reach) return f
-    val k = abs(d) / reach
-    return stop + d * k * k
+    val x = abs(d)
+    if (x >= MAGNET_RADIUS) return f
+    if (x <= MAGNET_CAPTURE) return stop
+    val u = (x - MAGNET_CAPTURE) / (MAGNET_RADIUS - MAGNET_CAPTURE)
+    return stop + kotlin.math.sign(d) * MAGNET_RADIUS * sqrt(u)
 }
 
 /**
@@ -261,7 +287,7 @@ private fun PowerSlider(
     trackColor: Color,
     onLevelChange: (PowerLevel) -> Unit,
 ) {
-    val haptics = LocalHapticFeedback.current
+    val haptics = com.wdtt.client.ui.motion.LocalAppHaptics.current
     val scope = rememberCoroutineScope()
     val stable = levelColors(PowerLevel.Stable).accent
     val balanced = levelColors(PowerLevel.Balanced).accent
@@ -269,7 +295,7 @@ private fun PowerSlider(
     var dragging by remember { mutableStateOf(false) }
     var caught by remember { mutableStateOf(-1) }
     LaunchedEffect(level, dragging) {
-        if (!dragging) pos.animateTo(level.ordinal / 2f, spring(dampingRatio = 0.8f, stiffness = 400f))
+        if (!dragging) pos.magnetTo(level.ordinal / 2f)
     }
     val motion = rememberMotionScale()
     val t = rememberInfiniteTransition(label = "slider")
@@ -289,7 +315,7 @@ private fun PowerSlider(
     fun select(frac: Float) {
         val next = PowerLevel.fromIndex((frac * 2).roundToInt())
         if (next != currentLevel) {
-            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            haptics.perform(com.wdtt.client.ui.motion.Haptic.Tick)
             currentOnChange(next)
         }
     }
@@ -297,7 +323,7 @@ private fun PowerSlider(
         dragging = false
         val stop = (pos.value * 2).roundToInt() / 2f
         select(stop)
-        scope.launch { pos.animateTo(stop, spring(0.8f, 400f)) }
+        scope.launch { pos.magnetTo(stop, onContact = { haptics.perform(com.wdtt.client.ui.motion.Haptic.Tick) }) }
     }
 
     BoxWithConstraints(
@@ -318,7 +344,9 @@ private fun PowerSlider(
                         detectTapGestures { o ->
                             val f = fracAt(o.x)
                             select(f)
-                            scope.launch { pos.animateTo((f * 2).roundToInt() / 2f, spring(0.8f, 400f)) }
+                            scope.launch {
+                                pos.magnetTo((f * 2).roundToInt() / 2f, onContact = { haptics.perform(com.wdtt.client.ui.motion.Haptic.Tick) })
+                            }
                         }
                     }
                     .pointerInput(Unit) {
@@ -331,9 +359,9 @@ private fun PowerSlider(
                             val shown = magnet(f)
                             // A light tick when the thumb catches a stop.
                             val stop = (f * 2).roundToInt()
-                            if (abs(f - stop / 2f) < MAGNET_RADIUS * 0.3f && caught != stop) {
+                            if (abs(f - stop / 2f) <= MAGNET_CAPTURE && caught != stop) {
                                 caught = stop
-                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                haptics.perform(com.wdtt.client.ui.motion.Haptic.Tick)
                             } else if (abs(f - stop / 2f) > MAGNET_RADIUS) {
                                 caught = -1
                             }
@@ -369,6 +397,19 @@ private fun PowerSlider(
                 drawRoundRect(neon[0].copy(alpha = 0.35f * k), Offset(left, cy - trackH), Size(x - left, trackH * 2), CornerRadius(trackH))
             }
             drawRoundRect(fillBrush, Offset(left, cy - trackH / 2f), Size((x - left).coerceAtLeast(trackH), trackH), r)
+            // Balanced: a faint light band running along the fill.
+            val bal = (1f - abs(p - 0.5f) * 2f).coerceIn(0f, 1f)
+            if (bal > 0.01f && x - left > trackH) {
+                val fillW = x - left
+                val bx = left + ((flow * 1.6f) % 1.6f - 0.3f) * fillW
+                drawRoundRect(
+                    Brush.horizontalGradient(
+                        listOf(Color.Transparent, Color.White.copy(alpha = 0.38f * bal), Color.Transparent),
+                        startX = bx - 28.dp.toPx(), endX = bx + 28.dp.toPx(),
+                    ),
+                    Offset(left, cy - trackH / 2f), Size(fillW, trackH), r,
+                )
+            }
             for (i in 0..2) {
                 val sx = left + (right - left) * i / 2f
                 val passed = i / 2f < p - 0.01f
@@ -382,7 +423,7 @@ private fun PowerSlider(
                 )
             }
             drawCircle(Color.Black.copy(alpha = 0.12f), 15.dp.toPx(), Offset(x, cy + 1.5.dp.toPx()))
-            // The thumb itself takes the level color: green → blue, then a light core in a neon ring.
+            // The thumb itself takes the level color: blue → green, then a light core in a neon ring.
             drawCircle(lerp(base, Neon.NightText, k), 14.dp.toPx(), Offset(x, cy))
             drawCircle(Color.White, 12.5.dp.toPx(), Offset(x, cy), alpha = 0.9f * (1f - k), style = Stroke(2.dp.toPx()))
             if (k > 0f) {

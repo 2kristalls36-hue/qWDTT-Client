@@ -42,6 +42,7 @@ import com.wdtt.client.ui.theme.ArdttColors
 @Composable
 fun LogsSheet(onDismiss: () -> Unit) {
     val context = LocalContext.current
+    val haptics = com.wdtt.client.ui.motion.LocalAppHaptics.current
     val version by RawLog.version.collectAsStateWithLifecycle()
     val lines = remember(version) { RawLog.snapshot() }
     val listState = rememberLazyListState()
@@ -84,6 +85,7 @@ fun LogsSheet(onDismiss: () -> Unit) {
                 onClick = {
                     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                     cm.setPrimaryClip(ClipData.newPlainText("Журнал qWDTT Client", lines.joinToString("\n")))
+                    haptics.perform(com.wdtt.client.ui.motion.Haptic.Confirm)
                     Toast.makeText(context, "Журнал скопирован.", Toast.LENGTH_SHORT).show()
                 },
                 modifier = Modifier.weight(1f),

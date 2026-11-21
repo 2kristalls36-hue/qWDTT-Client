@@ -75,8 +75,8 @@ fun ConnectButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // blend is the power thumb position 0..1: green → blue on the first half,
-    // blue → neon on the second. Every layer mixes by it, so dragging the slider
+    // blend is the power thumb position 0..1: blue → green on the first half,
+    // green → neon on the second. Every layer mixes by it, so dragging the slider
     // repaints the button continuously.
     val g = (blend * 2f).coerceIn(0f, 1f)
     val k = ((blend - 0.5f) * 2f).coerceIn(0f, 1f)
@@ -112,6 +112,8 @@ fun ConnectButton(
     val core = lerp(lerp(surface, Neon.Night, k), lerp(accent, Neon.Night, k), onF)
     val glyph = lerp(lerp(accent, Neon.NightFaint, k), lerp(onAccent, Neon.NightText, k), onF)
     val neonGlow = k * (0.3f + 0.6f * onF)
+    // Balanced level: a restrained motion of its own, strongest exactly in the middle.
+    val bal = (1f - kotlin.math.abs(blend - 0.5f) * 2f).coerceIn(0f, 1f)
     val sparks = k
 
     val interaction = remember { MutableInteractionSource() }
@@ -159,6 +161,22 @@ fun ConnectButton(
                 }
             }
         }
+        // Balanced: soft breathing halo while connected.
+        if (bal > 0f && onF > 0f && !reduced) {
+            Canvas(Modifier.size(236.dp)) {
+                val breath = 0.5f + 0.5f * sin(phase * 2.4f)
+                val r = size.minDimension / 2f
+                drawCircle(
+                    Brush.radialGradient(
+                        0f to Color.Transparent, 0.6f to Color.Transparent,
+                        0.72f to accent.copy(alpha = 0.22f * bal * onF * (0.55f + 0.45f * breath)),
+                        1f to Color.Transparent,
+                        center = center, radius = r,
+                    ),
+                    radius = r,
+                )
+            }
+        }
         // Neon glow behind the rim: a wide rotating sweep ring faded in and out by a radial
         // mask. Drawn, not blurred, so nothing is clipped to a square on any device.
         if (neonGlow > 0f) {
@@ -188,6 +206,20 @@ fun ConnectButton(
             val w = 7.dp.toPx()
             val r = size.minDimension / 2f - w / 2f
             if (k < 1f) drawCircle(color = accent, radius = r, alpha = 0.16f * (1f - k), style = Stroke(width = w))
+            // Balanced: one soft highlight gliding slowly along the ring.
+            if (bal > 0f) {
+                rotate(phase * 75f) {
+                    drawCircle(
+                        brush = Brush.sweepGradient(
+                            0f to Color.Transparent, 0.72f to Color.Transparent,
+                            0.97f to accent, 1f to Color.Transparent,
+                        ),
+                        radius = r,
+                        alpha = bal * (0.35f + 0.4f * onF),
+                        style = Stroke(width = w, cap = StrokeCap.Round),
+                    )
+                }
+            }
             if (k > 0f) {
                 rotate(phase * 120f) {
                     drawCircle(

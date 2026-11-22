@@ -25,7 +25,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** The loading stub must be exactly as tall as a loaded app row (the ARDTT stubs were not). */
+/** The loading stub must be exactly as tall as a loaded app row. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w400dp-h800dp-xxhdpi")
 class AppRowStubTest {

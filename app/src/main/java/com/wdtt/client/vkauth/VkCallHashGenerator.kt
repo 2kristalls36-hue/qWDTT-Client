@@ -33,7 +33,7 @@ object VkCallHashGenerator {
 
     suspend fun generateOutcome(context: Context): CallHashOutcome = generateCallHash(
         hasSession = VkSession.hasSessionCookie(),
-        userAgent = runCatching { WebSettings.getDefaultUserAgent(context) }.getOrDefault("ARDTT"),
+        userAgent = runCatching { WebSettings.getDefaultUserAgent(context) }.getOrDefault("qWDTT-Client"),
         cookieHeader = VkSession.cookieHeader(),
         transport = DefaultVkApiTransport,
     )
@@ -61,7 +61,7 @@ object VkCallHashGenerator {
             "&redirect_uri=$redirect" +
             "&response_type=token" +
             "&scope=messages" +
-            "&state=ardtt" +
+            "&state=qwdttclient" +
             "&v=$API_VERSION"
     }
 }

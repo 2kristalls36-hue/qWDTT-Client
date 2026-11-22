@@ -204,7 +204,7 @@ class VkLoginActivity : ComponentActivity() {
         AppLog.w(TAG_ACT, "Retry login attempt=$loginFlowAttempt reason=$reason → $next")
         view?.let {
             applySettings(it, loginFlowAttempt)
-            it.evaluateJavascript("window.__ardtt_login_err_watch=false;", null)
+            it.evaluateJavascript("window.__qwc_login_err_watch=false;", null)
             it.loadUrl(next, AUTH_HEADERS)
         }
     }
@@ -290,8 +290,8 @@ class VkLoginActivity : ComponentActivity() {
 
         private const val LOGIN_ERROR_WATCHER_JS = """
             (function() {
-                if (window.__ardtt_login_err_watch) return;
-                window.__ardtt_login_err_watch = true;
+                if (window.__qwc_login_err_watch) return;
+                window.__qwc_login_err_watch = true;
                 function check() {
                     try {
                         var t = (document.body && document.body.innerText) || '';

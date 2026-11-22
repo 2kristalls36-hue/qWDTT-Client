@@ -28,7 +28,7 @@ object TunnelActions {
         if (profileId.isBlank() || ProfilesStore(context).getProfileOnce(profileId) == null) return Problem.NoProfile
         prepareSettings(context, profileId)
         // Without a VK call link the tunnel service stops silently; say so instead —
-        // unless the VK account is signed in: then the link is created, as in ARDTT.
+        // unless the VK account is signed in: then the link is created automatically.
         if (settings.vkHashes.first().isBlank()) {
             if (!createCallLink(context, profileId).isSuccess) return Problem.NoCallLink
             prepareSettings(context, profileId)

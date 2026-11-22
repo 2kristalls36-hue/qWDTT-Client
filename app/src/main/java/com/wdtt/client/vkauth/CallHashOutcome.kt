@@ -1,7 +1,6 @@
 package com.wdtt.client.vkauth
 
-// From ARDTT (bypass/CallHashOutcome.kt): only the call-link result types; the ARDTT
-// call re-creation logic tied to its connection core is not carried over.
+// Call-link result types of the VK login code.
 
 import java.io.IOException
 import java.net.SocketTimeoutException

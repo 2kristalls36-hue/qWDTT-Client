@@ -186,7 +186,7 @@ fun SettingsScreen() {
             }
             item {
                 Box(Modifier.padding(horizontal = 16.dp)) {
-                    // VK account, as in ARDTT: with it the app creates call links itself.
+                    // VK account: with it the app creates call links itself.
                     var vkSignedIn by com.wdtt.client.ui.profiles.rememberVkSignedIn()
                     var vkBusy by remember { mutableStateOf(false) }
                     var confirmSignOut by remember { mutableStateOf(false) }

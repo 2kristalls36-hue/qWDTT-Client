@@ -50,7 +50,7 @@ import com.wdtt.client.ui.theme.ArdttSize
 import com.wdtt.client.ui.theme.ArdttSpacing
 
 /**
- * Floating search field that sits above the tab pill (as in ARDTT): translucent shell
+ * Floating search field that sits above the tab pill: translucent shell
  * while idle, solid surface while the keyboard is open.
  */
 @Composable

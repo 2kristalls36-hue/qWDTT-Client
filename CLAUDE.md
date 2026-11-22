@@ -1,6 +1,6 @@
 # qWDTT Client
 
-Личный Android-клиент на базе qWDTT (RAW через VK TURN), интерфейс в стиле ARDTT.
+Android-клиент на базе qWDTT (RAW через VK TURN) для пользователей подписки.
 
 ## Тексты интерфейса
 

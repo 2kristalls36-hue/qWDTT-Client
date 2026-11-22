@@ -133,7 +133,7 @@ fun ProfileSheet(
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
-            // As in ARDTT: a new call made through the signed-in VK account.
+            // A new call made through the signed-in VK account.
             var vkSignedIn by rememberVkSignedIn()
             var creating by remember { mutableStateOf(false) }
             var vkNote by remember { mutableStateOf<String?>(null) }

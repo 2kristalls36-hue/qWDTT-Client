@@ -125,7 +125,7 @@ fun AppsScreen(settingsStore: SettingsStore) {
     val keyboardVisible = imePad > 12.dp
     // With liquid glass on, the screen content is recorded for the floating header and
     // search bar to refract (they cannot sample the root layer they are drawn into).
-    // Two panes, as in ARDTT: apps and sites (addresses and domains outside the tunnel).
+    // Two panes: apps and sites (addresses and domains outside the tunnel).
     var sitesPane by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     val sitesRaw by settingsStore.bypassRoutes.collectAsStateWithLifecycle("")
     val sites = remember(sitesRaw) { com.wdtt.client.BypassRoutes.parseRules(sitesRaw) }
@@ -160,7 +160,7 @@ fun AppsScreen(settingsStore: SettingsStore) {
         scrolled = listState.canScrollBackward,
         backdrop = screenGlass,
         overlay = {
-            // Search floats above the tab pill, as in ARDTT; with the keyboard open it rides on top of it.
+            // Search floats above the tab pill; with the keyboard open it rides on top of it.
             androidx.compose.runtime.CompositionLocalProvider(LocalGlassBackdrop provides screenGlass) {
                 val bottom = Modifier
                     .align(Alignment.BottomCenter)
@@ -175,7 +175,7 @@ fun AppsScreen(settingsStore: SettingsStore) {
                         modifier = bottom,
                     )
                 } else {
-                    // Add row: field and button, as in ARDTT; the subdomain chip appears while typing a domain.
+                    // Add row: field and button; the subdomain chip appears while typing a domain.
                     Column(bottom, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         val isDomain = newSite.any { it.isLetter() }
                         androidx.compose.animation.AnimatedVisibility(visible = isDomain && keyboardVisible) {
@@ -446,7 +446,7 @@ private fun AppRowFrame(
 }
 
 /**
- * Loading stub in the ARDTT manner: a light band sweeps over an icon, two text bars
+ * Loading stub: a light band sweeps over an icon, two text bars
  * and the switch. Text bars sit in slots of the text line height, so the stub matches
  * a loaded row exactly.
  */

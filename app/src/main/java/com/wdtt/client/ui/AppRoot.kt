@@ -58,7 +58,7 @@ fun AppRoot(settingsStore: SettingsStore) {
     val rimColor by androidx.compose.animation.animateColorAsState(rimTarget, label = "rim")
     backdrop?.rim = if (power == com.wdtt.client.lite.PowerLevel.Maximum) null else rimColor
     val items = listOf(
-        // Same icons as ARDTT; the motions follow the routes (key turn, folder lift,
+        // Tab icons; the motions follow the routes (key turn, folder lift,
         // filter slide, gear half turn).
         ArdttNavItem(Routes.HOME, "Главная", Icons.Outlined.VpnKey),
         ArdttNavItem(Routes.PROFILES, "Профили", Icons.Outlined.Folder),

@@ -34,6 +34,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material.icons.filled.Close
 import com.wdtt.client.ui.components.control.ArdttChoiceChip
 import com.wdtt.client.ui.components.control.ArdttButtonVariant
@@ -73,7 +80,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
 
-private data class AppItem(val packageName: String, val name: String, val system: Boolean)
+internal data class AppItem(val packageName: String, val name: String, val system: Boolean)
 
 /**
  * Apps that bypass the tunnel (or, in the second mode, the only apps that use it).
@@ -84,7 +91,12 @@ fun AppsScreen(settingsStore: SettingsStore) {
     val context = LocalContext.current
     val haptics = com.wdtt.client.ui.motion.LocalAppHaptics.current
     val scope = rememberCoroutineScope()
-    val savedRaw by settingsStore.excludedApps.collectAsStateWithLifecycle("")
+    // Separate lists per mode: «Мимо туннеля» and «Только выбранные».
+    LaunchedEffect(Unit) { settingsStore.migrateSplitAppLists() }
+    val onlySelectedMode by settingsStore.isWhitelist.collectAsStateWithLifecycle(false)
+    val excludedRaw by settingsStore.excludedApps.collectAsStateWithLifecycle("")
+    val allowedRaw by settingsStore.allowedApps.collectAsStateWithLifecycle("")
+    val savedRaw = if (onlySelectedMode) allowedRaw else excludedRaw
     val selected = remember(savedRaw) { savedRaw.split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet() }
     val onlySelected by settingsStore.isWhitelist.collectAsStateWithLifecycle(false)
     val running by TunnelManager.running.collectAsStateWithLifecycle()
@@ -98,6 +110,8 @@ fun AppsScreen(settingsStore: SettingsStore) {
     // fade) and appears at its new place.
     var sortSelected by remember { mutableStateOf<Set<String>?>(null) }
     var leaving by remember { mutableStateOf(emptySet<String>()) }
+    // Another mode shows another list: drop the lagging sort copy of the old one.
+    LaunchedEffect(onlySelectedMode) { sortSelected = null; leaving = emptySet() }
     val order = sortSelected ?: selected
     val visible = remember(apps, query, showSystem, order) {
         val q = query.trim().lowercase(Locale.getDefault())
@@ -193,6 +207,19 @@ fun AppsScreen(settingsStore: SettingsStore) {
             }
         },
     ) { top ->
+        // One band for all stubs, sweeping left to right; only while loading, so the
+        // loaded list is not redrawn every frame.
+        val shift = if (apps == null) {
+            val shimmerT = androidx.compose.animation.core.rememberInfiniteTransition(label = "appsLoading")
+            shimmerT.animateFloat(
+                -400f, 1400f,
+                androidx.compose.animation.core.infiniteRepeatable(tween(1100, easing = androidx.compose.animation.core.LinearEasing)),
+                label = "shift",
+            ).value
+        } else 0f
+        val stubBase = MaterialTheme.colorScheme.surfaceVariant
+        val stubLight = MaterialTheme.colorScheme.surface
+        val shimmer = Brush.horizontalGradient(listOf(stubBase, stubLight, stubBase), startX = shift, endX = shift + 420f)
         LazyColumn(
             state = listState,
             // Magnet: after a fling the nearest row settles flush with the top.
@@ -276,8 +303,8 @@ fun AppsScreen(settingsStore: SettingsStore) {
                 }
             }
             when {
-                apps == null -> item(key = "loading") {
-                    Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                apps == null -> items(12, key = { "stub$it" }) { i ->
+                    AppRowStub(shimmer, titleWidth = listOf(0.62f, 0.48f, 0.7f, 0.55f)[i % 4], subtitleWidth = listOf(0.4f, 0.52f, 0.34f, 0.46f)[i % 4])
                 }
                 visible.isEmpty() -> item(key = "empty") {
                     Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
@@ -305,7 +332,8 @@ fun AppsScreen(settingsStore: SettingsStore) {
                         val next = if (on) selected + app.packageName else selected - app.packageName
                         val pkg = app.packageName
                         scope.launch {
-                            settingsStore.saveExcludedApps(next.joinToString(","))
+                            val csv = next.joinToString(",")
+                            if (onlySelectedMode) settingsStore.saveAllowedApps(csv) else settingsStore.saveExcludedApps(csv)
                             if (sortSelected == null) sortSelected = selected
                             delay(330) // the switch finishes first
                             leaving = leaving + pkg
@@ -349,7 +377,7 @@ private fun SiteRow(rule: String, modifier: Modifier = Modifier, onRemove: () ->
 }
 
 @Composable
-private fun AppRow(
+internal fun AppRow(
     app: AppItem,
     checked: Boolean,
     leaving: Boolean = false,
@@ -367,29 +395,85 @@ private fun AppRow(
             }
         }
     }
-    val shape = RoundedCornerShape(16.dp)
-    Row(
-        modifier
+    AppRowFrame(
+        modifier = modifier
             .graphicsLayer {
                 alpha = 1f - out
                 translationY = -10.dp.toPx() * out
             }
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onToggle),
+        icon = { m ->
+            icon?.let { Image(it, contentDescription = null, modifier = m) }
+                ?: Box(m.background(MaterialTheme.colorScheme.surfaceVariant))
+        },
+        title = { Text(app.name, style = AppRowTitle(), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        subtitle = { Text(app.packageName, style = AppRowSubtitle(), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        trailing = { com.wdtt.client.ui.components.control.LiteSwitch(checked = checked, onCheckedChange = null) },
+    )
+}
+
+@Composable private fun AppRowTitle() = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
+@Composable private fun AppRowSubtitle() = MaterialTheme.typography.labelSmall
+
+/**
+ * Layout shared by an app row and its loading stub, so the stub is exactly as tall:
+ * same padding, icon, two text lines and switch.
+ */
+@Composable
+private fun AppRowFrame(
+    modifier: Modifier,
+    icon: @Composable (Modifier) -> Unit,
+    title: @Composable () -> Unit,
+    subtitle: @Composable () -> Unit,
+    trailing: @Composable () -> Unit,
+) {
+    Row(
+        modifier
             .fillMaxWidth()
-            .clip(shape)
+            .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surface)
-            .toggleable(value = checked, role = Role.Switch, onValueChange = onToggle)
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        val iconModifier = Modifier.size(36.dp).clip(RoundedCornerShape(10.dp))
-        icon?.let { Image(it, contentDescription = null, modifier = iconModifier) }
-            ?: Box(iconModifier.background(MaterialTheme.colorScheme.surfaceVariant))
+        icon(Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)))
         Column(Modifier.weight(1f)) {
-            Text(app.name, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(app.packageName, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            title()
+            subtitle()
         }
-        com.wdtt.client.ui.components.control.LiteSwitch(checked = checked, onCheckedChange = null)
+        trailing()
+    }
+}
+
+/**
+ * Loading stub in the ARDTT manner: a light band sweeps over an icon, two text bars
+ * and the switch. Text bars sit in slots of the text line height, so the stub matches
+ * a loaded row exactly.
+ */
+@Composable
+internal fun AppRowStub(brush: Brush, titleWidth: Float, subtitleWidth: Float) {
+    AppRowFrame(
+        modifier = Modifier.clearAndSetSemantics {},
+        icon = { m -> Box(m.background(brush)) },
+        title = { ShimmerLine(brush, titleWidth, AppRowTitle()) },
+        subtitle = { ShimmerLine(brush, subtitleWidth, AppRowSubtitle()) },
+        trailing = { com.wdtt.client.ui.components.control.LiteSwitch(checked = false, onCheckedChange = null, enabled = false) },
+    )
+}
+
+@Composable
+private fun ShimmerLine(brush: Brush, widthFraction: Float, style: androidx.compose.ui.text.TextStyle) {
+    val density = LocalDensity.current
+    // An invisible one-line text gives the exact line height the real text would take.
+    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
+        Text(" ", style = style, maxLines = 1, modifier = Modifier.alpha(0f))
+        Box(
+            Modifier
+                .fillMaxWidth(widthFraction)
+                .height(with(density) { style.fontSize.toDp() })
+                .clip(RoundedCornerShape(50))
+                .background(brush),
+        )
     }
 }
 

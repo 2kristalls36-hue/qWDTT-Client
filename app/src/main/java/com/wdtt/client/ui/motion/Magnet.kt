@@ -20,6 +20,9 @@ import kotlin.math.sqrt
  * Magnet motion: the pull grows as the distance shrinks, so an element starts slowly
  * when far, speeds up as it nears its place and lands with a short click.
  */
+/** «Магнит» (beta setting): off — elements glide to their place without the pull. */
+val LocalMagnetEnabled = androidx.compose.runtime.staticCompositionLocalOf { true }
+
 object Magnet {
     /** Accelerating curve: slow start, fastest at contact (like a force ~ 1/distance²). */
     val Easing: Easing = Easing { t -> t * t * t }
@@ -37,7 +40,13 @@ suspend fun Animatable<Float, AnimationVector1D>.magnetTo(
     target: Float,
     fullRange: Float = 1f,
     onContact: () -> Unit = {},
+    enabled: Boolean = true,
 ) {
+    if (!enabled) {
+        // No magnet: a plain settle, no click.
+        animateTo(target, spring(dampingRatio = 0.85f, stiffness = 400f))
+        return
+    }
     val distance = abs(target - value)
     if (distance < 0.0005f * fullRange) {
         snapTo(target)
@@ -57,7 +66,8 @@ suspend fun Animatable<Float, AnimationVector1D>.magnetTo(
  * is drawn flush with [position], accelerating into place instead of easing out.
  */
 @Composable
-fun rememberMagnetSnapFling(state: LazyListState, position: SnapPosition = SnapPosition.Start): TargetedFlingBehavior {
+fun rememberMagnetSnapFling(state: LazyListState, position: SnapPosition = SnapPosition.Start): androidx.compose.foundation.gestures.FlingBehavior {
+    if (!LocalMagnetEnabled.current) return androidx.compose.foundation.gestures.ScrollableDefaults.flingBehavior()
     val decay = rememberSplineBasedDecay<Float>()
     return remember(state, position, decay) {
         snapFlingBehavior(
@@ -71,6 +81,7 @@ fun rememberMagnetSnapFling(state: LazyListState, position: SnapPosition = SnapP
 /** A light tick when a magnet-snapped list comes to rest after a scroll. */
 @Composable
 fun MagnetSnapTick(state: LazyListState) {
+    if (!LocalMagnetEnabled.current) return
     val haptics = LocalAppHaptics.current
     val scrolling = state.isScrollInProgress
     val was = remember { booleanArrayOf(false) }

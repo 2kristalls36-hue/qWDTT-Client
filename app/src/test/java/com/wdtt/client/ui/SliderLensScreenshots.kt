@@ -90,4 +90,30 @@ class SliderLensScreenshots {
 
     @Test fun switchLight() = switchShot("light", "light")
     @Test fun switchDark() = switchShot("dark", "dark")
+
+    @Test fun afterRelease() {
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            ArdttTheme(themeMode = "light") {
+                val glass = GlassBackdrop(rememberGraphicsLayer())
+                val levelState = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(PowerLevel.Stable) }
+                CompositionLocalProvider(LocalGlassBackdrop provides glass) {
+                    Box(Modifier.background(MaterialTheme.colorScheme.background).padding(16.dp)) {
+                        PowerCard(level = levelState.value, locked = false, onLevelChange = { levelState.value = it }, modifier = Modifier.fillMaxWidth())
+                    }
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(800)
+        val node = compose.onNodeWithTag("power-slider")
+        node.performTouchInput {
+            val pad = 14.dp.toPx()
+            val track = width - 2 * pad
+            down(Offset(pad, centerY))
+            for (k in 1..20) { moveTo(Offset(pad + track * 0.46f * k / 20f, centerY)); }
+            up()
+        }
+        compose.mainClock.advanceTimeBy(3000)
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/lens_after_release.png")
+    }
 }

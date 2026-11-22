@@ -76,6 +76,8 @@ class SettingsStore(context: Context) {
         private val DEPLOY_DNS1 = stringPreferencesKey("deploy_dns1")
         private val DEPLOY_DNS2 = stringPreferencesKey("deploy_dns2")
         private val EXCLUDED_APPS = stringPreferencesKey("excluded_apps")
+        /** Apps for «Только выбранные»; [EXCLUDED_APPS] is the list for «Мимо туннеля». */
+        private val ALLOWED_APPS = stringPreferencesKey("allowed_apps")
         
         private val DETAILED_LOGS = booleanPreferencesKey("detailed_logs")
         
@@ -383,6 +385,31 @@ class SettingsStore(context: Context) {
     val deployDns2: Flow<String> = dataStore.data.map { it[DEPLOY_DNS2] ?: "1.0.0.1" }
     
     val excludedApps: Flow<String> = dataStore.data.map { it[EXCLUDED_APPS] ?: "" }
+    val allowedApps: Flow<String> = dataStore.data.map { it[ALLOWED_APPS] ?: "" }
+
+    suspend fun saveAllowedApps(packages: String) {
+        dataStore.edit { prefs -> prefs[ALLOWED_APPS] = packages }
+    }
+
+    /**
+     * Each mode keeps its own list (qWDTT Client). Once: the current selection goes to
+     * the list of the current mode, and the legacy qWDTT inversion is marked done — it
+     * would otherwise flip a «Только выбранные» list on the first connection.
+     */
+    /** (excluded, allowed) after the split: the one list goes to the current mode. */
+    internal fun splitAppLists(isWhitelist: Boolean, current: String): Pair<String, String> =
+        if (isWhitelist) "" to current else current to ""
+
+    suspend fun migrateSplitAppLists() {
+        dataStore.edit { prefs ->
+            if (prefs[ALLOWED_APPS] == null) {
+                val (excluded, allowed) = splitAppLists(prefs[IS_WHITELIST] == true, prefs[EXCLUDED_APPS] ?: "")
+                prefs[EXCLUDED_APPS] = excluded
+                prefs[ALLOWED_APPS] = allowed
+            }
+            prefs[SPLIT_TUNNEL_WHITELIST_MIGRATED] = true
+        }
+    }
     
     val detailedLogs: Flow<Boolean> = dataStore.data.map { it[DETAILED_LOGS] ?: false }
     

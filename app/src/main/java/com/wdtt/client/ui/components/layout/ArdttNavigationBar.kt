@@ -37,6 +37,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.Icons
 import com.wdtt.client.ui.components.surface.glassBackdropSource
 import androidx.compose.ui.layout.layout
 import androidx.compose.animation.core.animateFloatAsState
@@ -157,6 +159,10 @@ internal enum class TabIconMotion {
     Pulse,
     Heartbeat,
     GearHalfTurn,
+    /** The folder opens and closes again, with a light pop. */
+    FolderOpen,
+    /** The three filter lines narrow one after another, like sifting. */
+    Sift,
 }
 
 internal data class TabIconPose(
@@ -180,8 +186,8 @@ internal const val KeyTurnDegrees = 360f
 internal fun tabIconMotionFor(route: String): TabIconMotion = when (route) {
     "tunnel" -> TabIconMotion.KeyTurn
     "servers" -> TabIconMotion.ServerLights
-    "profiles" -> TabIconMotion.Lift
-    "exceptions" -> TabIconMotion.Slide
+    "profiles" -> TabIconMotion.FolderOpen
+    "exceptions" -> TabIconMotion.Sift
     "network" -> TabIconMotion.Pulse
     "diagnostics" -> TabIconMotion.Heartbeat
     "settings" -> TabIconMotion.GearHalfTurn
@@ -238,6 +244,8 @@ internal fun tabIconPose(motion: TabIconMotion, progress: Float): TabIconPose {
             rotationZ = -8f * settle,
         )
         TabIconMotion.Slide -> TabIconPose(translationXFraction = 0.16f * settle)
+        TabIconMotion.FolderOpen -> TabIconPose(scale = 1f + 0.10f * settle)
+        TabIconMotion.Sift -> TabIconPose()
         TabIconMotion.Pulse -> TabIconPose(scale = 1f + 0.12f * settle)
         TabIconMotion.Heartbeat -> TabIconPose(scale = 1f + 0.14f * tabIconHeartbeat(progress))
     }
@@ -300,13 +308,15 @@ fun ArdttNavigationBar(
     val count = items.size
     val committedIndex = items.indexOfFirst { it.route == (pendingRoute ?: selectedRoute) }.coerceAtLeast(0)
     val selPos = remember { Animatable(committedIndex.toFloat()) }
+    // Read through state: gesture handlers outlive recompositions.
+    val magnetOn by androidx.compose.runtime.rememberUpdatedState(com.wdtt.client.ui.motion.LocalMagnetEnabled.current)
     var dragging by remember { mutableStateOf(false) }
     var hover by remember { mutableIntStateOf(-1) }
     val scope = rememberCoroutineScope()
     val haptics = com.wdtt.client.ui.motion.LocalAppHaptics.current
     val range = (count - 1).coerceAtLeast(1).toFloat()
     LaunchedEffect(committedIndex, dragging) {
-        if (!dragging) selPos.magnetTo(committedIndex.toFloat(), fullRange = range)
+        if (!dragging) selPos.magnetTo(committedIndex.toFloat(), fullRange = range, enabled = magnetOn)
     }
     val currentItems by rememberUpdatedState(items)
     // The drag handler lives across recompositions: read the selected tab through state,
@@ -325,7 +335,7 @@ fun ArdttNavigationBar(
                 hover = near
                 haptics.perform(com.wdtt.client.ui.motion.Haptic.Tick)
             }
-            scope.launch { selPos.snapTo(tabMagnet(raw)) }
+            scope.launch { selPos.snapTo(if (magnetOn) tabMagnet(raw) else raw) }
         }
         fun release() {
             val target = selPos.value.roundToInt().coerceIn(0, count - 1)
@@ -336,7 +346,7 @@ fun ArdttNavigationBar(
                 selectTab.value(route)
             }
             scope.launch {
-                selPos.magnetTo(target.toFloat(), fullRange = range, onContact = {
+                selPos.magnetTo(target.toFloat(), fullRange = range, enabled = magnetOn, onContact = {
                     haptics.perform(com.wdtt.client.ui.motion.Haptic.Click)
                 })
                 dragging = false
@@ -529,6 +539,31 @@ private fun BoxScope.SelectionDroplet(count: Int, pos: Float, velocity: Float, d
     }
 }
 
+/**
+ * Filter glyph (three centred lines, widest on top) whose lines narrow in turn from
+ * top to bottom and spring back: things passing through the filter.
+ */
+@Composable
+private fun SiftIcon(progress: Float, tint: Color, modifier: Modifier) {
+    Canvas(modifier) {
+        val u = size.minDimension / 24f
+        val widths = floatArrayOf(18f, 12f, 6f)
+        val ys = floatArrayOf(7f, 12f, 17f)
+        for (i in 0..2) {
+            // Each line has its own window inside the motion, staggered by 0.18.
+            val local = ((progress - i * 0.18f) / 0.64f).coerceIn(0f, 1f)
+            val squeeze = tabIconSettle(local)
+            val w = widths[i] * (1f - 0.55f * squeeze) * u
+            val cx = size.width / 2f
+            drawLine(
+                tint,
+                Offset(cx - w / 2f, ys[i] * u), Offset(cx + w / 2f, ys[i] * u),
+                strokeWidth = 2f * u, cap = androidx.compose.ui.graphics.StrokeCap.Round,
+            )
+        }
+    }
+}
+
 @Composable
 private fun NavBarTab(
     item: ArdttNavItem,
@@ -586,7 +621,21 @@ private fun NavBarTab(
     ) {
         Box(contentAlignment = Alignment.TopEnd) {
             val glyph = Modifier.size(ArdttSize.Icon)
-            if (iconMotion == TabIconMotion.ServerLights) {
+            if (iconMotion == TabIconMotion.Sift) {
+                SiftIcon(iconProgress.value, paint.color, glyph)
+            } else if (iconMotion == TabIconMotion.FolderOpen) {
+                // Open for the middle of the motion, closed at both ends.
+                val open = iconProgress.value in 0.12f..0.78f
+                Icon(
+                    imageVector = if (open) Icons.Outlined.FolderOpen else item.icon,
+                    contentDescription = null,
+                    modifier = glyph.graphicsLayer {
+                        scaleX = iconPose.scale
+                        scaleY = iconPose.scale
+                    },
+                    tint = paint.color,
+                )
+            } else if (iconMotion == TabIconMotion.ServerLights) {
                 ArdttServersTabIcon(
                     lightAlpha = tabIconServerLightAlpha(iconProgress.value),
                     tint = paint.color,

@@ -45,6 +45,7 @@ fun AppRoot(settingsStore: SettingsStore) {
     val backdrop = androidx.compose.runtime.remember(glassLayer) { com.wdtt.client.ui.components.surface.GlassBackdrop(glassLayer) }
         .takeIf { glassOn && com.wdtt.client.ui.components.surface.LiquidGlass.supported }
     val hapticsOn by lite.haptics.collectAsState(true)
+    val magnetOn by lite.magnet.collectAsState(true)
     val appHaptics = com.wdtt.client.ui.motion.rememberAppHaptics(hapticsOn)
     val glassTransparency by lite.glassTransparency.collectAsState(com.wdtt.client.lite.LiteSettings.DEFAULT_GLASS_TRANSPARENCY)
     backdrop?.transparency = glassTransparency
@@ -73,6 +74,7 @@ fun AppRoot(settingsStore: SettingsStore) {
     androidx.compose.runtime.CompositionLocalProvider(
         com.wdtt.client.ui.components.surface.LocalGlassBackdrop provides backdrop,
         com.wdtt.client.ui.motion.LocalAppHaptics provides appHaptics,
+        com.wdtt.client.ui.motion.LocalMagnetEnabled provides magnetOn,
         androidx.compose.ui.platform.LocalHapticFeedback provides androidx.compose.runtime.remember(appHaptics) { com.wdtt.client.ui.motion.SettingAwareHapticFeedback(appHaptics) },
     ) {
     Box(Modifier.fillMaxSize()) {

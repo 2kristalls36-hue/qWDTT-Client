@@ -193,9 +193,10 @@ class RawTunVpnService : VpnService() {
         }
         val store = SettingsStore(applicationContext)
         val (packages, isWhitelist) = runBlocking(Dispatchers.IO) {
-            store.migrateLegacyWhitelistMode()
-            val saved = store.excludedApps.first()
+            store.migrateSplitAppLists()
             val white = store.isWhitelist.first()
+            // Each mode has its own list.
+            val saved = if (white) store.allowedApps.first() else store.excludedApps.first()
             saved to white
         }
         val userSelected = packages.split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()

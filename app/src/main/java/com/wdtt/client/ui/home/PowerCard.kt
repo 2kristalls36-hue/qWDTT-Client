@@ -305,6 +305,8 @@ private fun PowerSlider(
     val surface = MaterialTheme.colorScheme.surface
     var dragging by remember { mutableStateOf(false) }
     var caught by remember { mutableStateOf(-1) }
+    // Read through state: gesture handlers outlive recompositions.
+    val magnetOn by androidx.compose.runtime.rememberUpdatedState(com.wdtt.client.ui.motion.LocalMagnetEnabled.current)
     var pressed by remember { mutableStateOf(false) }
     // Liquid glass on: while held, the thumb swells into a lens that magnifies the track.
     val glassOn = com.wdtt.client.ui.components.surface.LocalGlassBackdrop.current != null
@@ -318,7 +320,7 @@ private fun PowerSlider(
         label = "lift",
     )
     LaunchedEffect(level, dragging) {
-        if (!dragging) pos.magnetTo(level.ordinal / 2f)
+        if (!dragging) pos.magnetTo(level.ordinal / 2f, enabled = magnetOn)
     }
     val motion = rememberMotionScale()
     val t = rememberInfiniteTransition(label = "slider")
@@ -346,7 +348,7 @@ private fun PowerSlider(
         dragging = false
         val stop = (pos.value * 2).roundToInt() / 2f
         select(stop)
-        scope.launch { pos.magnetTo(stop, onContact = { haptics.perform(com.wdtt.client.ui.motion.Haptic.Tick) }) }
+        scope.launch { pos.magnetTo(stop, enabled = magnetOn, onContact = { haptics.perform(com.wdtt.client.ui.motion.Haptic.Tick) }) }
     }
 
     BoxWithConstraints(
@@ -375,7 +377,7 @@ private fun PowerSlider(
                             val f = fracAt(o.x)
                             select(f)
                             scope.launch {
-                                pos.magnetTo((f * 2).roundToInt() / 2f, onContact = { haptics.perform(com.wdtt.client.ui.motion.Haptic.Tick) })
+                                pos.magnetTo((f * 2).roundToInt() / 2f, enabled = magnetOn, onContact = { haptics.perform(com.wdtt.client.ui.motion.Haptic.Tick) })
                             }
                         }
                     }
@@ -386,10 +388,10 @@ private fun PowerSlider(
                             onDragCancel = { settle() },
                         ) { change, _ ->
                             val f = fracAt(change.position.x)
-                            val shown = magnet(f)
+                            val shown = if (magnetOn) magnet(f) else f
                             // A light tick when the thumb catches a stop.
                             val stop = (f * 2).roundToInt()
-                            if (abs(f - stop / 2f) <= MAGNET_CAPTURE && caught != stop) {
+                            if (magnetOn && abs(f - stop / 2f) <= MAGNET_CAPTURE && caught != stop) {
                                 caught = stop
                                 haptics.perform(com.wdtt.client.ui.motion.Haptic.Tick)
                             } else if (abs(f - stop / 2f) > MAGNET_RADIUS) {
@@ -457,8 +459,8 @@ private fun PowerSlider(
                 val cardBehind = lerp(surface, Neon.Night, k)
                 trackLayer.record(recDensity, layoutDirection, androidx.compose.ui.unit.IntSize(size.width.toInt(), size.height.toInt())) {
                     drawRect(cardBehind)
-                    // Without the stop dots: through the glass only the bar is seen.
-                    drawTrack(false)
+                    // With the stop dots: the dot under the thumb shows magnified in its centre.
+                    drawTrack(true)
                 }
             }
             drawTrack(true)

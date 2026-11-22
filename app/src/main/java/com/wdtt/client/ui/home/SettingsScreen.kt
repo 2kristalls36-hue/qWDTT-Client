@@ -153,6 +153,22 @@ fun SettingsScreen() {
                             else -> "Панель навигации отображается в стандартном виде."
                         }
                     )
+                    // Magnet, beta as well.
+                    val magnet by lite.magnet.collectAsStateWithLifecycle(true)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Магнит", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold))
+                            BetaBadge()
+                        }
+                        com.wdtt.client.ui.components.control.LiteSwitch(
+                            checked = magnet,
+                            onCheckedChange = { haptics.toggle(it); scope.launch { lite.saveMagnet(it) } },
+                        )
+                    }
+                    Hint(
+                        if (magnet) "Ползунки, вкладки и списки притягиваются к ближайшему положению."
+                        else "Ползунки, вкладки и списки останавливаются без притягивания."
+                    )
                 }
                 }
             }
@@ -333,6 +349,19 @@ private fun UpdateSection() {
             )
         }
     }
+}
+
+@Composable
+private fun BetaBadge() {
+    Text(
+        "Бета",
+        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(MaterialTheme.colorScheme.primaryContainer)
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+    )
 }
 
 @Composable

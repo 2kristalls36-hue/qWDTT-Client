@@ -87,10 +87,12 @@ private fun GlassSwitch(
     val dark = isDarkSurface()
     val scope = rememberCoroutineScope()
     val pos = remember { Animatable(if (checked) 1f else 0f) }
+    // Read through state: gesture handlers outlive recompositions.
+    val magnetOn by androidx.compose.runtime.rememberUpdatedState(com.wdtt.client.ui.motion.LocalMagnetEnabled.current)
     var dragging by remember { mutableStateOf(false) }
     var pressed by remember { mutableStateOf(false) }
     LaunchedEffect(checked, dragging) {
-        if (!dragging) pos.magnetTo(if (checked) 1f else 0f)
+        if (!dragging) pos.magnetTo(if (checked) 1f else 0f, enabled = magnetOn)
     }
     val moving = pos.isRunning && !(pos.value == 0f || pos.value == 1f)
     // The disc lifts a little while held or travelling.
@@ -136,7 +138,7 @@ private fun GlassSwitch(
                             onDragEnd = {
                                 val on = pos.value >= 0.5f
                                 scope.launch {
-                                    pos.magnetTo(if (on) 1f else 0f)
+                                    pos.magnetTo(if (on) 1f else 0f, enabled = magnetOn)
                                     dragging = false
                                 }
                                 if (on != current) change?.invoke(on)

@@ -371,9 +371,6 @@ fun ArdttNavigationBar(
     }
     val shownIndex = if (dragging && hover >= 0) hover else -1
 
-    // With the glass lens the tab under the droplet is magnified (crisp, not bent),
-    // following the droplet smoothly while it moves: the current tab reads at a glance.
-    val lensOn = LocalGlassBackdrop.current != null && LiquidGlass.supported
     val tabs: @Composable () -> Unit = {
         Row(
             modifier = Modifier
@@ -397,9 +394,6 @@ fun ArdttNavigationBar(
                         selectTab.value(item.route)
                     },
                     modifier = Modifier.weight(1f),
-                    magnify = if (lensOn) {
-                        { 1f + 0.12f * (1f - kotlin.math.abs(index - selPos.value)).coerceIn(0f, 1f) }
-                    } else null,
                 )
             }
         }
@@ -420,10 +414,9 @@ fun ArdttNavigationBar(
                 .then(dragToSelect),
         ) {
             CompositionLocalProvider(LocalContentColor provides colors.onSurface) {
-                // Lens in the lens: the selection is a small glass lens inside the panel. It
-                // bends only what lies under it (the page behind the panel, under the panel
-                // veil, magnified); the icons and labels sit on top of it, crisp, and the
-                // tab under it is shown larger. While dragged it swells.
+                // Lens in the lens: the selection is a small frosted glass lens inside the
+                // panel. It magnifies what lies under it (the page behind the panel under the
+                // veil, and the selected tab) by about 5%. While dragged it swells.
                 val lens by animateFloatAsState(
                     if (dragging) 1f else 0f,
                     spring(dampingRatio = 0.6f, stiffness = 420f),
@@ -435,26 +428,24 @@ fun ArdttNavigationBar(
                 // The inner lens edge is where the light crosses two layers of glass: real
                 // soda-lime glass shows a faint green there (iron traces). Kept faint.
                 panelGlass.rim = GlassEdgeGreen
-                // Panel picture for the lens: the page behind the panel under the veil,
-                // without the tabs.
+                // Panel picture for the lens: the page behind the panel under the veil, with
+                // the tabs; the tabs are drawn as usual beneath the lens.
                 Box(
                     Modifier
                         .matchParentSize()
                         .onGloballyPositioned { panelGlass.origin = it.positionInRoot() }
-                        .drawBehind {
+                        .drawWithContent {
                             val offset = panelGlass.origin - backdrop.origin
-                            // Explicit density and size: recording through this node's own draw
-                            // scope would make it reference itself.
-                            panelLayer.record(
-                                androidx.compose.ui.unit.Density(density, fontScale),
-                                layoutDirection,
-                                androidx.compose.ui.unit.IntSize(size.width.toInt(), size.height.toInt()),
-                            ) {
+                            panelLayer.record {
                                 translate(-offset.x, -offset.y) { drawLayer(backdrop.layer) }
                                 drawRect(veil)
+                                this@drawWithContent.drawContent()
                             }
+                            drawContent()
                         },
-                )
+                ) {
+                    tabs()
+                }
                 val trackH = ArdttSize.NavTrack
                 Box(
                     Modifier
@@ -463,7 +454,8 @@ fun ArdttNavigationBar(
                             val pad = NavBarDefaults.TrackPadding.toPx()
                             val slot = (constraints.maxWidth - pad * 2) / count
                             val lh = (trackH.toPx() - 8.dp.toPx()) * (0.86f + 0.14f * lens)
-                            val lw = slot * (0.9f + 0.25f * lens)
+                            // Nearly the slot width: the longest label must fit inside the flat middle.
+                            val lw = slot * (0.98f + 0.2f * lens)
                             val placeable = measurable.measure(
                                 androidx.compose.ui.unit.Constraints.fixed(lw.roundToInt(), lh.roundToInt())
                             )
@@ -477,22 +469,21 @@ fun ArdttNavigationBar(
                     LiquidGlassPanel(
                         backdrop = panelGlass,
                         cornerRadius = 40.dp,
-                        // Slightly frosted inside.
-                        tint = Color.White.copy(alpha = if (dark) 0.10f else 0.24f),
+                        // Slightly frosted inside by a milky haze, not by blur: the lens also
+                        // carries the selected label, which must stay sharp.
+                        tint = Color.White.copy(alpha = if (dark) 0.13f else 0.30f),
                         dark = dark,
                         // Narrow, shallow rim: the label sits close to the lower edge and must
                         // stay in the flat middle, not curl along the rim.
                         bezel = 6.dp,
                         depth = 2.dp,
-                        zoom = 0.12f,
-                        blur = 2.5.dp,
+                        zoom = 0.05f,
+                        blur = 0.dp,
                         underlay = lerp(colors.surface, Color.White, if (dark) 0.06f else 0.5f),
                         fringe = 0.45f, dispersion = 0.2f,
                         modifier = Modifier.fillMaxSize(),
                     ) {}
                 }
-                // Tabs on top of the lens: never bent.
-                Box(Modifier.matchParentSize()) { tabs() }
             }
         }
         return
@@ -610,8 +601,6 @@ private fun NavBarTab(
     unselectedColor: Color,
     onSelect: () -> Unit,
     modifier: Modifier = Modifier,
-    /** Scale of the icon and label, read at draw time (the lens over this tab). */
-    magnify: (() -> Float)? = null,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
@@ -642,13 +631,6 @@ private fun NavBarTab(
     Column(
         modifier = modifier
             .fillMaxHeight()
-            .then(
-                if (magnify == null) Modifier else Modifier.graphicsLayer {
-                    val m = magnify()
-                    scaleX = m
-                    scaleY = m
-                }
-            )
             .selectable(
                 selected = selected,
                 interactionSource = interactionSource,

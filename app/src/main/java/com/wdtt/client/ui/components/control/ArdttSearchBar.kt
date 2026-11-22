@@ -60,6 +60,8 @@ fun ArdttSearchBar(
     keyboardVisible: Boolean,
     modifier: Modifier = Modifier,
     placeholder: String = "Поиск",
+    /** Entry field instead of search: no magnifier, the keyboard action submits. */
+    onSubmit: (() -> Unit)? = null,
 ) {
     val colors = MaterialTheme.colorScheme
     val focusRequester = remember { FocusRequester() }
@@ -78,8 +80,10 @@ fun ArdttSearchBar(
             Modifier.fillMaxSize().padding(horizontal = ArdttSpacing.Large),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Outlined.Search, contentDescription = null, modifier = Modifier.size(ArdttSize.Icon), tint = colors.onSurfaceVariant)
-            Spacer(Modifier.width(ArdttSpacing.Medium))
+            if (onSubmit == null) {
+                Icon(Icons.Outlined.Search, contentDescription = null, modifier = Modifier.size(ArdttSize.Icon), tint = colors.onSurfaceVariant)
+                Spacer(Modifier.width(ArdttSpacing.Medium))
+            }
             val style = MaterialTheme.typography.titleMedium.copy(color = colors.onSurface, fontWeight = FontWeight.SemiBold)
             BasicTextField(
                 value = value,
@@ -87,13 +91,25 @@ fun ArdttSearchBar(
                 singleLine = true,
                 textStyle = style,
                 cursorBrush = SolidColor(colors.primary),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() }),
+                keyboardOptions = KeyboardOptions(
+                    imeAction = if (onSubmit != null) ImeAction.Done else ImeAction.Search,
+                    autoCorrectEnabled = onSubmit == null,
+                    keyboardType = if (onSubmit != null) androidx.compose.ui.text.input.KeyboardType.Uri else androidx.compose.ui.text.input.KeyboardType.Text,
+                ),
+                keyboardActions = KeyboardActions(
+                    onSearch = { keyboard?.hide() },
+                    onDone = { onSubmit?.invoke() ?: keyboard?.hide() },
+                ),
                 modifier = Modifier.weight(1f).background(Color.Transparent).focusRequester(focusRequester),
                 decorationBox = { inner ->
                     Box(contentAlignment = Alignment.CenterStart) {
                         if (value.isEmpty()) {
-                            Text(placeholder, style = style.copy(color = colors.onSurfaceVariant.copy(alpha = ArdttAlpha.Subtle)))
+                            Text(
+                                placeholder,
+                                style = style.copy(color = colors.onSurfaceVariant.copy(alpha = ArdttAlpha.Subtle)),
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            )
                         }
                         inner()
                     }

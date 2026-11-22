@@ -86,10 +86,23 @@ object BypassRoutes {
                 android.net.Uri.parse(s).host?.trim().orEmpty()
             }.getOrDefault("")
             if (s.isEmpty()) return raw.trim()
+        } else if (s.matches(Regex("^[0-9.]+/[0-9]{1,2}$"))) {
+            // An IPv4 subnet (1.2.3.0/24): the part after '/' is the prefix, not a path.
+            return s
         } else if ('/' in s) {
             s = s.substringBefore('/').trim()
         }
         return s.trim().trimEnd('.')
+    }
+
+    /** True for an IP, a CIDR, an IP mask (1.2.*.*), a domain or *.domain. */
+    fun isValidRule(rule: String): Boolean {
+        // "1.2.3.0/40" must not pass as 1.2.3.0: normalizeRuleInput drops anything after '/'
+        // as a URL path, so an IP with a prefix is checked as a CIDR as written.
+        val raw = rule.trim()
+        if (raw.matches(Regex("^[0-9.*]+/.*$"))) return parseCidr(raw) != null
+        val r = normalizeRuleInput(rule)
+        return r.isNotEmpty() && (parseRule(r) != null || domainLookupHosts(r) != null)
     }
 
     fun hasDomainRules(raw: String): Boolean {

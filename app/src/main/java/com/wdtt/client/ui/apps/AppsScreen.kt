@@ -34,6 +34,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.material.icons.filled.Close
+import com.wdtt.client.ui.components.control.ArdttChoiceChip
+import com.wdtt.client.ui.components.control.ArdttButtonVariant
+import com.wdtt.client.ui.components.control.ArdttButton
 import androidx.compose.animation.core.VisibilityThreshold
 import kotlinx.coroutines.delay
 import androidx.compose.ui.graphics.graphicsLayer
@@ -107,26 +111,85 @@ fun AppsScreen(settingsStore: SettingsStore) {
     val keyboardVisible = imePad > 12.dp
     // With liquid glass on, the screen content is recorded for the floating header and
     // search bar to refract (they cannot sample the root layer they are drawn into).
+    // Two panes, as in ARDTT: apps and sites (addresses and domains outside the tunnel).
+    var sitesPane by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    val sitesRaw by settingsStore.bypassRoutes.collectAsStateWithLifecycle("")
+    val sites = remember(sitesRaw) { com.wdtt.client.BypassRoutes.parseRules(sitesRaw) }
+    var newSite by remember { mutableStateOf("") }
+    var siteError by remember { mutableStateOf<String?>(null) }
+    var subdomains by remember { mutableStateOf(false) }
+    fun saveSites(list: List<String>) = scope.launch { settingsStore.saveBypassRoutes(list.joinToString("\n")) }
+    fun addSite() {
+        val rule = com.wdtt.client.BypassRoutes.normalizeRuleInput(newSite).lowercase(Locale.US)
+        val withSub = if (subdomains && !rule.startsWith("*.") && rule.any { it.isLetter() }) "*.$rule" else rule
+        siteError = when {
+            rule.isEmpty() -> null
+            !com.wdtt.client.BypassRoutes.isValidRule(withSub) -> "Адрес не распознан."
+            withSub in sites -> "Адрес уже есть в списке."
+            sites.size >= com.wdtt.client.BypassRoutes.MAX_RULES -> "В списке максимальное число адресов."
+            else -> null
+        }
+        if (rule.isEmpty() || siteError != null) {
+            haptics.perform(com.wdtt.client.ui.motion.Haptic.Reject)
+            return
+        }
+        haptics.perform(com.wdtt.client.ui.motion.Haptic.Confirm)
+        saveSites(listOf(withSub) + sites)
+        newSite = ""
+    }
+
     val screenGlass = com.wdtt.client.ui.components.surface.rememberScreenGlass()
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     com.wdtt.client.ui.motion.MagnetSnapTick(listState)
     com.wdtt.client.ui.components.layout.GlassHeaderPage(
-        title = "Приложения",
+        title = "Обход",
         scrolled = listState.canScrollBackward,
         backdrop = screenGlass,
         overlay = {
             // Search floats above the tab pill, as in ARDTT; with the keyboard open it rides on top of it.
             androidx.compose.runtime.CompositionLocalProvider(LocalGlassBackdrop provides screenGlass) {
-                ArdttSearchBar(
-                    value = query,
-                    onValueChange = { query = it },
-                    keyboardVisible = keyboardVisible,
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .zIndex(2f)
-                        .padding(horizontal = 16.dp)
-                        .padding(bottom = maxOf(ArdttBottomChrome.stickyBottomPadding(), imePad + 8.dp)),
-                )
+                val bottom = Modifier
+                    .align(Alignment.BottomCenter)
+                    .zIndex(2f)
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = maxOf(ArdttBottomChrome.stickyBottomPadding(), imePad + 8.dp))
+                if (!sitesPane) {
+                    ArdttSearchBar(
+                        value = query,
+                        onValueChange = { query = it },
+                        keyboardVisible = keyboardVisible,
+                        modifier = bottom,
+                    )
+                } else {
+                    // Add row: field and button, as in ARDTT; the subdomain chip appears while typing a domain.
+                    Column(bottom, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val isDomain = newSite.any { it.isLetter() }
+                        androidx.compose.animation.AnimatedVisibility(visible = isDomain && keyboardVisible) {
+                            ArdttChoiceChip(
+                                label = "С поддоменами",
+                                selected = subdomains,
+                                enabled = true,
+                                onClick = { subdomains = !subdomains },
+                            )
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            ArdttSearchBar(
+                                value = newSite,
+                                onValueChange = { newSite = it.filter { c -> c != '\n' && c != '\r' }; siteError = null },
+                                keyboardVisible = keyboardVisible,
+                                placeholder = "Сайт или IP-адрес",
+                                onSubmit = { addSite() },
+                                modifier = Modifier.weight(1f),
+                            )
+                            ArdttButton(
+                                text = "Добавить",
+                                onClick = { addSite() },
+                                enabled = newSite.isNotBlank(),
+                                fillMaxWidth = false,
+                            )
+                        }
+                    }
+                }
             }
         },
     ) { top ->
@@ -139,6 +202,53 @@ fun AppsScreen(settingsStore: SettingsStore) {
             verticalArrangement = Arrangement.spacedBy(6.dp),
             modifier = Modifier.fillMaxSize(),
         ) {
+            item(key = "panes") {
+                ArdttChoiceChipRow(
+                    choices = listOf(ArdttChoice(false, "Приложения"), ArdttChoice(true, "Сайты")),
+                    selected = sitesPane,
+                    onSelect = { sitesPane = it },
+                    modifier = Modifier.padding(bottom = 6.dp),
+                )
+            }
+            if (sitesPane) {
+                item(key = "sites-hint") {
+                    Column(Modifier.padding(bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            "Сайты и IP-адреса из списка открываются вне туннеля.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (running) {
+                            Text(
+                                "Изменения применяются при следующем подключении.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                        siteError?.let {
+                            Text(it, style = MaterialTheme.typography.bodySmall, color = com.wdtt.client.ui.home.ToneColors.Critical)
+                        }
+                    }
+                }
+                if (sites.isEmpty()) {
+                    item(key = "sites-empty") {
+                        Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
+                            Text("Список пуст.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                } else {
+                    items(sites, key = { "site|$it" }) { rule ->
+                        SiteRow(
+                            rule = rule,
+                            modifier = Modifier.animateItem(fadeInSpec = tween(220), fadeOutSpec = tween(160)),
+                            onRemove = {
+                                haptics.perform(com.wdtt.client.ui.motion.Haptic.Tick)
+                                saveSites(sites - rule)
+                            },
+                        )
+                    }
+                }
+            } else {
             item(key = "controls") {
                 Column(Modifier.padding(bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     ArdttChoiceChipRow(
@@ -206,7 +316,35 @@ fun AppsScreen(settingsStore: SettingsStore) {
                     }
                 }
             }
+            }
         }
+    }
+}
+
+/** One site rule: the address and a remove button. */
+@Composable
+private fun SiteRow(rule: String, modifier: Modifier = Modifier, onRemove: () -> Unit) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            rule,
+            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        ArdttButton(
+            onClick = onRemove,
+            variant = ArdttButtonVariant.Icon,
+            icon = androidx.compose.material.icons.Icons.Filled.Close,
+            contentDescription = "Удалить $rule",
+        )
     }
 }
 

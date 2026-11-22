@@ -61,7 +61,7 @@ fun AppRoot(settingsStore: SettingsStore) {
         // filter slide, gear half turn).
         ArdttNavItem(Routes.HOME, "Главная", Icons.Outlined.VpnKey),
         ArdttNavItem(Routes.PROFILES, "Профили", Icons.Outlined.Folder),
-        ArdttNavItem(Routes.APPS, "Приложения", Icons.Outlined.FilterList),
+        ArdttNavItem(Routes.APPS, "Обход", Icons.Outlined.FilterList),
         ArdttNavItem(Routes.SETTINGS, "Настройки", Icons.Outlined.Settings, dot = update != null),
     )
     // A link or file opened from another app is imported on the profiles tab.

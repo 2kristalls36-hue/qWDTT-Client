@@ -37,7 +37,7 @@ class AppSmokeTest {
         compose.onNodeWithText("Вставить из буфера обмена").assertExists()
         compose.activity.onBackPressedDispatcher.onBackPressed()
         step(1000)
-        compose.onNodeWithText("Приложения").performClick()
+        compose.onNodeWithText("Обход").performClick()
         step(3000)
         compose.onNodeWithText("Главная").performClick()
         step(1500)

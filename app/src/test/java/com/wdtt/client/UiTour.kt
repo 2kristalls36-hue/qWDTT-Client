@@ -51,6 +51,7 @@ class UiTour {
         val lite = LiteSettings(ctx)
         lite.savePowerLevel(level)
         lite.saveLiquidGlass(glass)
+        SettingsStore(ctx).saveBypassRoutes("example.com\n*.example.org\n203.0.113.0/24")
         lite.saveGlassTransparency(clear)
         lite.saveSubscription(
             home.id,
@@ -158,9 +159,14 @@ class UiTour {
         shot(dir, "10_other_profile_sheet")
         pressBack(); settle(8)
 
-        compose.onNodeWithText("Приложения").performClick()
+        compose.onNodeWithText("Обход").performClick()
         settle(14)
         shot(dir, "11_apps")
+        compose.onNodeWithText("Сайты").performClick()
+        settle(10)
+        shot(dir, "11a_sites")
+        compose.onNodeWithText("Приложения").performClick()
+        settle(6)
         compose.onNodeWithText("Настройки").performClick()
         settle(12)
         shot(dir, "11b_settings")

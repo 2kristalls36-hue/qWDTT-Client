@@ -1,17 +1,23 @@
 name: Release
 
-# A tag v1.2.3 on main builds signed APKs and publishes a GitHub Release.
-# The app checks the latest release and offers it in Settings → Updates.
-#   1. Raise versionName in app/build.gradle.kts and push to main.
-#   2. git tag v1.2.3 && git push origin v1.2.3
+# Publishes a GitHub Release with signed APKs; the app offers it in Settings → Updates.
+# Two ways, both after raising versionName in app/build.gradle.kts on main:
+#   - Actions → Release → Run workflow with «publish» ticked: the tag v<versionName>
+#     is created by this workflow;
+#   - or push a tag yourself: git tag v1.2.3 && git push origin v1.2.3
 # Tags with -alpha/-beta/-rc become pre-releases, which the app does not offer.
-# Manual run (Actions → Release → Run workflow): a signed test build as an artifact, no release.
+# Manual run without «publish»: a signed test build as an artifact, no release.
 
 on:
   push:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish a release tagged v<versionName>"
+        type: boolean
+        default: false
 
 concurrency:
   group: release-${{ github.ref }}
@@ -96,6 +102,8 @@ jobs:
           mkdir -p dist
           if [ "$GITHUB_EVENT_NAME" = push ]; then
             version="${GITHUB_REF_NAME#v}"
+          elif [ "${{ inputs.publish }}" = "true" ]; then
+            version="$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -n 1)"
           else
             gradle_version="$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -n 1)"
             version="${gradle_version}-test-${GITHUB_SHA::7}"
@@ -117,7 +125,7 @@ jobs:
           cat SHA256SUMS.txt
 
       - name: Upload test build
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' && !inputs.publish
         uses: actions/upload-artifact@v4
         with:
           name: qwdtt-client-${{ env.APP_VERSION }}
@@ -126,13 +134,20 @@ jobs:
           retention-days: 7
 
       - name: Publish GitHub Release
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || inputs.publish
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          args=(--title "qWDTT Client ${GITHUB_REF_NAME}" --generate-notes)
-          case "$GITHUB_REF_NAME" in
+          tag="v${APP_VERSION}"
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            if [ "$GITHUB_REF_NAME" != main ]; then echo "Publish from main only" >&2; exit 1; fi
+            if gh release view "$tag" >/dev/null 2>&1; then
+              echo "Release $tag already exists: raise versionName first" >&2; exit 1
+            fi
+          fi
+          args=(--title "qWDTT Client ${tag}" --generate-notes --target "$GITHUB_SHA")
+          case "$tag" in
             *-alpha*|*-beta*|*-rc*) args+=(--prerelease) ;;
           esac
-          gh release create "$GITHUB_REF_NAME" dist/* "${args[@]}"
+          gh release create "$tag" dist/* "${args[@]}"

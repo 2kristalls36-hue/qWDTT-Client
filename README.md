@@ -46,7 +46,9 @@ export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018
 ## Выпуск версии
 
 1. Увеличьте `versionName` в `app/build.gradle.kts` и отправьте изменения в `main`.
-2. Создайте тег той же версии:
+2. Запустите workflow: Actions → Release → Run workflow, отметьте «publish». Тег `v<versionName>` создаётся автоматически.
+
+   Альтернатива: создать тег той же версии вручную:
 
    ```bash
    git tag v1.0.1

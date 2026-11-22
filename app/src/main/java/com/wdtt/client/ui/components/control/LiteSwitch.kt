@@ -115,7 +115,12 @@ private fun GlassSwitch(
     Box(
         modifier
             .size(w, h)
-            .alpha(if (enabled) 1f else 0.45f)
+            // Fade without an offscreen buffer: one would clip the glass thumb where it
+            // reaches past these bounds (at the end stops).
+            .graphicsLayer {
+                this.alpha = if (enabled) 1f else 0.45f
+                compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.ModulateAlpha
+            }
             .onGloballyPositioned { glass.origin = it.positionInRoot() }
             .semantics {
                 role = Role.Switch
@@ -208,7 +213,7 @@ private fun GlassSwitch(
                 zoom = 0.06f,
                 blur = 0.dp,
                 underlay = surface,
-                fringe = 0.35f,
+                fringe = 0.35f, steepRim = true, dispersion = 0.35f,
                 modifier = Modifier.fillMaxSize(),
             ) {}
         }

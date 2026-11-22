@@ -101,9 +101,11 @@ private fun BoxScope.HeaderPlate(backdrop: GlassBackdrop?, alpha: Float) {
             modifier = m,
         ) {}
     } else {
+        // Without glass the plate is nearly opaque: the translucent shell let the list
+        // text show through the title.
         Box(
             m.clip(ArdttShapes.Section)
-                .background(ArdttFloatingShell.shellColor())
+                .background(colors.surface.copy(alpha = 0.96f))
                 .border(ArdttFloatingShell.shellBorder(), ArdttShapes.Section),
         )
     }

@@ -452,7 +452,7 @@ fun ArdttNavigationBar(
                             zoom = 0.14f,
                             blur = 0.dp,
                             underlay = lerp(colors.surface, Color.White, if (dark) 0.06f else 0.5f),
-                            fringe = 0.45f,
+                            fringe = 0.45f, dispersion = 0.2f,
                             modifier = Modifier.fillMaxSize().graphicsLayer { this.alpha = lens.coerceIn(0f, 1f) },
                         ) {}
                     }
@@ -674,11 +674,18 @@ private fun NavBarTab(
             }
         }
         Spacer(modifier = Modifier.height(ArdttSpacing.Hairline))
+        // Over clear glass the page shows right behind the label: a soft halo of the
+        // background colour keeps it legible at any transparency.
+        val glass = LocalGlassBackdrop.current
+        val halo = if (glass != null && glass.veil(isDarkSurface()) < 0.25f) {
+            androidx.compose.ui.graphics.Shadow(MaterialTheme.colorScheme.background, blurRadius = with(androidx.compose.ui.platform.LocalDensity.current) { 7.dp.toPx() })
+        } else null
         // One line; with a large system font the label shrinks instead of breaking mid-word.
         com.wdtt.client.ui.components.control.FitText(
             text = item.label,
             modifier = Modifier.fillMaxWidth(),
             style = ArdttNavigationLabelStyle.copy(
+                shadow = halo,
                 platformStyle = PlatformTextStyle(includeFontPadding = false),
                 lineHeightStyle = LineHeightStyle(
                     alignment = LineHeightStyle.Alignment.Center,

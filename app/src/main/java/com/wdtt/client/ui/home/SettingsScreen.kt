@@ -186,6 +186,62 @@ fun SettingsScreen() {
             }
             item {
                 Box(Modifier.padding(horizontal = 16.dp)) {
+                    // VK account, as in ARDTT: with it the app creates call links itself.
+                    var vkSignedIn by com.wdtt.client.ui.profiles.rememberVkSignedIn()
+                    var vkBusy by remember { mutableStateOf(false) }
+                    var confirmSignOut by remember { mutableStateOf(false) }
+                    var vkNote by remember { mutableStateOf<String?>(null) }
+                    Section("Аккаунт VK") {
+                        Hint(if (vkSignedIn) com.wdtt.client.ui.profiles.VkAccountText.SIGNED_IN else com.wdtt.client.ui.profiles.VkAccountText.SIGNED_OUT)
+                        vkNote?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        ArdttButton(
+                            text = if (vkSignedIn) com.wdtt.client.ui.profiles.VkAccountText.SIGN_OUT else com.wdtt.client.ui.profiles.VkAccountText.SIGN_IN,
+                            variant = if (vkSignedIn) ArdttButtonVariant.Outlined else ArdttButtonVariant.Primary,
+                            busy = vkBusy,
+                            enabled = !vkBusy,
+                            onClick = {
+                                if (vkSignedIn) { confirmSignOut = true; return@ArdttButton }
+                                scope.launch {
+                                    vkBusy = true
+                                    val activity = context as? android.app.Activity
+                                    val r = com.wdtt.client.vkauth.VkLoginActivity.login(activity ?: context)
+                                    vkSignedIn = com.wdtt.client.vkauth.VkSession.hasSessionCookie()
+                                    if (r.isFailure || !vkSignedIn) {
+                                        // Drop a half-made session so the button stays «Войти».
+                                        com.wdtt.client.vkauth.VkSession.clear()
+                                        vkSignedIn = false
+                                        vkNote = com.wdtt.client.ui.profiles.VkAccountText.LOGIN_CANCELLED
+                                        haptics.perform(com.wdtt.client.ui.motion.Haptic.Reject)
+                                    } else {
+                                        vkNote = null
+                                        haptics.perform(com.wdtt.client.ui.motion.Haptic.Confirm)
+                                    }
+                                    vkBusy = false
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    if (confirmSignOut) {
+                        com.wdtt.client.ui.components.surface.ArdttDialog(
+                            title = com.wdtt.client.ui.profiles.VkAccountText.SIGN_OUT_TITLE,
+                            onDismissRequest = { confirmSignOut = false },
+                            confirmAction = com.wdtt.client.ui.components.surface.ArdttDialogAction("Выйти", destructive = true, onClick = {
+                                scope.launch {
+                                    com.wdtt.client.vkauth.VkSession.clear()
+                                    vkSignedIn = false
+                                    confirmSignOut = false
+                                }
+                            }),
+                            dismissAction = com.wdtt.client.ui.components.surface.ArdttDialogAction("Отмена", onClick = { confirmSignOut = false }),
+                        ) {
+                            Text(com.wdtt.client.ui.profiles.VkAccountText.SIGN_OUT_BODY, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            }
+            item {
+                Box(Modifier.padding(horizontal = 16.dp)) {
                 Section("Подписка") {
                     SwitchLine("Предупреждать об окончании", warnEnabled) { scope.launch { lite.saveWarnEnabled(it) } }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -133,6 +133,47 @@ fun ProfileSheet(
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
+            // As in ARDTT: a new call made through the signed-in VK account.
+            var vkSignedIn by rememberVkSignedIn()
+            var creating by remember { mutableStateOf(false) }
+            var vkNote by remember { mutableStateOf<String?>(null) }
+            val haptics = com.wdtt.client.ui.motion.LocalAppHaptics.current
+            ArdttButton(
+                text = if (saved) VkAccountText.CREATE_NEW_LINK else VkAccountText.CREATE_LINK,
+                variant = ArdttButtonVariant.Outlined,
+                busy = creating,
+                enabled = !creating,
+                onClick = {
+                    scope.launch {
+                        creating = true
+                        vkNote = VkAccountText.CREATING
+                        if (!vkSignedIn) {
+                            val activity = context as? android.app.Activity
+                            val login = com.wdtt.client.vkauth.VkLoginActivity.login(activity ?: context)
+                            vkSignedIn = com.wdtt.client.vkauth.VkSession.hasSessionCookie()
+                            if (login.isFailure || !vkSignedIn) {
+                                creating = false
+                                vkNote = VkAccountText.LOGIN_CANCELLED
+                                haptics.perform(com.wdtt.client.ui.motion.Haptic.Reject)
+                                return@launch
+                            }
+                        }
+                        val r = TunnelActions.createCallLink(context, profile.id)
+                        creating = false
+                        r.onSuccess {
+                            vkNote = VkAccountText.CREATED
+                            haptics.perform(com.wdtt.client.ui.motion.Haptic.Confirm)
+                        }.onFailure {
+                            vkNote = it.message ?: "Не удалось создать ссылку."
+                            haptics.perform(com.wdtt.client.ui.motion.Haptic.Reject)
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            vkNote?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
 
         Block("Сервер") {

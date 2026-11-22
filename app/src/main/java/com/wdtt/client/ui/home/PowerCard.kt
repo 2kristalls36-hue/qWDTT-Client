@@ -358,7 +358,12 @@ private fun PowerSlider(
             .height(44.dp)
             .onSizeChanged { widthPx = it.width.toFloat() }
             .onGloballyPositioned { trackGlass.origin = it.positionInRoot() }
-            .alpha(alpha)
+            // Fade without an offscreen buffer: one would clip the glass thumb where it
+            // reaches past these bounds (at the end stops).
+            .graphicsLayer {
+                this.alpha = alpha
+                compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.ModulateAlpha
+            }
             .semantics {
                 stateDescription = level.title
                 progressBarRangeInfo = ProgressBarRangeInfo(level.ordinal.toFloat(), 0f..2f, steps = 1)
@@ -509,7 +514,7 @@ private fun PowerSlider(
                     bezel = h * 0.22f,
                     depth = h * 0.42f,
                     zoom = 0.04f,
-                    fringe = 0.3f,
+                    fringe = 0.3f, steepRim = true, dispersion = 0.3f,
                     blur = 0.dp,
                     underlay = lerp(surface, Neon.Night, ((pos.value - 0.5f) * 2f).coerceIn(0f, 1f)),
                     modifier = Modifier.fillMaxSize().graphicsLayer { this.alpha = lens.coerceIn(0f, 1f) },

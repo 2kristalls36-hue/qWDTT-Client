@@ -94,9 +94,13 @@ fun LiquidGlassPanel(
     dark: Boolean,
     modifier: Modifier = Modifier,
     /** Width of the refracting rim. */
-    bezel: Dp = 22.dp,
-    /** How far the rim pulls the image inward. */
-    depth: Dp = 26.dp,
+    bezel: Dp = 16.dp,
+    /** How far the rim pulls the image inward; with a smooth rim keep it under bezel / 2. */
+    depth: Dp = 7.dp,
+    /** Circular rim profile that wraps the image (small lenses); false — smooth, no folding. */
+    steepRim: Boolean = false,
+    /** Colour split at the rim, 1 — the old strong value. */
+    dispersion: Float = 0.2f,
     /** Magnification of the middle, 0 — none. */
     zoom: Float = 0f,
     blur: Dp = 4.dp,
@@ -128,6 +132,8 @@ fun LiquidGlassPanel(
                             blurPx = with(density) { blur.toPx() },
                             fringeK = fringe,
                             rim = backdrop.rim,
+                            steep = steepRim,
+                            dispersion = dispersion,
                         ).asComposeRenderEffect()
                     }
                 }
@@ -156,6 +162,8 @@ private object GlassShader {
         uniform float depthPx;
         uniform float zoom;
         uniform float fringeK;
+        uniform float steep;
+        uniform float dispK;
         uniform half4 rimColor;
         uniform float rimMix;
 
@@ -188,14 +196,17 @@ private object GlassShader {
             // Kept clear of the middle: there the rim normal flips and would tear the image.
             float bezel = min(bezelPx, min(half_size.x, half_size.y) * 0.7);
             float x = clamp(1.0 - inside / bezel, 0.0, 1.0);
-            float bend = 1.0 - sqrt(1.0 - x * x);
+            // Steep (small lenses): circular profile, the rim wraps the image around.
+            // Smooth (panels): x², and the bend never exceeds half the rim width, so the
+            // image near the edge is squeezed but never folded into a mirror copy.
+            float bend = steep > 0.5 ? 1.0 - sqrt(1.0 - x * x) : x * x;
             // Pull samples inward (the rim magnifies what lies under the middle) and add a
             // little overall magnification so even a calm backdrop visibly bends.
             float2 off = -n * bend * depthPx - p * (zoom + 0.04 * x);
 
             // Chromatic split grows toward the edge.
             // A coloured rim keeps the colour split faint, so no rainbow shows at the edge.
-            float disp = 0.32 * bend * fringeK * (1.0 - 0.8 * rimMix);
+            float disp = 0.32 * bend * dispK * (1.0 - 0.8 * rimMix);
             half4 cg = content.eval(coord + off);
             half r = content.eval(coord + off * (1.0 + disp)).r;
             half b = content.eval(coord + off * (1.0 - disp)).b;
@@ -243,6 +254,7 @@ private object GlassShader {
         shader: RuntimeShader,
         w: Float, h: Float, radius: Float, dp: Float, time: Float, tint: Color, dark: Boolean,
         bezelPx: Float, depthPx: Float, zoom: Float, blurPx: Float, fringeK: Float, rim: Color?,
+        steep: Boolean, dispersion: Float,
     ): RenderEffect {
         shader.setFloatUniform("size", w, h)
         shader.setFloatUniform("radius", radius.coerceAtMost(minOf(w, h) / 2f))
@@ -254,6 +266,8 @@ private object GlassShader {
         shader.setFloatUniform("depthPx", depthPx)
         shader.setFloatUniform("zoom", zoom)
         shader.setFloatUniform("fringeK", fringeK)
+        shader.setFloatUniform("steep", if (steep) 1f else 0f)
+        shader.setFloatUniform("dispK", dispersion)
         val rc = rim ?: Color.White
         shader.setFloatUniform("rimColor", rc.red, rc.green, rc.blue, 1f)
         shader.setFloatUniform("rimMix", if (rim == null) 0f else 1f)

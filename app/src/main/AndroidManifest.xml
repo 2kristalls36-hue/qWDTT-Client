@@ -110,6 +110,12 @@
 
 
         <activity
+            android:name=".vkauth.VkLoginActivity"
+            android:exported="false"
+            android:hardwareAccelerated="true"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+
+        <activity
             android:name=".ManlCaptchaActivity"
             android:theme="@android:style/Theme.Translucent.NoTitleBar"
             android:launchMode="singleTask"

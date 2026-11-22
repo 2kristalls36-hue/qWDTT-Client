@@ -27,8 +27,12 @@ object TunnelActions {
         val profileId = settings.currentProfileId.first()
         if (profileId.isBlank() || ProfilesStore(context).getProfileOnce(profileId) == null) return Problem.NoProfile
         prepareSettings(context, profileId)
-        // Without a VK call link the tunnel service stops silently; say so instead.
-        if (settings.vkHashes.first().isBlank()) return Problem.NoCallLink
+        // Without a VK call link the tunnel service stops silently; say so instead —
+        // unless the VK account is signed in: then the link is created, as in ARDTT.
+        if (settings.vkHashes.first().isBlank()) {
+            if (!createCallLink(context, profileId).isSuccess) return Problem.NoCallLink
+            prepareSettings(context, profileId)
+        }
         return null
     }
 
@@ -57,6 +61,21 @@ object TunnelActions {
         ProfilesStore(context).applyProfile(context, profileId)
         settings.saveConnectionMode(SettingsStore.CONNECTION_MODE_RAWTUN)
         settings.saveWorkersPerHash(LiteSettings(context).powerLevel.first().workers)
+    }
+
+    /**
+     * Creates a VK call through the signed-in account and saves its link into the
+     * profile. Fails when there is no VK session or VK refuses.
+     */
+    suspend fun createCallLink(context: Context, profileId: String): Result<String> {
+        val signedIn = withContext(Dispatchers.Main) { com.wdtt.client.vkauth.VkSession.hasSessionCookie() }
+        if (!signedIn) return Result.failure(IllegalStateException("Вход в аккаунт VK не выполнен."))
+        val result = com.wdtt.client.vkauth.VkCallHashGenerator.generateOne(context)
+        result.onSuccess { hash ->
+            RawLog.add("[VK] call link created for the profile")
+            saveCallLink(context, profileId, "https://vk.com/call/join/$hash")
+        }.onFailure { RawLog.add("[VK] call link not created: ${it.message}") }
+        return result
     }
 
     /** Saves the VK call link (or hash) into the profile and re-applies it if active. */

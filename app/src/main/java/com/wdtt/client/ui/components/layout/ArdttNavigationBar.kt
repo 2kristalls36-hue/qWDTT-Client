@@ -371,6 +371,9 @@ fun ArdttNavigationBar(
     }
     val shownIndex = if (dragging && hover >= 0) hover else -1
 
+    // With the glass lens the tab under the droplet is magnified (crisp, not bent),
+    // following the droplet smoothly while it moves: the current tab reads at a glance.
+    val lensOn = LocalGlassBackdrop.current != null && LiquidGlass.supported
     val tabs: @Composable () -> Unit = {
         Row(
             modifier = Modifier
@@ -394,6 +397,9 @@ fun ArdttNavigationBar(
                         selectTab.value(item.route)
                     },
                     modifier = Modifier.weight(1f),
+                    magnify = if (lensOn) {
+                        { 1f + 0.12f * (1f - kotlin.math.abs(index - selPos.value)).coerceIn(0f, 1f) }
+                    } else null,
                 )
             }
         }
@@ -416,8 +422,8 @@ fun ArdttNavigationBar(
             CompositionLocalProvider(LocalContentColor provides colors.onSurface) {
                 // Lens in the lens: the selection is a small glass lens inside the panel. It
                 // bends only what lies under it (the page behind the panel, under the panel
-                // veil); the icons and labels sit on top of it, crisp, as if printed on the
-                // glass. While dragged it swells.
+                // veil, magnified); the icons and labels sit on top of it, crisp, and the
+                // tab under it is shown larger. While dragged it swells.
                 val lens by animateFloatAsState(
                     if (dragging) 1f else 0f,
                     spring(dampingRatio = 0.6f, stiffness = 420f),
@@ -471,14 +477,15 @@ fun ArdttNavigationBar(
                     LiquidGlassPanel(
                         backdrop = panelGlass,
                         cornerRadius = 40.dp,
-                        tint = Color.White.copy(alpha = if (dark) 0.07f else 0.18f),
+                        // Slightly frosted inside.
+                        tint = Color.White.copy(alpha = if (dark) 0.10f else 0.24f),
                         dark = dark,
                         // Narrow, shallow rim: the label sits close to the lower edge and must
                         // stay in the flat middle, not curl along the rim.
                         bezel = 6.dp,
                         depth = 2.dp,
-                        zoom = 0.05f + 0.09f * lens,
-                        blur = 0.dp,
+                        zoom = 0.12f,
+                        blur = 2.5.dp,
                         underlay = lerp(colors.surface, Color.White, if (dark) 0.06f else 0.5f),
                         fringe = 0.45f, dispersion = 0.2f,
                         modifier = Modifier.fillMaxSize(),
@@ -603,6 +610,8 @@ private fun NavBarTab(
     unselectedColor: Color,
     onSelect: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Scale of the icon and label, read at draw time (the lens over this tab). */
+    magnify: (() -> Float)? = null,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
@@ -633,6 +642,13 @@ private fun NavBarTab(
     Column(
         modifier = modifier
             .fillMaxHeight()
+            .then(
+                if (magnify == null) Modifier else Modifier.graphicsLayer {
+                    val m = magnify()
+                    scaleX = m
+                    scaleY = m
+                }
+            )
             .selectable(
                 selected = selected,
                 interactionSource = interactionSource,

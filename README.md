@@ -67,6 +67,6 @@ export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018
 
 ## Происхождение проекта
 
-qWDTT Client основан на исходном коде [qWDTT](https://github.com/SpaceNeuroX/proxy-turn-vk-android) (SpaceNeuroX), который, в свою очередь, развивает оригинальный проект [WDTT](https://github.com/amurcanov/proxy-turn-vk-android). Оформление интерфейса заимствовано из приложения ARDTT.
+qWDTT Client основан на исходном коде [qWDTT](https://github.com/SpaceNeuroX/proxy-turn-vk-android) (SpaceNeuroX), который, в свою очередь, развивает оригинальный проект [WDTT](https://github.com/amurcanov/proxy-turn-vk-android).
 
 qWDTT Client не является официальной версией qWDTT или WDTT.

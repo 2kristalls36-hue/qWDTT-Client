@@ -146,7 +146,13 @@ jobs:
               echo "Release $tag already exists: raise versionName first" >&2; exit 1
             fi
           fi
-          args=(--title "qWDTT Client ${tag}" --generate-notes --target "$GITHUB_SHA")
+          # Description from docs/releases/<tag>.md when present, otherwise generated.
+          if [ -f "docs/releases/${tag}.md" ]; then
+            notes=(--notes-file "docs/releases/${tag}.md")
+          else
+            notes=(--generate-notes)
+          fi
+          args=(--title "qWDTT Client ${tag}" "${notes[@]}" --target "$GITHUB_SHA")
           case "$tag" in
             *-alpha*|*-beta*|*-rc*) args+=(--prerelease) ;;
           esac

@@ -239,7 +239,9 @@ fun ConnectButton(
                     )
                 }
             }
-            if (stages != null && state == TunnelUiState.Connecting) {
+            // After a failed attempt the ring stays, with the failed stage in red,
+            // until the next attempt resets it.
+            if (stages != null && (state == TunnelUiState.Connecting || stages.failed)) {
                 // One segment per stage: done ones full, the current one breathing and
                 // filling, pending ones faint, a failed one red.
                 val n = stages.total.coerceAtLeast(1)
@@ -258,7 +260,7 @@ fun ConnectButton(
                         isFailed -> drawArc(Color(0xFFEF4444), start, sweep, false, style = stroke)
                         fill > 0f -> drawArc(color, start, sweep * fill, false, style = stroke)
                     }
-                    if (!stages.failed && i == stages.index && fill < 1f) {
+                    if (!stages.failed && state == TunnelUiState.Connecting && i == stages.index && fill < 1f) {
                         drawArc(color.copy(alpha = 0.25f + 0.45f * pulse), start, sweep, false, style = stroke)
                     }
                 }

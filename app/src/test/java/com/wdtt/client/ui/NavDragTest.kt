@@ -109,6 +109,7 @@ class NavDragTest {
             }
         }
         compose.mainClock.advanceTimeBy(500)
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/tab_lens_rest_$theme.png")
         val a = compose.onNodeWithText("Главная").fetchSemanticsNode().boundsInRoot.center
         val b = compose.onNodeWithText("Профили").fetchSemanticsNode().boundsInRoot.center
         compose.onRoot().performTouchInput {

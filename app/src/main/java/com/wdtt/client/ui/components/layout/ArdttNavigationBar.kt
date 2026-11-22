@@ -37,6 +37,11 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.Icons
 import com.wdtt.client.ui.components.surface.glassBackdropSource
@@ -104,6 +109,9 @@ internal object ArdttNavChrome {
     val LabelSize = ArdttNavigationLabelStyle.fontSize
     val LabelLineHeight = ArdttNavigationLabelStyle.lineHeight
 }
+
+/** Pale green of a thick glass edge. */
+private val GlassEdgeGreen = Color(0xFF8FD9B0)
 
 private object NavBarDefaults {
     val GlassCorner = com.wdtt.client.ui.theme.ArdttRadius.Section
@@ -406,57 +414,78 @@ fun ArdttNavigationBar(
                 .then(dragToSelect),
         ) {
             CompositionLocalProvider(LocalContentColor provides colors.onSurface) {
-                // While dragging, the droplet rises above the tabs as a glass lens that
-                // magnifies the icon under it and bends the neighbours along its rim.
+                // Lens in the lens: the selection is a small glass lens inside the panel. It
+                // bends only what lies under it (the page behind the panel, under the panel
+                // veil); the icons and labels sit on top of it, crisp, as if printed on the
+                // glass. While dragged it swells.
                 val lens by animateFloatAsState(
                     if (dragging) 1f else 0f,
                     spring(dampingRatio = 0.6f, stiffness = 420f),
                     label = "tabLens",
                 )
-                val tabsLayer = androidx.compose.ui.graphics.rememberGraphicsLayer()
-                val tabsGlass = remember(tabsLayer) { com.wdtt.client.ui.components.surface.GlassBackdrop(tabsLayer) }
-                Box(Modifier.matchParentSize().graphicsLayer { this.alpha = 1f - lens }) {
-                    SelectionDroplet(count = count, pos = selPos.value, velocity = selPos.velocity, dark = dark, glass = true)
-                }
-                Box(Modifier.matchParentSize().glassBackdropSource(tabsGlass)) {
-                    tabs()
-                }
-                if (lens > 0.01f) {
-                    val trackH = ArdttSize.NavTrack
-                    Box(
-                        Modifier
-                            .matchParentSize()
-                            .layout { measurable, constraints ->
-                                val pad = NavBarDefaults.TrackPadding.toPx()
-                                val slot = (constraints.maxWidth - pad * 2) / count
-                                val lh = (trackH.toPx() - 8.dp.toPx()) * (0.86f + 0.14f * lens)
-                                val lw = slot * (0.9f + 0.25f * lens)
-                                val placeable = measurable.measure(
-                                    androidx.compose.ui.unit.Constraints.fixed(lw.roundToInt(), lh.roundToInt())
-                                )
-                                layout(constraints.maxWidth, constraints.maxHeight) {
-                                    val cx = pad + slot * (selPos.value + 0.5f)
-                                    placeable.place((cx - lw / 2f).roundToInt(), ((constraints.maxHeight - lh) / 2f).roundToInt())
-                                }
+                val panelLayer = androidx.compose.ui.graphics.rememberGraphicsLayer()
+                val panelGlass = remember(panelLayer) { com.wdtt.client.ui.components.surface.GlassBackdrop(panelLayer) }
+                val veil = colors.surface.copy(alpha = backdrop.veil(dark))
+                // The inner lens edge is where the light crosses two layers of glass: real
+                // soda-lime glass shows a faint green there (iron traces). Kept faint.
+                panelGlass.rim = GlassEdgeGreen
+                // Panel picture for the lens: the page behind the panel under the veil,
+                // without the tabs.
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .onGloballyPositioned { panelGlass.origin = it.positionInRoot() }
+                        .drawBehind {
+                            val offset = panelGlass.origin - backdrop.origin
+                            // Explicit density and size: recording through this node's own draw
+                            // scope would make it reference itself.
+                            panelLayer.record(
+                                androidx.compose.ui.unit.Density(density, fontScale),
+                                layoutDirection,
+                                androidx.compose.ui.unit.IntSize(size.width.toInt(), size.height.toInt()),
+                            ) {
+                                translate(-offset.x, -offset.y) { drawLayer(backdrop.layer) }
+                                drawRect(veil)
                             }
-                            .shadow((6f * lens).dp, androidx.compose.foundation.shape.RoundedCornerShape(50), ambientColor = Color.Black.copy(alpha = 0.3f), spotColor = Color.Black.copy(alpha = 0.3f)),
-                    ) {
-                        LiquidGlassPanel(
-                            backdrop = tabsGlass,
-                            cornerRadius = 40.dp,
-                            tint = Color.White.copy(alpha = if (dark) 0.06f else 0.16f),
-                            dark = dark,
-                            // Shallow bend: a deep one would mirror the label at the lower rim.
-                            bezel = 10.dp,
-                            depth = 8.dp,
-                            zoom = 0.14f,
-                            blur = 0.dp,
-                            underlay = lerp(colors.surface, Color.White, if (dark) 0.06f else 0.5f),
-                            fringe = 0.45f, dispersion = 0.2f,
-                            modifier = Modifier.fillMaxSize().graphicsLayer { this.alpha = lens.coerceIn(0f, 1f) },
-                        ) {}
-                    }
+                        },
+                )
+                val trackH = ArdttSize.NavTrack
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .layout { measurable, constraints ->
+                            val pad = NavBarDefaults.TrackPadding.toPx()
+                            val slot = (constraints.maxWidth - pad * 2) / count
+                            val lh = (trackH.toPx() - 8.dp.toPx()) * (0.86f + 0.14f * lens)
+                            val lw = slot * (0.9f + 0.25f * lens)
+                            val placeable = measurable.measure(
+                                androidx.compose.ui.unit.Constraints.fixed(lw.roundToInt(), lh.roundToInt())
+                            )
+                            layout(constraints.maxWidth, constraints.maxHeight) {
+                                val cx = pad + slot * (selPos.value + 0.5f)
+                                placeable.place((cx - lw / 2f).roundToInt(), ((constraints.maxHeight - lh) / 2f).roundToInt())
+                            }
+                        }
+                        .shadow((2f + 4f * lens).dp, androidx.compose.foundation.shape.RoundedCornerShape(50), ambientColor = Color.Black.copy(alpha = 0.3f), spotColor = Color.Black.copy(alpha = 0.3f)),
+                ) {
+                    LiquidGlassPanel(
+                        backdrop = panelGlass,
+                        cornerRadius = 40.dp,
+                        tint = Color.White.copy(alpha = if (dark) 0.07f else 0.18f),
+                        dark = dark,
+                        // Narrow, shallow rim: the label sits close to the lower edge and must
+                        // stay in the flat middle, not curl along the rim.
+                        bezel = 6.dp,
+                        depth = 2.dp,
+                        zoom = 0.05f + 0.09f * lens,
+                        blur = 0.dp,
+                        underlay = lerp(colors.surface, Color.White, if (dark) 0.06f else 0.5f),
+                        fringe = 0.45f, dispersion = 0.2f,
+                        modifier = Modifier.fillMaxSize(),
+                    ) {}
                 }
+                // Tabs on top of the lens: never bent.
+                Box(Modifier.matchParentSize()) { tabs() }
             }
         }
         return

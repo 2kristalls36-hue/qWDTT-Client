@@ -415,14 +415,15 @@ fun ArdttNavigationBar(
         ) {
             CompositionLocalProvider(LocalContentColor provides colors.onSurface) {
                 // Lens in the lens: the selection is a small frosted glass lens inside the
-                // panel. It magnifies what lies under it (the page behind the panel under the
-                // veil, and the selected tab) by about 5%. While dragged it swells.
+                // panel. It magnifies what lies under it by about 5%: the page behind the
+                // panel, frosted, and the selected tab, sharp. While dragged it swells.
                 val lens by animateFloatAsState(
                     if (dragging) 1f else 0f,
                     spring(dampingRatio = 0.6f, stiffness = 420f),
                     label = "tabLens",
                 )
                 val panelLayer = androidx.compose.ui.graphics.rememberGraphicsLayer()
+                val frostLayer = androidx.compose.ui.graphics.rememberGraphicsLayer()
                 val panelGlass = remember(panelLayer) { com.wdtt.client.ui.components.surface.GlassBackdrop(panelLayer) }
                 val veil = colors.surface.copy(alpha = backdrop.veil(dark))
                 // The inner lens edge is where the light crosses two layers of glass: real
@@ -436,9 +437,17 @@ fun ArdttNavigationBar(
                         .onGloballyPositioned { panelGlass.origin = it.positionInRoot() }
                         .drawWithContent {
                             val offset = panelGlass.origin - backdrop.origin
-                            panelLayer.record {
+                            // Two layers for the lens: the page behind the panel, frosted (blur
+                            // on its own layer), and the tabs sharp on top. The lens bends both,
+                            // so the background is matte while the selected label stays crisp.
+                            val r = 5.dp.toPx()
+                            frostLayer.renderEffect = androidx.compose.ui.graphics.BlurEffect(r, r, androidx.compose.ui.graphics.TileMode.Clamp)
+                            frostLayer.record {
                                 translate(-offset.x, -offset.y) { drawLayer(backdrop.layer) }
                                 drawRect(veil)
+                            }
+                            panelLayer.record {
+                                drawLayer(frostLayer)
                                 this@drawWithContent.drawContent()
                             }
                             drawContent()
@@ -469,9 +478,8 @@ fun ArdttNavigationBar(
                     LiquidGlassPanel(
                         backdrop = panelGlass,
                         cornerRadius = 40.dp,
-                        // Slightly frosted inside by a milky haze, not by blur: the lens also
-                        // carries the selected label, which must stay sharp.
-                        tint = Color.White.copy(alpha = if (dark) 0.13f else 0.30f),
+                        // The frost is in the picture it bends (background only); a light haze.
+                        tint = Color.White.copy(alpha = if (dark) 0.08f else 0.20f),
                         dark = dark,
                         // Narrow, shallow rim: the label sits close to the lower edge and must
                         // stay in the flat middle, not curl along the rim.

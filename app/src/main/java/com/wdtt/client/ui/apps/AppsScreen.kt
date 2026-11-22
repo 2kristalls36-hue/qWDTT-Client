@@ -34,6 +34,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.animation.core.VisibilityThreshold
+import kotlinx.coroutines.delay
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
 import com.wdtt.client.ui.components.surface.glassBackdropSource
 import com.wdtt.client.ui.components.surface.GlassBackdrop
 import com.wdtt.client.ui.components.surface.LocalGlassBackdrop
@@ -83,12 +89,18 @@ fun AppsScreen(settingsStore: SettingsStore) {
 
     val apps by produceState<List<AppItem>?>(null) { value = withContext(Dispatchers.IO) { loadApps(context) } }
 
-    val visible = remember(apps, query, showSystem, selected) {
+    // The list is sorted by a copy of the selection that lags behind it: a toggled row
+    // stays in place while its switch animates, then leaves (a slight swipe up with a
+    // fade) and appears at its new place.
+    var sortSelected by remember { mutableStateOf<Set<String>?>(null) }
+    var leaving by remember { mutableStateOf(emptySet<String>()) }
+    val order = sortSelected ?: selected
+    val visible = remember(apps, query, showSystem, order) {
         val q = query.trim().lowercase(Locale.getDefault())
         (apps ?: emptyList())
-            .filter { showSystem || !it.system || it.packageName in selected }
+            .filter { showSystem || !it.system || it.packageName in order }
             .filter { q.isEmpty() || it.name.lowercase(Locale.getDefault()).contains(q) || it.packageName.contains(q) }
-            .sortedWith(compareByDescending<AppItem> { it.packageName in selected }.thenBy { it.name.lowercase(Locale.getDefault()) })
+            .sortedWith(compareByDescending<AppItem> { it.packageName in order }.thenBy { it.name.lowercase(Locale.getDefault()) })
     }
 
     val imePad = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
@@ -166,11 +178,31 @@ fun AppsScreen(settingsStore: SettingsStore) {
                         )
                     }
                 }
-                else -> items(visible, key = { it.packageName }) { app ->
-                    AppRow(app, checked = app.packageName in selected) { on ->
+                // The key carries the group, so a row that changes group is removed and
+                // inserted (fade) instead of sliding across the whole list.
+                else -> items(visible, key = { "${it.packageName}|${it.packageName in order}" }) { app ->
+                    AppRow(
+                        app,
+                        checked = app.packageName in selected,
+                        leaving = app.packageName in leaving,
+                        modifier = Modifier.animateItem(
+                            fadeInSpec = tween(220),
+                            placementSpec = spring(dampingRatio = 0.9f, stiffness = 500f, visibilityThreshold = androidx.compose.ui.unit.IntOffset.VisibilityThreshold),
+                            fadeOutSpec = tween(120),
+                        ),
+                    ) { on ->
                         haptics.toggle(on)
                         val next = if (on) selected + app.packageName else selected - app.packageName
-                        scope.launch { settingsStore.saveExcludedApps(next.joinToString(",")) }
+                        val pkg = app.packageName
+                        scope.launch {
+                            settingsStore.saveExcludedApps(next.joinToString(","))
+                            if (sortSelected == null) sortSelected = selected
+                            delay(330) // the switch finishes first
+                            leaving = leaving + pkg
+                            delay(170) // slight swipe up with a fade
+                            sortSelected = (sortSelected ?: emptySet()).let { if (on) it + pkg else it - pkg }
+                            leaving = leaving - pkg
+                        }
                     }
                 }
             }
@@ -179,7 +211,14 @@ fun AppsScreen(settingsStore: SettingsStore) {
 }
 
 @Composable
-private fun AppRow(app: AppItem, checked: Boolean, onToggle: (Boolean) -> Unit) {
+private fun AppRow(
+    app: AppItem,
+    checked: Boolean,
+    leaving: Boolean = false,
+    modifier: Modifier = Modifier,
+    onToggle: (Boolean) -> Unit,
+) {
+    val out by animateFloatAsState(if (leaving) 1f else 0f, tween(170), label = "leave")
     val context = LocalContext.current
     val icon by produceState<ImageBitmap?>(null, app.packageName) {
         value = withContext(Dispatchers.IO) {
@@ -192,7 +231,11 @@ private fun AppRow(app: AppItem, checked: Boolean, onToggle: (Boolean) -> Unit) 
     }
     val shape = RoundedCornerShape(16.dp)
     Row(
-        Modifier
+        modifier
+            .graphicsLayer {
+                alpha = 1f - out
+                translationY = -10.dp.toPx() * out
+            }
             .fillMaxWidth()
             .clip(shape)
             .background(MaterialTheme.colorScheme.surface)

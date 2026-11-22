@@ -81,6 +81,22 @@ class UiTour {
         compose.mainClock.autoAdvance = false
         ActivityScenario.launch(MainActivity::class.java)
         settle(10)
+        // Connecting: the ring shows the reported stage, the line names it.
+        val raw = { cur: ConnectionStep, done: Set<ConnectionStep>, failed: ConnectionStep? ->
+            ConnectionPipelineState(current = cur, completed = done, failed = failed, visible = true,
+                transportKind = ConnectionTransportKind.RAW, dtlsUsed = false)
+        }
+        val doneSoFar = setOf(ConnectionStep.DNS, ConnectionStep.VK, ConnectionStep.WRAP)
+        TunnelManager.isConnecting.value = true
+        TunnelManager.connectionPipeline.value = raw(ConnectionStep.TURN, doneSoFar, null)
+        settle(8)
+        shot(dir, "00a_connecting_stage")
+        TunnelManager.connectionPipeline.value = raw(ConnectionStep.TURN, doneSoFar, ConnectionStep.TURN)
+        TunnelManager.isConnecting.value = false
+        settle(8)
+        shot(dir, "00b_stage_failed")
+        TunnelManager.connectionPipeline.value = ConnectionPipelineState()
+        settle(4)
         if (connected) {
             TunnelManager.running.value = true
             TunnelManager.connectedSinceMs.value = System.currentTimeMillis() - 754_000

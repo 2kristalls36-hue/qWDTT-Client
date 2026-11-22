@@ -39,6 +39,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.animation.togetherWith
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.material.icons.outlined.Settings
@@ -136,6 +137,11 @@ fun HomeScreen(settingsStore: SettingsStore, onOpenProfiles: () -> Unit) {
     // The home screen widget mirrors level, profile and state.
     LaunchedEffect(level, profile?.name, state, ping) { com.wdtt.client.TunnelWidgetProvider.refresh(context) }
 
+    // Real connection stages from the client, for the ring and the line under the button.
+    val pipeline by TunnelManager.connectionPipeline.collectAsStateWithLifecycle()
+    val stageView = com.wdtt.client.lite.ConnectionStages.view(pipeline)
+        ?.takeIf { state == TunnelUiState.Connecting || it.failed }
+
     // Vibration on results: connected, or an attempt that ended without connecting.
     val haptics = com.wdtt.client.ui.motion.LocalAppHaptics.current
     var prevState by remember { mutableStateOf(state) }
@@ -186,6 +192,7 @@ fun HomeScreen(settingsStore: SettingsStore, onOpenProfiles: () -> Unit) {
             ConnectButton(
                 state = state,
                 blend = powerPos.value,
+                stages = stageView,
                 onClick = {
                     haptics.perform(com.wdtt.client.ui.motion.Haptic.Click)
                     when (state) {
@@ -208,7 +215,7 @@ fun HomeScreen(settingsStore: SettingsStore, onOpenProfiles: () -> Unit) {
                     }
                 },
             )
-            StatusLine(state, level)
+            StatusLine(state, level, stageView)
             StatsRow(
                 visible = state == TunnelUiState.On,
                 sinceMs = since,
@@ -305,25 +312,42 @@ private fun ProfileChip(name: String, value: String?, tone: SubscriptionTone, pi
 }
 
 @Composable
-private fun StatusLine(state: TunnelUiState, level: PowerLevel) {
+private fun StatusLine(state: TunnelUiState, level: PowerLevel, stage: com.wdtt.client.lite.StageView?) {
     val colors = levelColors(level)
     val scheme = MaterialTheme.colorScheme
     val led = when (state) {
         TunnelUiState.Off -> scheme.outline.copy(alpha = 0.5f)
         else -> if (level == PowerLevel.Maximum) colors.neon[1] else colors.accent
     }
-    val ledColor by animateColorAsState(led, tween(300), label = "led")
+    val failed = stage?.failed == true
+    val ledColor by animateColorAsState(if (failed) PingColors.Bad else led, tween(300), label = "led")
+    val text = when {
+        stage != null -> com.wdtt.client.lite.ConnectionStages.line(stage)
+        state == TunnelUiState.Off -> "Не подключено"
+        state == TunnelUiState.Connecting -> "Подключение…"
+        else -> "Подключено"
+    }
+    // Shown while connecting: which stage out of how many.
+    val counter = stage?.takeIf { !it.failed && it.index < it.total }?.let { "${it.index + 1} из ${it.total}" }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Box(Modifier.size(8.dp).background(ledColor, CircleShape))
-        Text(
-            when (state) {
-                TunnelUiState.Off -> "Не подключено"
-                TunnelUiState.Connecting -> "Подключение…"
-                TunnelUiState.On -> "Подключено"
+        androidx.compose.animation.AnimatedContent(
+            targetState = text,
+            transitionSpec = {
+                (androidx.compose.animation.fadeIn(tween(260, 100)) togetherWith androidx.compose.animation.fadeOut(tween(160)))
+                    .using(androidx.compose.animation.SizeTransform(clip = false))
             },
-            style = MaterialTheme.typography.bodySmall,
-            color = scheme.onSurfaceVariant,
-        )
+            label = "stage",
+        ) { t ->
+            Text(
+                t,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (failed) PingColors.Bad else scheme.onSurfaceVariant,
+            )
+        }
+        if (counter != null) {
+            Text(counter, style = MaterialTheme.typography.bodySmall, color = scheme.outline)
+        }
     }
 }
 

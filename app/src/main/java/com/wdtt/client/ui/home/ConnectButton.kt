@@ -74,6 +74,8 @@ fun ConnectButton(
     blend: Float,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Real connection stages; null — the client does not report them, a timed arc is shown. */
+    stages: com.wdtt.client.lite.StageView? = null,
 ) {
     // blend is the power thumb position 0..1: blue → green on the first half,
     // green → neon on the second. Every layer mixes by it, so dragging the slider
@@ -133,6 +135,13 @@ fun ConnectButton(
             arc.snapTo(0f)
         }
     }
+
+    // Stage ring: segments fill up to the reported stage; the fill glides between stages.
+    val stageFill by animateFloatAsState(
+        targetValue = stages?.let { if (it.failed) it.index + 1f else it.index.toFloat() } ?: 0f,
+        animationSpec = tween(650),
+        label = "stageFill",
+    )
 
     val ripple = rememberInfiniteTransition(label = "ripple")
     val ripplePhase by ripple.animateFloat(
@@ -230,7 +239,30 @@ fun ConnectButton(
                     )
                 }
             }
-            if (arc.value > 0f) {
+            if (stages != null && state == TunnelUiState.Connecting) {
+                // One segment per stage: done ones full, the current one breathing and
+                // filling, pending ones faint, a failed one red.
+                val n = stages.total.coerceAtLeast(1)
+                val gap = if (n > 1) 6f else 0f
+                val seg = 360f / n
+                val pulse = 0.5f + 0.5f * sin(phase * 7f)
+                val stroke = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
+                val color = lerp(accent, Neon.NightText, k)
+                for (i in 0 until n) {
+                    val start = -90f + i * seg + gap / 2f
+                    val sweep = seg - gap
+                    drawArc(color.copy(alpha = 0.16f), start, sweep, false, style = stroke)
+                    val fill = (stageFill - i).coerceIn(0f, 1f)
+                    val isFailed = stages.failed && i == stages.index
+                    when {
+                        isFailed -> drawArc(Color(0xFFEF4444), start, sweep, false, style = stroke)
+                        fill > 0f -> drawArc(color, start, sweep * fill, false, style = stroke)
+                    }
+                    if (!stages.failed && i == stages.index && fill < 1f) {
+                        drawArc(color.copy(alpha = 0.25f + 0.45f * pulse), start, sweep, false, style = stroke)
+                    }
+                }
+            } else if (arc.value > 0f) {
                 rotate(-90f + phase * 360f * 0.6f) {
                     drawArc(
                         color = lerp(accent, Neon.NightText, k),

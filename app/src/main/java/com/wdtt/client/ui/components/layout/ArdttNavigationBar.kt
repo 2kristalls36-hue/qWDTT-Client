@@ -400,7 +400,7 @@ fun ArdttNavigationBar(
     // Where the droplet is, in tab slots: its centre and its half width. The tabs take
     // their colour only inside it, so the colour moves exactly with the droplet.
     val dropletSpan: () -> Pair<Float, Float> = {
-        val half = if (glassBar) (0.98f + 0.2f * lens) / 2f
+        val half = if (glassBar) (NavDropletWidth + 0.2f * lens) / 2f
             else (0.86f + (kotlin.math.abs(selPos.velocity) * 0.10f).coerceAtMost(0.45f)) / 2f
         selPos.value to half
     }
@@ -498,7 +498,7 @@ fun ArdttNavigationBar(
                             val slot = (constraints.maxWidth - pad * 2) / count
                             val lh = (trackH.toPx() - 8.dp.toPx()) * (0.86f + 0.14f * lens)
                             // Nearly the slot width: the longest label must fit inside the flat middle.
-                            val lw = slot * (0.98f + 0.2f * lens)
+                            val lw = slot * (NavDropletWidth + 0.2f * lens)
                             val placeable = measurable.measure(
                                 androidx.compose.ui.unit.Constraints.fixed(lw.roundToInt(), lh.roundToInt())
                             )
@@ -517,10 +517,11 @@ fun ArdttNavigationBar(
                         dark = dark,
                         // Narrow, shallow rim: the label sits close to the lower edge and must
                         // stay in the flat middle, not curl along the rim.
-                        bezel = 6.dp,
+                        bezel = NavDropletBezel,
                         depth = 2.dp,
-                        // A little magnification, like a magnifying lens over the tab.
-                        zoom = 0.12f,
+                        // A little magnification, like a magnifying lens over the tab; the
+                        // labels are kept narrow enough to stay in the flat middle (see NavBarTab).
+                        zoom = NavDropletZoom,
                         blur = 0.dp,
                         underlay = lerp(colors.surface, Color.White, if (dark) 0.06f else 0.5f),
                         fringe = 0.45f, dispersion = 0.2f,
@@ -569,6 +570,16 @@ private fun rememberNavAccentClock(accent: NavAccent): () -> Float {
     )
     return { p.value }
 }
+
+/**
+ * Glass droplet: width in tab slots, magnification, the width of its bending rim, and how
+ * much closer its rounded ends come at the height of the label (a capsule narrows away
+ * from its middle line; the label sits below it).
+ */
+private const val NavDropletWidth = 1.02f
+private const val NavDropletZoom = 0.08f
+private val NavDropletBezel = 6.dp
+private val NavDropletEndCap = 6.dp
 
 private const val NavAccentNeonPeriodMs = 2600
 /** Balanced: one faint pass about every seven seconds. */
@@ -908,9 +919,22 @@ private fun NavBarTab(
         }
         Spacer(modifier = Modifier.height(ArdttSpacing.Hairline))
         // One line; with a large system font the label shrinks instead of breaking mid-word.
+        // Under the glass droplet the label is magnified; it is kept so narrow that even
+        // magnified it stays inside the droplet's flat middle and is never bent by the rim.
+        val labelFit = if (glass != null && LiquidGlass.supported) {
+            Modifier.layout { measurable, constraints ->
+                val rim = NavDropletBezel.toPx() + NavDropletEndCap.toPx() + 1.dp.toPx()
+                val maxW = ((constraints.maxWidth * NavDropletWidth - 2f * rim) / (1f + NavDropletZoom)).roundToInt()
+                    .coerceIn(0, constraints.maxWidth)
+                val placeable = measurable.measure(constraints.copy(minWidth = 0, maxWidth = maxW))
+                layout(constraints.maxWidth, placeable.height) {
+                    placeable.place((constraints.maxWidth - placeable.width) / 2, 0)
+                }
+            }
+        } else Modifier.fillMaxWidth()
         com.wdtt.client.ui.components.control.FitText(
             text = item.label,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = labelFit,
             style = ArdttNavigationLabelStyle.copy(
                 platformStyle = PlatformTextStyle(includeFontPadding = false),
                 lineHeightStyle = LineHeightStyle(

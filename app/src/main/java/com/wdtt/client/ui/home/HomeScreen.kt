@@ -70,6 +70,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.TextStyle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.wdtt.client.MainActivity
 import com.wdtt.client.ProfilesStore
@@ -489,11 +490,11 @@ private fun TrafficTile(traffic: Traffic, accent: Color, modifier: Modifier) {
         modifier
             .clip(RoundedCornerShape(14.dp))
             .background(scheme.surfaceVariant)
-            .padding(vertical = 8.dp, horizontal = 4.dp),
+            .padding(vertical = 7.dp, horizontal = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+        verticalArrangement = Arrangement.spacedBy(1.dp),
     ) {
-        Text("Трафик", fontSize = 11.sp, color = scheme.onSurfaceVariant)
+        Text("Трафик", style = tileLabelStyle(), color = scheme.onSurfaceVariant)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy((-3).dp)) {
                 FlowArrow(down = true, active = traffic.downActive, accent = accent, drift = drift)
@@ -501,7 +502,7 @@ private fun TrafficTile(traffic: Traffic, accent: Color, modifier: Modifier) {
             }
             Text(
                 total?.let { formatMb(it) } ?: "—",
-                fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = scheme.onSurface, maxLines = 1,
+                style = tileValueStyle(), color = scheme.onSurface, maxLines = 1,
             )
         }
     }
@@ -535,14 +536,35 @@ private fun StatTile(label: String, value: String, dot: Color?, modifier: Modifi
         modifier
             .clip(RoundedCornerShape(14.dp))
             .background(scheme.surfaceVariant)
-            .padding(vertical = 8.dp, horizontal = 4.dp),
+            .padding(vertical = 7.dp, horizontal = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+        verticalArrangement = Arrangement.spacedBy(1.dp),
     ) {
-        Text(label, fontSize = 11.sp, color = scheme.onSurfaceVariant)
+        Text(label, style = tileLabelStyle(), color = scheme.onSurfaceVariant)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             if (dot != null) Box(Modifier.size(7.dp).background(dot, CircleShape))
-            Text(value, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = scheme.onSurface, maxLines = 1)
+            Text(value, style = tileValueStyle(), color = scheme.onSurface, maxLines = 1)
         }
     }
 }
+
+// Tile texts without the font's own top and bottom padding: the label sits right on the value.
+private val TightLines = androidx.compose.ui.text.style.LineHeightStyle(
+    alignment = androidx.compose.ui.text.style.LineHeightStyle.Alignment.Center,
+    trim = androidx.compose.ui.text.style.LineHeightStyle.Trim.Both,
+)
+
+private fun tileLabelStyle() = TextStyle(
+    fontSize = 11.sp,
+    lineHeight = 13.sp,
+    platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false),
+    lineHeightStyle = TightLines,
+)
+
+private fun tileValueStyle() = TextStyle(
+    fontSize = 14.sp,
+    lineHeight = 17.sp,
+    fontWeight = FontWeight.SemiBold,
+    platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false),
+    lineHeightStyle = TightLines,
+)

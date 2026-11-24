@@ -71,8 +71,7 @@ fun AppRoot(settingsStore: SettingsStore) {
     androidx.compose.runtime.CompositionLocalProvider(
         androidx.compose.material3.LocalContentColor provides androidx.compose.material3.MaterialTheme.colorScheme.onBackground,
     ) {
-    // The physical screen (rounded corners, camera hole): the tab bar and the camera
-    // ring fit themselves to it.
+    // The physical screen (rounded corners, navigation): the tab bar fits itself to it.
     val screenShape = com.wdtt.client.ui.components.layout.rememberScreenShape()
     androidx.compose.runtime.CompositionLocalProvider(
         com.wdtt.client.ui.components.layout.LocalScreenShape provides screenShape,
@@ -124,8 +123,6 @@ fun AppRoot(settingsStore: SettingsStore) {
                 com.wdtt.client.lite.PowerLevel.Maximum -> com.wdtt.client.ui.components.layout.NavAccent.Neon(levelColors.neon)
             },
         )
-        // Over everything: the glass ring around the camera hole bends the page under it.
-        com.wdtt.client.ui.components.surface.CameraRing()
     }
     }
 }

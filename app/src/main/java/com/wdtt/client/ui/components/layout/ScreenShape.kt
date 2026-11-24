@@ -11,7 +11,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Density
@@ -21,9 +20,9 @@ import androidx.core.view.WindowInsetsCompat
 
 /**
  * The physical shape of this screen, as the system reports it: the radius of the bottom
- * corners (Android 12+), whether the system navigation is a gesture line (the tab bar may
- * then come down to the screen corners) and a round camera hole in the screen, if any.
- * Unknown parts are zero / null, and the interface keeps its usual layout for them.
+ * corners (Android 12+) and whether the system navigation is a gesture line (the tab bar
+ * may then come down to the screen corners). Unknown parts are zero, and the interface
+ * keeps its usual layout for them.
  */
 @Immutable
 data class ScreenShape(
@@ -31,8 +30,6 @@ data class ScreenShape(
     val bottomCorner: Dp = 0.dp,
     /** Gesture navigation: no buttons at the bottom, only the thin handle. */
     val gestureNav: Boolean = false,
-    /** Round camera hole in the display (punch hole), in window pixels; null — none or not round. */
-    val cameraHole: Rect? = null,
 ) {
     companion object {
         val Unknown = ScreenShape()
@@ -88,65 +85,10 @@ private fun readScreenShape(view: View, density: Density): ScreenShape {
     val cornerPx = if (apiCorner > 0) apiCorner else resCorner
     val corner = with(density) { cornerPx.toDp() }
 
-    val cutout = insets.displayCutout
-    // The exact cutout outline (Android 12+) is better than the bounding rects, which some
-    // firmware pads; a round hole has a square outline.
-    val pathBounds: android.graphics.RectF? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        raw.displayCutout?.cutoutPath?.let { path -> android.graphics.RectF().also { path.computeBounds(it, true) } }
-    } else null
-    val rects = cutout?.boundingRects.orEmpty()
-    val screenW = view.rootView.width.takeIf { it > 0 } ?: view.resources.displayMetrics.widthPixels
-    fun roundHole(l: Float, t: Float, r: Float, b: Float): Rect? {
-        val w = r - l
-        val h = b - t
-        if (w <= 0f || h <= 0f) return null
-        // A hole, not a notch: small, about as wide as tall, not spanning the screen top.
-        if (maxOf(w, h) / minOf(w, h) > 1.6f) return null
-        if (with(density) { minOf(w, h).toDp() } > 64.dp || w > screenW * 0.3f) return null
-        val d = minOf(w, h)
-        val cx = (l + r) / 2f
-        val cy = (t + b) / 2f
-        return Rect(cx - d / 2f, cy - d / 2f, cx + d / 2f, cy + d / 2f)
-    }
-    val hole = pathBounds?.let { roundHole(it.left, it.top, it.right, it.bottom) }
-        ?: rects.firstNotNullOfOrNull { roundHole(it.left.toFloat(), it.top.toFloat(), it.right.toFloat(), it.bottom.toFloat()) }
-
-    // Some firmware (ColorOS) reports a punch hole as a band from the top edge down, as
-    // wide as the hole. Where the hole sits in it shows in the outline: the rows where it
-    // narrows are the round part. Rounded at the bottom — the hole is at the bottom of the
-    // band; at the top — at the top; both — in the middle of the widest rows; a plain
-    // rectangle — in the middle of the status bar, which is centred on the camera.
-    val statusTop = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
-    var profile = ""
-    var method = ""
-    val bandHole = if (hole != null) null else {
-        val band = pathBounds?.let { Rect(it.left, it.top, it.right, it.bottom) }
-            ?: rects.firstOrNull()?.let { Rect(it.left.toFloat(), it.top.toFloat(), it.right.toFloat(), it.bottom.toFloat()) }
-        band?.takeIf { b ->
-            b.top <= 1f && b.height > b.width && b.height <= b.width * 3f &&
-                with(density) { b.width.toDp() } <= 64.dp && b.width <= screenW * 0.3f
-        }?.let { b ->
-            val widths = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                raw.displayCutout?.cutoutPath?.let { outlineWidths(it, b) }
-            } else null
-            profile = widths?.joinToString(",") { it.second.toString() }.orEmpty()
-            val (place, how) = bandHolePlace(widths, b, statusTop)
-            method = how
-            val d = place.first
-            val cy = place.second
-            Rect(b.center.x - d / 2f, cy - d / 2f, b.center.x + d / 2f, cy + d / 2f)
-        }
-    }
-    val shape = ScreenShape(bottomCorner = corner, gestureNav = gesture, cameraHole = hole ?: bandHole)
+    val shape = ScreenShape(bottomCorner = corner, gestureNav = gesture)
     // Once per distinct reading: what the phone reported, for the connection log.
     val report = "[ЭКРАН] углы: API ${apiCorner}px, ресурсы ${resCorner}px → ${corner.value.toInt()}dp; " +
-        "навигация: ${if (gesture) "жесты" else "кнопки"} (снизу ${navBottom}px, нажимаемые ${tappableBottom}px); " +
-        "вырез: ${rects.joinToString { "${it.left},${it.top}-${it.right},${it.bottom}" }.ifEmpty { "нет" }}" +
-        (pathBounds?.let { "; контур ${it.left.toInt()},${it.top.toInt()}-${it.right.toInt()},${it.bottom.toInt()}" } ?: "") +
-        "; камера: ${when { hole != null -> "круглая"; bandHole != null -> "по полосе выреза ($method)"; else -> "нет" }}" +
-        (bandHole?.let { "; центр ${it.center.x.toInt()},${it.center.y.toInt()} d=${it.width.toInt()}" } ?: "") +
-        "; строка состояния ${statusTop}px" +
-        (if (profile.isNotEmpty()) "; ширина контура по строкам: $profile" else "")
+        "навигация: ${if (gesture) "жесты" else "кнопки"} (снизу ${navBottom}px, нажимаемые ${tappableBottom}px)"
     if (report != lastReport) {
         lastReport = report
         runCatching { com.wdtt.client.lite.RawLog.add(report) }
@@ -178,44 +120,4 @@ private fun systemCornerRadiusPx(view: View): Int {
 fun ScreenShape.tabBarGap(minGap: Dp, maxBarRadius: Dp): Dp? {
     if (!gestureNav || bottomCorner <= 0.dp) return null
     return maxOf(minGap, bottomCorner - maxBarRadius)
-}
-
-/** The outline's width every 4 px down its bounds: (row, width). */
-internal fun outlineWidths(path: android.graphics.Path, b: Rect): List<Pair<Float, Int>> {
-    val l = b.left.toInt() - 1
-    val t = b.top.toInt()
-    val r = b.right.toInt() + 1
-    val bottom = b.bottom.toInt()
-    val region = android.graphics.Region().apply { setPath(path, android.graphics.Region(l, t - 1, r, bottom + 1)) }
-    val out = ArrayList<Pair<Float, Int>>()
-    var y = t
-    while (y <= bottom - 1) {
-        var first = -1
-        var last = -1
-        for (x in l..r) if (region.contains(x, y)) { if (first < 0) first = x; last = x }
-        out += y.toFloat() to (if (first < 0) 0 else last - first + 1)
-        y += 4
-    }
-    return out
-}
-
-/**
- * Where a camera hole reported as a band from the top edge sits: (diameter, centre y)
- * and how it was found. [widths] are the outline's (row, width) from top to bottom.
- */
-internal fun bandHolePlace(widths: List<Pair<Float, Int>>?, b: Rect, statusTop: Int): Pair<Pair<Float, Float>, String> {
-    val d = widths?.maxOfOrNull { it.second }?.toFloat()?.takeIf { it > 0f } ?: b.width
-    if (widths == null || widths.size < 4) {
-        return if (statusTop > 0) (d to statusTop / 2f) to "строка состояния" else (d to b.top + b.height / 2f) to "середина полосы"
-    }
-    val full = widths.filter { it.second >= d - 2f }
-    val narrowTop = widths.first().second < d - 4f
-    val narrowBottom = widths.last().second < d - 4f
-    return when {
-        narrowBottom && !narrowTop -> (d to b.bottom - d / 2f) to "снизу"
-        narrowTop && !narrowBottom -> (d to b.top + d / 2f) to "сверху"
-        narrowTop && narrowBottom && full.isNotEmpty() -> (d to (full.first().first + full.last().first) / 2f) to "середина контура"
-        statusTop > 0 -> (d to statusTop / 2f) to "строка состояния"
-        else -> (d to b.top + b.height / 2f) to "середина полосы"
-    }
 }

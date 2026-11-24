@@ -1,6 +1,5 @@
 package com.wdtt.client.ui
 
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -29,7 +28,7 @@ import org.robolectric.shadows.ShadowLooper
 
 /**
  * The interface on screens of different shapes (rounded corners, gesture or button
- * navigation, a round camera hole). The shape is injected; PNGs are for review.
+ * navigation). The shape is injected; PNGs are for review.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -41,9 +40,6 @@ class ScreenFitScreenshots {
     private fun settle(rounds: Int = 8) = repeat(rounds) {
         Thread.sleep(100); ShadowLooper.idleMainLooper(); compose.mainClock.advanceTimeBy(160)
     }
-
-    // A camera hole of 26 dp at the top centre of a 411 dp wide xxhdpi screen.
-    private val hole = Rect(616f - 39f, 30f, 616f + 39f, 108f)
 
     private fun run(dir: String, shape: ScreenShape, level: PowerLevel, glass: Boolean, clear: Float = 0.5f) {
         screenShapeOverride = shape
@@ -66,18 +62,18 @@ class ScreenFitScreenshots {
     }
 
     @Test @Config(sdk = [35], qualifiers = "w411dp-h891dp-xxhdpi")
-    fun gesture44Glass() = run("g44_glass", ScreenShape(44.dp, true, hole), PowerLevel.Balanced, glass = true)
+    fun gesture44Glass() = run("g44_glass", ScreenShape(44.dp, true), PowerLevel.Balanced, glass = true)
 
     @Test @Config(sdk = [35], qualifiers = "w411dp-h891dp-night-xxhdpi")
-    fun gesture32GlassMax() = run("g32_glass_max", ScreenShape(32.dp, true, hole), PowerLevel.Maximum, glass = true, clear = 1f)
+    fun gesture32GlassMax() = run("g32_glass_max", ScreenShape(32.dp, true), PowerLevel.Maximum, glass = true, clear = 1f)
 
     @Test @Config(sdk = [35], qualifiers = "w411dp-h891dp-xxhdpi")
-    fun gesture56Plain() = run("g56_plain", ScreenShape(56.dp, true, null), PowerLevel.Stable, glass = false)
+    fun gesture56Plain() = run("g56_plain", ScreenShape(56.dp, true), PowerLevel.Stable, glass = false)
 
     // The values a ColorOS phone reported: 58 dp corners, gesture navigation.
     @Test @Config(sdk = [35], qualifiers = "w411dp-h891dp-night-xxhdpi")
-    fun gesture58GlassColorOs() = run("g58_glass_coloros", ScreenShape(58.dp, true, hole), PowerLevel.Balanced, glass = true, clear = 0.9f)
+    fun gesture58GlassColorOs() = run("g58_glass_coloros", ScreenShape(58.dp, true), PowerLevel.Balanced, glass = true, clear = 0.9f)
 
     @Test @Config(sdk = [35], qualifiers = "w411dp-h891dp-xxhdpi")
-    fun buttons44() = run("b44", ScreenShape(44.dp, false, hole), PowerLevel.Balanced, glass = true)
+    fun buttons44() = run("b44", ScreenShape(44.dp, false), PowerLevel.Balanced, glass = true)
 }

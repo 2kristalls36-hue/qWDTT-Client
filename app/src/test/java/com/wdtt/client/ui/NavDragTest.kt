@@ -80,9 +80,9 @@ class NavDragTest {
         assertEquals("a", route)
     }
 
-    @Test fun dragFeelsEachCatchOnceAndNoSecondClickOnRelease() {
-        // Detents: one tick each time the magnet catches the droplet on a tab, and no extra
-        // click when the drag ends on a tab that was already caught.
+    @Test fun dragVibratesOnceWhenTakenAndOnceWhenLetGo() {
+        // Without glass: one vibration when the drag starts, one on release; none on the
+        // tabs the droplet passes.
         val felt = mutableListOf<com.wdtt.client.ui.motion.Haptic>()
         val haptics = com.wdtt.client.ui.motion.AppHaptics(null, { felt += it }) { true }
         var route by mutableStateOf("a")
@@ -109,8 +109,7 @@ class NavDragTest {
         }
         compose.waitForIdle()
         assertEquals("c", route)
-        // Caught on b, then on c; the start on a was already held; no click on release.
-        assertEquals(listOf(com.wdtt.client.ui.motion.Haptic.Tick, com.wdtt.client.ui.motion.Haptic.Tick), felt)
+        assertEquals(listOf(Haptic.Grab, Haptic.Drop), felt)
     }
 
     private fun glassBar(felt: MutableList<Haptic>, onPosition: (Float) -> Unit = {}, onRoute: (String) -> Unit) {
@@ -139,8 +138,8 @@ class NavDragTest {
     }
 
     @Test fun glassDropletVibratesOnTouchAndOnRelease() {
-        // Liquid glass: one vibration when the droplet swells under the finger, the detents
-        // while dragged, one when it is let go; no click when it lands.
+        // Liquid glass: one vibration when the droplet swells under the finger and one when
+        // it is let go; none on the tabs it passes, no click when it lands.
         val felt = mutableListOf<com.wdtt.client.ui.motion.Haptic>()
         var route = "a"
         glassBar(felt) { route = it }
@@ -154,7 +153,7 @@ class NavDragTest {
         }
         compose.mainClock.advanceTimeBy(2000)
         assertEquals("c", route)
-        assertEquals(listOf(Haptic.Grab, Haptic.Tick, Haptic.Tick, Haptic.Drop), felt)
+        assertEquals(listOf(Haptic.Grab, Haptic.Drop), felt)
     }
 
     @Test fun glassTapVibratesOnTouchAndOnRelease() {

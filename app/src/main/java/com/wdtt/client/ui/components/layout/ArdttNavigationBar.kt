@@ -405,7 +405,6 @@ fun ArdttNavigationBar(
             val onDroplet = at == selPos.value.roundToInt()
             val from = if (onDroplet) selPos.value else at.toFloat()
             grab.anchor = from - raw
-            grab.tab = at
             if (!glassNow) return@awaitEachGesture
             touching = true
             haptics.perform(com.wdtt.client.ui.motion.Haptic.Grab)
@@ -437,47 +436,32 @@ fun ArdttNavigationBar(
             val slot = (size.width - pad * 2) / count
             return ((x - pad) / slot - 0.5f + grab.anchor).coerceIn(0f, (count - 1).toFloat())
         }
-        // Haptics like detents: with the magnet, one light tick at the moment it catches
-        // the droplet on a tab (not while it stays there, not on the way out); without it,
-        // a tick when the nearest tab changes. The tab the drag starts on is already held.
-        var held = -1
+        // Vibration: once when the droplet is taken and once when it is let go, none on
+        // the tabs it passes. Liquid glass vibrates on touch and release (see grabWatch).
         fun follow(x: Float) {
             val raw = positionAt(x)
             hover = raw.roundToInt()
             val shown = if (magnetOn) tabMagnet(raw) else raw
-            val caught = shown.roundToInt().takeIf { kotlin.math.abs(shown - it) < 0.001f } ?: -1
-            if (magnetOn) {
-                if (caught >= 0 && caught != held) haptics.perform(com.wdtt.client.ui.motion.Haptic.Tick)
-                held = caught
-            } else if (hover != held) {
-                haptics.perform(com.wdtt.client.ui.motion.Haptic.Tick)
-                held = hover
-            }
             scope.launch { selPos.snapTo(shown) }
         }
         fun release() {
             val target = selPos.value.roundToInt().coerceIn(0, count - 1)
             val route = currentItems[target].route
-            // Already caught there: it was felt; otherwise one click when it lands. Liquid
-            // glass has its own vibration on release (the droplet shrinks), so no click.
-            val felt = held == target || glassNow
             hover = -1
-            held = -1
+            if (!glassNow) haptics.perform(com.wdtt.client.ui.motion.Haptic.Drop)
             if (route != currentSelected) {
                 navTabPendingRoute(currentSelected, route)?.let { pendingRoute = it }
                 selectTab.value(route)
             }
             scope.launch {
-                selPos.magnetTo(target.toFloat(), fullRange = range, enabled = magnetOn, onContact = {
-                    if (!felt) haptics.perform(com.wdtt.client.ui.motion.Haptic.Click)
-                })
+                selPos.magnetTo(target.toFloat(), fullRange = range, enabled = magnetOn)
                 dragging = false
             }
         }
         detectHorizontalDragGestures(
             onDragStart = { o ->
                 dragging = true
-                held = grab.tab
+                if (!glassNow) haptics.perform(com.wdtt.client.ui.motion.Haptic.Grab)
                 follow(o.x)
             },
             onDragEnd = { release() },
@@ -771,10 +755,9 @@ private fun Modifier.navTint(
 }
 
 /** Where the droplet is: [pos] in tabs, [half] its half width in tab slots, [inset] its top/bottom gap in px. */
-/** Where a drag took the droplet: its offset from the finger, in tabs, and the tab touched. */
+/** Where a drag took the droplet: its offset from the finger, in tabs. */
 private class NavGrab {
     var anchor = 0f
-    var tab = -1
 }
 
 private data class DropletSpan(val pos: Float, val half: Float, val inset: Float)

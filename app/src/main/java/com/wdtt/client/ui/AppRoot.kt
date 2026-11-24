@@ -98,11 +98,18 @@ fun AppRoot(settingsStore: SettingsStore) {
             }
         }
         }
+        val level by lite.powerLevel.collectAsState(com.wdtt.client.lite.PowerLevel.Default)
+        val levelColors = com.wdtt.client.ui.home.levelColors(level)
         ArdttNavigationBar(
             items = items,
             selectedRoute = route,
             onSelect = { route = it },
             modifier = Modifier.align(Alignment.BottomCenter),
+            accent = when (level) {
+                com.wdtt.client.lite.PowerLevel.Stable -> com.wdtt.client.ui.components.layout.NavAccent.Plain
+                com.wdtt.client.lite.PowerLevel.Balanced -> com.wdtt.client.ui.components.layout.NavAccent.Sheen(levelColors.accent)
+                com.wdtt.client.lite.PowerLevel.Maximum -> com.wdtt.client.ui.components.layout.NavAccent.Neon(levelColors.neon)
+            },
         )
     }
     }

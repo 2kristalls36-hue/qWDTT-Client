@@ -117,6 +117,11 @@ private val GlassEdgeGreen = Color(0xFF8FD9B0)
 
 private object NavBarDefaults {
     val GlassCorner = com.wdtt.client.ui.theme.ArdttRadius.Section
+    /** Fitted bar: corners never sharper than this, whatever the screen. */
+    val MinCorner = 14.dp
+    /** Distance from the bar edge to the droplet edge (vertically, (track − droplet) / 2). */
+    val DropletInset = 8.5.dp
+    val MinDropletCorner = 10.dp
     val OuterPadding = ArdttSpacing.SmallPlus
     val TrackPadding = ArdttSpacing.Small
 
@@ -324,13 +329,31 @@ fun ArdttNavigationBar(
         pendingRoute = null
     }
 
-    val outer = modifier
-        .fillMaxWidth()
-        .windowInsetsPadding(WindowInsets.navigationBars)
-        .padding(
-            horizontal = NavBarDefaults.OuterPadding,
-            vertical = NavBarDefaults.TrackPadding,
-        )
+    // Fitted to the screen: with gesture navigation and known rounded corners the bar
+    // comes down to the corners, the same distance from the side and the bottom edge,
+    // and its corners run concentric with the screen's (radius = screen radius − gap).
+    // Otherwise (buttons at the bottom, unknown corners) it keeps its usual place.
+    val screen = LocalScreenShape.current
+    val fitted = screen.gestureNav && screen.bottomCorner > 0.dp
+    val gap = NavBarDefaults.OuterPadding
+    val barRadius = if (fitted) (screen.bottomCorner - gap).coerceIn(NavBarDefaults.MinCorner, ArdttSize.NavTrack / 2)
+        else NavBarDefaults.GlassCorner
+    val barShape = androidx.compose.foundation.shape.RoundedCornerShape(barRadius)
+    // The droplet keeps the same distance to the bar edge all round its corners.
+    val dropletRadius = (barRadius - NavBarDefaults.DropletInset).coerceAtLeast(NavBarDefaults.MinDropletCorner)
+    val outer = if (fitted) {
+        modifier
+            .fillMaxWidth()
+            .padding(start = gap, end = gap, top = NavBarDefaults.TrackPadding, bottom = gap)
+    } else {
+        modifier
+            .fillMaxWidth()
+            .windowInsetsPadding(WindowInsets.navigationBars)
+            .padding(
+                horizontal = NavBarDefaults.OuterPadding,
+                vertical = NavBarDefaults.TrackPadding,
+            )
+    }
     // Selection droplet: follows the finger when dragged across the bar, then is pulled
     // into the nearest tab by the magnet and that tab opens. A plain tap works as before.
     val count = items.size
@@ -443,12 +466,12 @@ fun ArdttNavigationBar(
         val dark = isDarkSurface()
         LiquidGlassPanel(
             backdrop = backdrop,
-            cornerRadius = NavBarDefaults.GlassCorner,
+            cornerRadius = barRadius,
             tint = colors.surface.copy(alpha = backdrop.veil(dark)),
             dark = dark,
             blur = backdrop.frost(),
             modifier = outer
-                .shadow(18.dp, ArdttShapes.Section, ambientColor = Color.Black.copy(alpha = 0.25f), spotColor = Color.Black.copy(alpha = 0.25f))
+                .shadow(18.dp, barShape, ambientColor = Color.Black.copy(alpha = 0.25f), spotColor = Color.Black.copy(alpha = 0.25f))
                 .height(ArdttSize.NavTrack)
                 .then(dragToSelect),
         ) {
@@ -507,11 +530,11 @@ fun ArdttNavigationBar(
                                 placeable.place((cx - lw / 2f).roundToInt(), ((constraints.maxHeight - lh) / 2f).roundToInt())
                             }
                         }
-                        .shadow((2f + 4f * lens).dp, androidx.compose.foundation.shape.RoundedCornerShape(50), ambientColor = Color.Black.copy(alpha = 0.3f), spotColor = Color.Black.copy(alpha = 0.3f)),
+                        .shadow((2f + 4f * lens).dp, androidx.compose.foundation.shape.RoundedCornerShape(dropletRadius), ambientColor = Color.Black.copy(alpha = 0.3f), spotColor = Color.Black.copy(alpha = 0.3f)),
                 ) {
                     LiquidGlassPanel(
                         backdrop = panelGlass,
-                        cornerRadius = 40.dp,
+                        cornerRadius = dropletRadius,
                         // The frost is in the picture it bends (background only); a light haze.
                         tint = Color.White.copy(alpha = if (dark) 0.08f else 0.20f),
                         dark = dark,
@@ -534,7 +557,7 @@ fun ArdttNavigationBar(
     }
 
     Surface(
-        shape = ArdttShapes.Section,
+        shape = barShape,
         color = shell,
         contentColor = ArdttSurface.contentColorOn(shell),
         border = ArdttFloatingShell.shellBorder(),
@@ -549,7 +572,7 @@ fun ArdttNavigationBar(
                 .height(ArdttSize.NavTrack)
                 .then(dragToSelect),
         ) {
-            SelectionDroplet(count = count, pos = selPos.value, velocity = selPos.velocity, dark = isDarkSurface(), glass = false)
+            SelectionDroplet(count = count, pos = selPos.value, velocity = selPos.velocity, dark = isDarkSurface(), glass = false, corner = dropletRadius)
             tabs()
         }
     }
@@ -678,7 +701,7 @@ internal fun tabMagnet(v: Float, reach: Float = 0.34f, capture: Float = 0.08f): 
  * then settles round. Glass mode: light glass body with a bright rim; plain mode: a soft tint.
  */
 @Composable
-private fun BoxScope.SelectionDroplet(count: Int, pos: Float, velocity: Float, dark: Boolean, glass: Boolean) {
+private fun BoxScope.SelectionDroplet(count: Int, pos: Float, velocity: Float, dark: Boolean, glass: Boolean, corner: androidx.compose.ui.unit.Dp) {
     if (count <= 0) return
     val primary = MaterialTheme.colorScheme.primary
     Canvas(Modifier.matchParentSize()) {
@@ -690,7 +713,7 @@ private fun BoxScope.SelectionDroplet(count: Int, pos: Float, velocity: Float, d
         val cx = pad + slot * (pos + 0.5f)
         val left = cx - w / 2f
         val top = (size.height - h) / 2f
-        val r = CornerRadius(h / 2f)
+        val r = CornerRadius(minOf(h / 2f, corner.toPx()))
         if (!glass) {
             drawRoundRect(primary.copy(alpha = if (dark) 0.18f else 0.10f), Offset(left, top), Size(w, h), r)
             return@Canvas

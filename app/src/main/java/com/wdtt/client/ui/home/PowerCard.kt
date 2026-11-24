@@ -556,14 +556,12 @@ private fun PowerSlider(
                     cornerRadius = h / 2,
                     tint = (if (dark) Color.White.copy(alpha = 0.04f) else Color.White.copy(alpha = 0.10f)),
                     dark = dark,
-                    // A narrow rim that bends steeply: right at the edge the glass reaches the
-                    // track in the middle and smears its color along the rim; the middle stays flat.
+                    // A soft, shallow rim: the track under the edge is bent only a little, so
+                    // its colour does not wrap along the top and bottom edges as a band.
                     bezel = h * 0.22f,
-                    depth = h * 0.42f,
+                    depth = h * 0.12f,
                     zoom = 0.04f,
-                    // Almost no colour split: on the large capsule it showed as rainbow
-                    // bands along the top and bottom edges.
-                    fringe = 0.08f, steepRim = true, dispersion = 0.04f,
+                    fringe = 0f, steepRim = false, dispersion = 0f,
                     blur = 0.dp,
                     underlay = lerp(surface, Neon.Night, ((pos.value - 0.5f) * 2f).coerceIn(0f, 1f)),
                     modifier = Modifier.fillMaxSize().graphicsLayer { this.alpha = lens.coerceIn(0f, 1f) },

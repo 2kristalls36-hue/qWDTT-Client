@@ -20,6 +20,7 @@ import androidx.compose.ui.geometry.Offset
 import com.wdtt.client.ui.components.layout.ArdttNavItem
 import com.wdtt.client.ui.components.layout.ArdttNavigationBar
 import com.wdtt.client.ui.components.layout.tabMagnet
+import com.wdtt.client.ui.motion.Haptic
 import com.wdtt.client.ui.theme.ArdttTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -110,6 +111,108 @@ class NavDragTest {
         assertEquals("c", route)
         // Caught on b, then on c; the start on a was already held; no click on release.
         assertEquals(listOf(com.wdtt.client.ui.motion.Haptic.Tick, com.wdtt.client.ui.motion.Haptic.Tick), felt)
+    }
+
+    private fun glassBar(felt: MutableList<Haptic>, onPosition: (Float) -> Unit = {}, onRoute: (String) -> Unit) {
+        val haptics = com.wdtt.client.ui.motion.AppHaptics(null, { felt += it }) { true }
+        // The glass is animated without end: the clock is moved by hand.
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            ArdttTheme {
+                var route by androidx.compose.runtime.remember { mutableStateOf("a") }
+                val glass = com.wdtt.client.ui.components.surface.GlassBackdrop(androidx.compose.ui.graphics.rememberGraphicsLayer())
+                androidx.compose.runtime.CompositionLocalProvider(
+                    com.wdtt.client.ui.motion.LocalAppHaptics provides haptics,
+                    com.wdtt.client.ui.components.surface.LocalGlassBackdrop provides glass,
+                ) {
+                    Box(Modifier.fillMaxWidth()) {
+                        ArdttNavigationBar(
+                            items = listOf("a", "b", "c", "d").map { ArdttNavItem(it, "Tab $it", Icons.Outlined.Home) },
+                            selectedRoute = route,
+                            onSelect = { route = it; onRoute(it) },
+                            onPosition = onPosition,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Test fun glassDropletVibratesOnTouchAndOnRelease() {
+        // Liquid glass: one vibration when the droplet swells under the finger, the detents
+        // while dragged, one when it is let go; no click when it lands.
+        val felt = mutableListOf<com.wdtt.client.ui.motion.Haptic>()
+        var route = "a"
+        glassBar(felt) { route = it }
+        val a = compose.onNodeWithText("Tab a").fetchSemanticsNode().boundsInRoot.center
+        val c = compose.onNodeWithText("Tab c").fetchSemanticsNode().boundsInRoot.center
+        compose.onRoot().performTouchInput {
+            down(a)
+            val steps = 40
+            for (i in 1..steps) moveTo(Offset(a.x + (c.x - a.x) * i / steps, a.y))
+            up()
+        }
+        compose.mainClock.advanceTimeBy(2000)
+        assertEquals("c", route)
+        assertEquals(listOf(Haptic.Grab, Haptic.Tick, Haptic.Tick, Haptic.Drop), felt)
+    }
+
+    @Test fun glassTapVibratesOnTouchAndOnRelease() {
+        val felt = mutableListOf<com.wdtt.client.ui.motion.Haptic>()
+        var route = "a"
+        glassBar(felt) { route = it }
+        compose.onNodeWithText("Tab c").performClick()
+        compose.mainClock.advanceTimeBy(2000)
+        assertEquals("c", route)
+        assertEquals(listOf(Haptic.Grab, Haptic.Drop), felt)
+    }
+
+    @Test fun glassPressSlidOffTheBarPutsTheDropletBack() {
+        // The droplet goes under the finger on touch; a press that ends off the bar does not
+        // select the tab, and the droplet returns to the current one.
+        val felt = mutableListOf<Haptic>()
+        var route = "a"
+        var pos = 0f
+        glassBar(felt, onPosition = { pos = it }) { route = it }
+        val c = compose.onNodeWithText("Tab c").fetchSemanticsNode().boundsInRoot.center
+        compose.onRoot().performTouchInput {
+            down(c)
+            for (i in 1..20) moveTo(Offset(c.x, c.y - 30f * i))
+            up()
+        }
+        compose.mainClock.advanceTimeBy(2000)
+        assertEquals("a", route)
+        assertEquals(0f, pos, 0.001f)
+    }
+
+    @Test fun dropletTakenOffCentreDoesNotJumpToTheFinger() {
+        // Regression: the droplet on the first tab taken right of its centre and pulled
+        // left jumped right for a moment (and the screens with it), then came back.
+        var pos = 0f
+        var maxPos = 0f
+        compose.setContent {
+            ArdttTheme {
+                var route by androidx.compose.runtime.remember { mutableStateOf("a") }
+                Box(Modifier.fillMaxWidth()) {
+                    ArdttNavigationBar(
+                        items = listOf("a", "b", "c", "d").map { ArdttNavItem(it, "Tab $it", Icons.Outlined.Home) },
+                        selectedRoute = route,
+                        onSelect = { route = it },
+                        onPosition = { pos = it; if (it > maxPos) maxPos = it },
+                    )
+                }
+            }
+        }
+        val a = compose.onNodeWithText("Tab a").fetchSemanticsNode().boundsInRoot
+        val start = Offset(a.center.x + a.width * 0.35f, a.center.y)
+        compose.onRoot().performTouchInput {
+            down(start)
+            for (i in 1..20) moveTo(Offset(start.x - 12f * i, start.y))
+            up()
+        }
+        compose.waitForIdle()
+        assertEquals(0f, pos, 0.001f)
+        assertEquals(0f, maxPos, 0.001f)
     }
 
     @Test fun dropletStaysInsideTheBar() {

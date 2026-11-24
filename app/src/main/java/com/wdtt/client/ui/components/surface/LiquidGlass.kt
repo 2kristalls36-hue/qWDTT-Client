@@ -114,6 +114,11 @@ fun LiquidGlassPanel(
     underlay: Color? = null,
     /** Strength of the rainbow edge and color split, 1 — panel default. */
     fringe: Float = 1f,
+    /**
+     * Share of the rim bend across the top and bottom edges, 1 — the same as at the sides.
+     * Lower keeps a wide lens from pulling what lies under its middle up to those edges.
+     */
+    verticalBend: Float = 1f,
     content: @Composable BoxScope.() -> Unit,
 ) {
     var position by remember { mutableStateOf(Offset.Zero) }
@@ -140,6 +145,7 @@ fun LiquidGlassPanel(
                             rim = backdrop.rim,
                             steep = steepRim,
                             dispersion = dispersion,
+                            verticalBend = verticalBend,
                         ).asComposeRenderEffect()
                     }
                 }
@@ -170,6 +176,7 @@ private object GlassShader {
         uniform float fringeK;
         uniform float steep;
         uniform float dispK;
+        uniform float vBend;
         uniform half4 rimColor;
         uniform float rimMix;
 
@@ -208,7 +215,7 @@ private object GlassShader {
             float bend = steep > 0.5 ? 1.0 - sqrt(1.0 - x * x) : x * x;
             // Pull samples inward (the rim magnifies what lies under the middle) and add a
             // little overall magnification so even a calm backdrop visibly bends.
-            float2 off = -n * bend * depthPx - p * (zoom + 0.04 * x);
+            float2 off = -n * float2(1.0, vBend) * bend * depthPx - p * (zoom + 0.04 * x);
 
             // Chromatic split grows toward the edge.
             // A coloured rim keeps the colour split faint, so no rainbow shows at the edge.
@@ -260,7 +267,7 @@ private object GlassShader {
         shader: RuntimeShader,
         w: Float, h: Float, radius: Float, dp: Float, time: Float, tint: Color, dark: Boolean,
         bezelPx: Float, depthPx: Float, zoom: Float, blurPx: Float, fringeK: Float, rim: Color?,
-        steep: Boolean, dispersion: Float,
+        steep: Boolean, dispersion: Float, verticalBend: Float,
     ): RenderEffect {
         shader.setFloatUniform("size", w, h)
         shader.setFloatUniform("radius", radius.coerceAtMost(minOf(w, h) / 2f))
@@ -274,6 +281,7 @@ private object GlassShader {
         shader.setFloatUniform("fringeK", fringeK)
         shader.setFloatUniform("steep", if (steep) 1f else 0f)
         shader.setFloatUniform("dispK", dispersion)
+        shader.setFloatUniform("vBend", verticalBend)
         val rc = rim ?: Color.White
         shader.setFloatUniform("rimColor", rc.red, rc.green, rc.blue, 1f)
         shader.setFloatUniform("rimMix", if (rim == null) 0f else 1f)

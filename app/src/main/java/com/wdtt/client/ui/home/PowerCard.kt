@@ -556,12 +556,14 @@ private fun PowerSlider(
                     cornerRadius = h / 2,
                     tint = (if (dark) Color.White.copy(alpha = 0.04f) else Color.White.copy(alpha = 0.10f)),
                     dark = dark,
-                    // A soft, shallow rim: the track under the edge is bent only a little, so
-                    // its colour does not wrap along the top and bottom edges as a band.
+                    // A steep rim that bends the track at the rounded ends. Across the top and
+                    // bottom edges it bends only a little, so the track colour is not pulled
+                    // up to them as a band; no colour split.
                     bezel = h * 0.22f,
-                    depth = h * 0.12f,
+                    depth = h * 0.42f,
                     zoom = 0.04f,
-                    fringe = 0f, steepRim = false, dispersion = 0f,
+                    fringe = 0f, steepRim = true, dispersion = 0f,
+                    verticalBend = PowerThumbVerticalBend,
                     blur = 0.dp,
                     underlay = lerp(surface, Neon.Night, ((pos.value - 0.5f) * 2f).coerceIn(0f, 1f)),
                     modifier = Modifier.fillMaxSize().graphicsLayer { this.alpha = lens.coerceIn(0f, 1f) },
@@ -570,3 +572,6 @@ private fun PowerSlider(
         }
     }
 }
+
+/** Share of the thumb lens bend across its top and bottom edges (see LiquidGlassPanel). */
+internal const val PowerThumbVerticalBend = 0.45f

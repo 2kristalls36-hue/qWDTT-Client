@@ -40,6 +40,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layout
 import androidx.compose.animation.togetherWith
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
@@ -245,7 +246,16 @@ fun HomeScreen(settingsStore: SettingsStore, onOpenProfiles: () -> Unit) {
             level = level,
             locked = state != TunnelUiState.Off,
             onLevelChange = { scope.launch { lite.savePowerLevel(it) } },
-            modifier = Modifier.widthIn(max = 460.dp),
+            modifier = Modifier
+                .widthIn(max = 460.dp)
+                // Closer to the status line: the place kept for the statistics made the gap
+                // look large. When they are shown, the card stays as far from them as the
+                // tiles are from each other.
+                .layout { measurable, constraints ->
+                    val p = measurable.measure(constraints)
+                    val up = PowerCardLift.roundToPx()
+                    layout(p.width, (p.height - up).coerceAtLeast(0)) { p.place(0, -up) }
+                },
             pos = powerPos,
         )
     }
@@ -562,3 +572,6 @@ private fun tileValueStyle() = TextStyle(
     platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false),
     lineHeightStyle = TightLines,
 )
+
+/** How much the power card is drawn up into the gap above it. */
+private val PowerCardLift = 16.dp

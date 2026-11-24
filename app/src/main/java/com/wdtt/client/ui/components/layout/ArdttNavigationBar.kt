@@ -53,6 +53,8 @@ import com.wdtt.client.ui.motion.magnetTo
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import com.wdtt.client.ui.theme.isDarkSurface
@@ -380,18 +382,67 @@ fun ArdttNavigationBar(
     // The drag handler lives across recompositions: read the selected tab through state,
     // or it would compare against the tab that was selected when the bar first appeared.
     val currentSelected by rememberUpdatedState(selectedRoute)
+    val committedNow by rememberUpdatedState(committedIndex)
+    val glassBar = LocalGlassBackdrop.current != null && LiquidGlass.supported
+    val glassNow by rememberUpdatedState(glassBar)
+    // Where the finger took the droplet. A drag moves it by the finger's travel from there,
+    // so taking it off-centre does not make it (and the screens with it) jump to the finger.
+    val grab = remember { NavGrab() }
+    // Liquid glass: the droplet swells as soon as the bar is touched (touching another tab
+    // brings it there) and shrinks when the finger is lifted. One vibration for each.
+    var touching by remember { mutableStateOf(false) }
+    val grabWatch = Modifier.pointerInput(count) {
+        val pad = NavBarDefaults.TrackPadding.toPx()
+        awaitEachGesture {
+            val down = awaitFirstDown(
+                requireUnconsumed = false,
+                pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial,
+            )
+            val slot = (size.width - pad * 2) / count
+            val raw = (down.position.x - pad) / slot - 0.5f
+            val at = raw.roundToInt().coerceIn(0, count - 1)
+            // On the droplet's tab it stays where it is; on another tab it goes there.
+            val onDroplet = at == selPos.value.roundToInt()
+            val from = if (onDroplet) selPos.value else at.toFloat()
+            grab.anchor = from - raw
+            grab.tab = at
+            if (!glassNow) return@awaitEachGesture
+            touching = true
+            haptics.perform(com.wdtt.client.ui.motion.Haptic.Grab)
+            if (!onDroplet && !dragging) scope.launch { selPos.magnetTo(from, fullRange = range, enabled = magnetOn) }
+            try {
+                while (true) {
+                    val event = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                    if (event.changes.none { it.pressed }) break
+                }
+            } finally {
+                touching = false
+                haptics.perform(com.wdtt.client.ui.motion.Haptic.Drop)
+                // A tap selects the tab on release. A press that ends without selecting
+                // (the finger slid off the bar) puts the droplet back on the current tab.
+                scope.launch {
+                    androidx.compose.runtime.withFrameNanos { }
+                    androidx.compose.runtime.withFrameNanos { }
+                    if (!dragging && committedNow != at) {
+                        selPos.magnetTo(committedNow.toFloat(), fullRange = range, enabled = magnetOn)
+                    }
+                }
+            }
+        }
+    }
     val dragToSelect = Modifier.pointerInput(count) {
         val pad = NavBarDefaults.TrackPadding.toPx()
-        fun indexAt(x: Float): Float {
+        /** The droplet position for the finger at [x]: shifted by the finger's travel. */
+        fun positionAt(x: Float): Float {
             val slot = (size.width - pad * 2) / count
-            return ((x - pad) / slot - 0.5f).coerceIn(0f, (count - 1).toFloat())
+            return ((x - pad) / slot - 0.5f + grab.anchor).coerceIn(0f, (count - 1).toFloat())
         }
         // Haptics like detents: with the magnet, one light tick at the moment it catches
         // the droplet on a tab (not while it stays there, not on the way out); without it,
         // a tick when the nearest tab changes. The tab the drag starts on is already held.
         var held = -1
         fun follow(x: Float) {
-            val raw = indexAt(x)
+            val raw = positionAt(x)
             hover = raw.roundToInt()
             val shown = if (magnetOn) tabMagnet(raw) else raw
             val caught = shown.roundToInt().takeIf { kotlin.math.abs(shown - it) < 0.001f } ?: -1
@@ -407,8 +458,9 @@ fun ArdttNavigationBar(
         fun release() {
             val target = selPos.value.roundToInt().coerceIn(0, count - 1)
             val route = currentItems[target].route
-            // Already caught there: it was felt; otherwise one click when it lands.
-            val felt = held == target
+            // Already caught there: it was felt; otherwise one click when it lands. Liquid
+            // glass has its own vibration on release (the droplet shrinks), so no click.
+            val felt = held == target || glassNow
             hover = -1
             held = -1
             if (route != currentSelected) {
@@ -423,7 +475,11 @@ fun ArdttNavigationBar(
             }
         }
         detectHorizontalDragGestures(
-            onDragStart = { o -> dragging = true; held = selPos.value.roundToInt(); follow(o.x) },
+            onDragStart = { o ->
+                dragging = true
+                held = grab.tab
+                follow(o.x)
+            },
             onDragEnd = { release() },
             onDragCancel = { release() },
         ) { change, _ ->
@@ -432,10 +488,9 @@ fun ArdttNavigationBar(
         }
     }
     val shownIndex = if (dragging && hover >= 0) hover else -1
-    val glassBar = LocalGlassBackdrop.current != null && LiquidGlass.supported
-    // While dragged the glass droplet swells.
+    // While touched the glass droplet swells.
     val lens by animateFloatAsState(
-        if (dragging) 1f else 0f,
+        if (touching) 1f else 0f,
         spring(dampingRatio = 0.6f, stiffness = 420f),
         label = "tabLens",
     )
@@ -498,12 +553,13 @@ fun ArdttNavigationBar(
             modifier = outer
                 .shadow(18.dp, barShape, ambientColor = Color.Black.copy(alpha = 0.25f), spotColor = Color.Black.copy(alpha = 0.25f))
                 .height(ArdttSize.NavTrack)
+                .then(grabWatch)
                 .then(dragToSelect),
         ) {
             CompositionLocalProvider(LocalContentColor provides colors.onSurface) {
                 // Lens in the lens: the selection is a small frosted glass lens inside the
                 // panel. It magnifies what lies under it by about 5%: the page behind the
-                // panel, frosted, and the selected tab, sharp. While dragged it swells.
+                // panel, frosted, and the selected tab, sharp. While touched it swells.
                 val panelLayer = androidx.compose.ui.graphics.rememberGraphicsLayer()
                 val frostLayer = androidx.compose.ui.graphics.rememberGraphicsLayer()
                 val panelGlass = remember(panelLayer) { com.wdtt.client.ui.components.surface.GlassBackdrop(panelLayer) }
@@ -597,6 +653,7 @@ fun ArdttNavigationBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(ArdttSize.NavTrack)
+                .then(grabWatch)
                 .then(dragToSelect),
         ) {
             SelectionDroplet(count = count, pos = selPos.value, velocity = selPos.velocity, dark = isDarkSurface(), glass = false, corner = dropletRadius)
@@ -714,6 +771,12 @@ private fun Modifier.navTint(
 }
 
 /** Where the droplet is: [pos] in tabs, [half] its half width in tab slots, [inset] its top/bottom gap in px. */
+/** Where a drag took the droplet: its offset from the finger, in tabs, and the tab touched. */
+private class NavGrab {
+    var anchor = 0f
+    var tab = -1
+}
+
 private data class DropletSpan(val pos: Float, val half: Float, val inset: Float)
 
 /**
@@ -915,7 +978,8 @@ private fun NavBarTab(
                 indication = null,
                 role = Role.Tab,
                 onClick = {
-                    if (!selected) haptics.perform(com.wdtt.client.ui.motion.Haptic.Click)
+                    // Liquid glass: the touch and the release of the bar already vibrate.
+                    if (!selected && !(glass != null && LiquidGlass.supported)) haptics.perform(com.wdtt.client.ui.motion.Haptic.Click)
                     // Liquid glass: the icons stay still (their motion under the lens looked busy).
                     if (!iconProgress.isRunning && !(glass != null && LiquidGlass.supported)) iconPlay++
                     onSelect()

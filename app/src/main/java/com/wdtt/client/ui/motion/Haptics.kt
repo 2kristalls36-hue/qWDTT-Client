@@ -25,6 +25,10 @@ enum class Haptic {
     Reject,
     /** Long press opened something. */
     LongPress,
+    /** Something was picked up under the finger (the tab bar droplet swells). */
+    Grab,
+    /** It was let go (the droplet shrinks back); lighter than [Grab]. */
+    Drop,
 }
 
 /**
@@ -50,6 +54,10 @@ class AppHaptics(
             Haptic.Confirm -> if (sdk >= 30) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.VIRTUAL_KEY
             Haptic.Reject -> if (sdk >= 30) HapticFeedbackConstants.REJECT else HapticFeedbackConstants.LONG_PRESS
             Haptic.LongPress -> HapticFeedbackConstants.LONG_PRESS
+            // The system key press / release pair: supported everywhere, unlike the
+            // gesture start / end signals that some firmware leaves silent.
+            Haptic.Grab -> HapticFeedbackConstants.VIRTUAL_KEY
+            Haptic.Drop -> HapticFeedbackConstants.CONTEXT_CLICK
         }
         v.performHapticFeedback(constant)
     }

@@ -38,6 +38,14 @@ object VkCallHashGenerator {
         transport = DefaultVkApiTransport,
     )
 
+    /** calls.start with a token received elsewhere (in the VK window, see [VkLoginActivity.awaitAccessToken]). */
+    suspend fun generateWithToken(accessToken: String): Result<String> = withContext(Dispatchers.IO) {
+        when (val outcome = startCall(accessToken, DefaultVkApiTransport)) {
+            is CallHashOutcome.Success -> Result.success(outcome.hash)
+            is CallHashOutcome.Failure -> Result.failure(IllegalStateException(outcome.error.userMessage))
+        }
+    }
+
     internal fun extractAccessToken(url: String): String? {
         if (!url.contains("access_token=")) return null
         val part = when {

@@ -380,32 +380,44 @@ fun ArdttNavigationBar(
             val slot = (size.width - pad * 2) / count
             return ((x - pad) / slot - 0.5f).coerceIn(0f, (count - 1).toFloat())
         }
+        // Haptics like detents: with the magnet, one light tick at the moment it catches
+        // the droplet on a tab (not while it stays there, not on the way out); without it,
+        // a tick when the nearest tab changes. The tab the drag starts on is already held.
+        var held = -1
         fun follow(x: Float) {
             val raw = indexAt(x)
-            val near = raw.roundToInt()
-            if (near != hover) {
-                hover = near
+            hover = raw.roundToInt()
+            val shown = if (magnetOn) tabMagnet(raw) else raw
+            val caught = shown.roundToInt().takeIf { kotlin.math.abs(shown - it) < 0.001f } ?: -1
+            if (magnetOn) {
+                if (caught >= 0 && caught != held) haptics.perform(com.wdtt.client.ui.motion.Haptic.Tick)
+                held = caught
+            } else if (hover != held) {
                 haptics.perform(com.wdtt.client.ui.motion.Haptic.Tick)
+                held = hover
             }
-            scope.launch { selPos.snapTo(if (magnetOn) tabMagnet(raw) else raw) }
+            scope.launch { selPos.snapTo(shown) }
         }
         fun release() {
             val target = selPos.value.roundToInt().coerceIn(0, count - 1)
             val route = currentItems[target].route
+            // Already caught there: it was felt; otherwise one click when it lands.
+            val felt = held == target
             hover = -1
+            held = -1
             if (route != currentSelected) {
                 navTabPendingRoute(currentSelected, route)?.let { pendingRoute = it }
                 selectTab.value(route)
             }
             scope.launch {
                 selPos.magnetTo(target.toFloat(), fullRange = range, enabled = magnetOn, onContact = {
-                    haptics.perform(com.wdtt.client.ui.motion.Haptic.Click)
+                    if (!felt) haptics.perform(com.wdtt.client.ui.motion.Haptic.Click)
                 })
                 dragging = false
             }
         }
         detectHorizontalDragGestures(
-            onDragStart = { o -> dragging = true; hover = -1; follow(o.x) },
+            onDragStart = { o -> dragging = true; held = selPos.value.roundToInt(); follow(o.x) },
             onDragEnd = { release() },
             onDragCancel = { release() },
         ) { change, _ ->
@@ -423,10 +435,15 @@ fun ArdttNavigationBar(
     )
     // Where the droplet is, in tab slots: its centre and its half width. The tabs take
     // their colour only inside it, so the colour moves exactly with the droplet.
-    val dropletSpan: () -> Pair<Float, Float> = {
-        val half = if (glassBar) (NavDropletWidth + 0.2f * lens) / 2f
-            else (0.86f + (kotlin.math.abs(selPos.velocity) * 0.10f).coerceAtMost(0.45f)) / 2f
-        selPos.value to half
+    val densityNow = androidx.compose.ui.platform.LocalDensity.current
+    val dropletSpan: () -> DropletSpan = {
+        if (glassBar) {
+            val lh = with(densityNow) { (ArdttSize.NavTrack - 8.dp).toPx() } * (0.86f + 0.14f * lens)
+            DropletSpan(selPos.value, (NavDropletWidth + 0.2f * lens) / 2f, (with(densityNow) { ArdttSize.NavTrack.toPx() } - lh) / 2f)
+        } else {
+            val stretch = (kotlin.math.abs(selPos.velocity) * 0.10f).coerceAtMost(0.45f)
+            DropletSpan(selPos.value, (0.86f + stretch) / 2f, with(densityNow) { (5.dp + 3.dp * stretch).toPx() })
+        }
     }
 
     val tabs: @Composable () -> Unit = {
@@ -442,6 +459,7 @@ fun ArdttNavigationBar(
             items.forEachIndexed { index, item ->
                 NavBarTab(
                     index = index,
+                    count = count,
                     droplet = dropletSpan,
                     accent = accent,
                     accentClock = accentClock,
@@ -527,7 +545,9 @@ fun ArdttNavigationBar(
                                 androidx.compose.ui.unit.Constraints.fixed(lw.roundToInt(), lh.roundToInt())
                             )
                             layout(constraints.maxWidth, constraints.maxHeight) {
-                                val cx = pad + slot * (selPos.value + 0.5f)
+                                // Never past the bar edge: at the end tabs (and swollen while
+                                // dragged) it keeps the gap it has at the top and bottom.
+                                val cx = dropletCenter(constraints.maxWidth.toFloat(), pad, slot, selPos.value, lw / 2f, (constraints.maxHeight - lh) / 2f)
                                 placeable.place((cx - lw / 2f).roundToInt(), ((constraints.maxHeight - lh) / 2f).roundToInt())
                             }
                         }
@@ -623,7 +643,8 @@ private const val NavAccentSheenPass = 0.2f
 @Composable
 private fun Modifier.navTint(
     index: Int,
-    droplet: () -> Pair<Float, Float>,
+    count: Int,
+    droplet: () -> DropletSpan,
     color: Color,
     accent: NavAccent,
     clock: () -> Float,
@@ -634,11 +655,14 @@ private fun Modifier.navTint(
         .graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
         .drawWithContent {
             drawContent()
-            val (pos, half) = droplet()
+            val span = droplet()
             val w = size.width
-            val c = w * (pos - index + 0.5f)
-            val l = c - half * w
-            val r = c + half * w
+            // The droplet centre in bar coordinates (tabs are equal slots), kept inside the
+            // bar as the droplet itself is, then in this tab's coordinates.
+            val barCx = dropletCenter(trackPad * 2f + w * count, trackPad, w, span.pos, span.half * w, span.inset)
+            val c = barCx - (trackPad + w * index)
+            val l = c - span.half * w
+            val r = c + span.half * w
             if (r <= 0f || l >= w) return@drawWithContent
             val tall = size.height
             clipRect(left = l, top = -tall, right = r, bottom = size.height + tall) {
@@ -683,6 +707,20 @@ private fun Modifier.navTint(
         }
 }
 
+/** Where the droplet is: [pos] in tabs, [half] its half width in tab slots, [inset] its top/bottom gap in px. */
+private data class DropletSpan(val pos: Float, val half: Float, val inset: Float)
+
+/**
+ * Centre x of the droplet over tab [pos], kept so the droplet never passes the bar edge:
+ * at least [inset] (its gap at the top and bottom) from either side.
+ */
+internal fun dropletCenter(barWidth: Float, pad: Float, slot: Float, pos: Float, halfWidth: Float, inset: Float): Float {
+    val cx = pad + slot * (pos + 0.5f)
+    val lo = inset + halfWidth
+    val hi = barWidth - inset - halfWidth
+    return if (hi < lo) barWidth / 2f else cx.coerceIn(lo, hi)
+}
+
 /**
  * Magnet between tabs while dragging: near a tab the droplet is drawn in faster the
  * closer it gets and is caught on it; between tabs it follows the finger.
@@ -711,9 +749,9 @@ private fun BoxScope.SelectionDroplet(count: Int, pos: Float, velocity: Float, d
         val stretch = (kotlin.math.abs(velocity) * 0.10f).coerceAtMost(0.45f)
         val w = slot * (0.86f + stretch)
         val h = size.height - 10.dp.toPx() - stretch * 6.dp.toPx()
-        val cx = pad + slot * (pos + 0.5f)
-        val left = cx - w / 2f
         val top = (size.height - h) / 2f
+        val cx = dropletCenter(size.width, pad, slot, pos, w / 2f, top)
+        val left = cx - w / 2f
         val r = CornerRadius(minOf(h / 2f, corner.toPx()))
         if (!glass) {
             drawRoundRect(primary.copy(alpha = if (dark) 0.18f else 0.10f), Offset(left, top), Size(w, h), r)
@@ -801,7 +839,8 @@ private fun SiftIcon(progress: Float, tint: Color, modifier: Modifier) {
 @Composable
 private fun NavBarTab(
     index: Int,
-    droplet: () -> Pair<Float, Float>,
+    count: Int,
+    droplet: () -> DropletSpan,
     accent: NavAccent,
     accentClock: () -> Float,
     item: ArdttNavItem,
@@ -863,7 +902,7 @@ private fun NavBarTab(
         modifier = modifier
             .fillMaxHeight()
             .graphicsLayer { renderEffect = halo }
-            .navTint(index, droplet, selectedColor, accent, clock = accentClock)
+            .navTint(index, count, droplet, selectedColor, accent, clock = accentClock)
             .selectable(
                 selected = selected,
                 interactionSource = interactionSource,

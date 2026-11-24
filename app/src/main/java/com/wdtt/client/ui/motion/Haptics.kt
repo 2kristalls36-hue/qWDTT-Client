@@ -31,9 +31,15 @@ enum class Haptic {
  * App vibration, honoring the «Вибрация» setting (and the system touch feedback setting,
  * which View.performHapticFeedback respects by itself).
  */
-class AppHaptics(private val view: View?, private val enabled: () -> Boolean) {
+class AppHaptics(
+    private val view: View?,
+    /** For tests: receives every vibration that would be played. */
+    private val record: ((Haptic) -> Unit)? = null,
+    private val enabled: () -> Boolean,
+) {
     fun perform(kind: Haptic) {
         if (!enabled()) return
+        record?.invoke(kind)
         val v = view ?: return
         val sdk = Build.VERSION.SDK_INT
         val constant = when (kind) {
@@ -51,7 +57,7 @@ class AppHaptics(private val view: View?, private val enabled: () -> Boolean) {
     fun toggle(on: Boolean) = perform(if (on) Haptic.ToggleOn else Haptic.ToggleOff)
 
     companion object {
-        val Off = AppHaptics(null) { false }
+        val Off = AppHaptics(null, null) { false }
     }
 }
 
@@ -61,7 +67,7 @@ val LocalAppHaptics = staticCompositionLocalOf { AppHaptics.Off }
 fun rememberAppHaptics(enabled: Boolean): AppHaptics {
     val view = LocalView.current
     val on = rememberUpdatedState(enabled)
-    return remember(view) { AppHaptics(view) { on.value } }
+    return remember(view) { AppHaptics(view, null) { on.value } }
 }
 
 /** Compose's own haptics (used by text selection and our older code) routed through the setting. */

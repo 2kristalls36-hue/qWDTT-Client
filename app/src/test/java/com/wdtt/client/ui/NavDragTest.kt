@@ -79,6 +79,53 @@ class NavDragTest {
         assertEquals("a", route)
     }
 
+    @Test fun dragFeelsEachCatchOnceAndNoSecondClickOnRelease() {
+        // Detents: one tick each time the magnet catches the droplet on a tab, and no extra
+        // click when the drag ends on a tab that was already caught.
+        val felt = mutableListOf<com.wdtt.client.ui.motion.Haptic>()
+        val haptics = com.wdtt.client.ui.motion.AppHaptics(null, { felt += it }) { true }
+        var route by mutableStateOf("a")
+        compose.setContent {
+            ArdttTheme {
+                androidx.compose.runtime.CompositionLocalProvider(com.wdtt.client.ui.motion.LocalAppHaptics provides haptics) {
+                    Box(Modifier.fillMaxWidth()) {
+                        ArdttNavigationBar(
+                            items = listOf("a", "b", "c", "d").map { ArdttNavItem(it, "Tab $it", Icons.Outlined.Home) },
+                            selectedRoute = route,
+                            onSelect = { route = it },
+                        )
+                    }
+                }
+            }
+        }
+        val a = compose.onNodeWithText("Tab a").fetchSemanticsNode().boundsInRoot.center
+        val c = compose.onNodeWithText("Tab c").fetchSemanticsNode().boundsInRoot.center
+        compose.onRoot().performTouchInput {
+            down(a)
+            val steps = 40
+            for (i in 1..steps) moveTo(Offset(a.x + (c.x - a.x) * i / steps, a.y))
+            up()
+        }
+        compose.waitForIdle()
+        assertEquals("c", route)
+        // Caught on b, then on c; the start on a was already held; no click on release.
+        assertEquals(listOf(com.wdtt.client.ui.motion.Haptic.Tick, com.wdtt.client.ui.motion.Haptic.Tick), felt)
+    }
+
+    @Test fun dropletStaysInsideTheBar() {
+        val bar = 400f
+        val pad = 8f
+        val slot = (bar - pad * 2) / 4
+        // Swollen droplet over the last tab: its edge stays the inset away from the bar edge.
+        val half = slot * 0.61f
+        val cx = com.wdtt.client.ui.components.layout.dropletCenter(bar, pad, slot, 3f, half, 6f)
+        assertEquals(bar - 6f, cx + half, 0.01f)
+        val cx0 = com.wdtt.client.ui.components.layout.dropletCenter(bar, pad, slot, 0f, half, 6f)
+        assertEquals(6f, cx0 - half, 0.01f)
+        // In the middle it is not moved.
+        assertEquals(pad + slot * 1.5f, com.wdtt.client.ui.components.layout.dropletCenter(bar, pad, slot, 1f, half, 6f), 0.01f)
+    }
+
     @Test fun magnetBetweenTabs() {
         assertEquals(2f, tabMagnet(2.05f), 1e-6f)
         assertEquals(1.5f, tabMagnet(1.5f), 1e-6f)

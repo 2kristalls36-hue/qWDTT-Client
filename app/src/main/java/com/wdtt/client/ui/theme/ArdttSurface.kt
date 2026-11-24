@@ -145,6 +145,24 @@ fun cardContainerColor(): Color {
     )
 }
 
+/**
+ * Fill of the cards that were white (power card, app and site rows): in the light
+ * theme the same card tone as every other card, a shade darker than the page; in the
+ * dark theme the surface as before.
+ */
+@Composable
+@ReadOnlyComposable
+fun liteCardColor(): Color =
+    if (isDarkSurface()) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant
+
+/** Something recessed inside such a card (slider track, icon placeholder). */
+@Composable
+@ReadOnlyComposable
+fun liteInsetColor(): Color {
+    val c = MaterialTheme.colorScheme
+    return if (isDarkSurface()) c.surfaceVariant else androidx.compose.ui.graphics.lerp(c.surfaceVariant, c.outline, 0.18f)
+}
+
 /** Default shadow of a section / compact card. Cards are flat. */
 @Composable
 @ReadOnlyComposable

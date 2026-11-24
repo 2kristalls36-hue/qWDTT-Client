@@ -41,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.material.icons.outlined.FolderOpen
@@ -389,6 +390,20 @@ fun ArdttNavigationBar(
         }
     }
     val shownIndex = if (dragging && hover >= 0) hover else -1
+    val glassBar = LocalGlassBackdrop.current != null && LiquidGlass.supported
+    // While dragged the glass droplet swells.
+    val lens by animateFloatAsState(
+        if (dragging) 1f else 0f,
+        spring(dampingRatio = 0.6f, stiffness = 420f),
+        label = "tabLens",
+    )
+    // Where the droplet is, in tab slots: its centre and its half width. The tabs take
+    // their colour only inside it, so the colour moves exactly with the droplet.
+    val dropletSpan: () -> Pair<Float, Float> = {
+        val half = if (glassBar) (0.98f + 0.2f * lens) / 2f
+            else (0.86f + (kotlin.math.abs(selPos.velocity) * 0.10f).coerceAtMost(0.45f)) / 2f
+        selPos.value to half
+    }
 
     val tabs: @Composable () -> Unit = {
         Row(
@@ -402,12 +417,15 @@ fun ArdttNavigationBar(
         ) {
             items.forEachIndexed { index, item ->
                 NavBarTab(
+                    index = index,
+                    droplet = dropletSpan,
                     accent = accent,
                     accentClock = accentClock,
                     item = item,
                     selected = if (shownIndex >= 0) index == shownIndex else item.route == selectedRoute,
                     pending = shownIndex < 0 && item.route == pendingRoute,
-                    emphasis = 0f,
+                    // How much of the droplet is over this tab (weight of the label, halo).
+                    emphasis = (1f - kotlin.math.abs(selPos.value - index)).coerceIn(0f, 1f),
                     selectedColor = selectedColor,
                     unselectedColor = unselectedColor,
                     onSelect = {
@@ -438,11 +456,6 @@ fun ArdttNavigationBar(
                 // Lens in the lens: the selection is a small frosted glass lens inside the
                 // panel. It magnifies what lies under it by about 5%: the page behind the
                 // panel, frosted, and the selected tab, sharp. While dragged it swells.
-                val lens by animateFloatAsState(
-                    if (dragging) 1f else 0f,
-                    spring(dampingRatio = 0.6f, stiffness = 420f),
-                    label = "tabLens",
-                )
                 val panelLayer = androidx.compose.ui.graphics.rememberGraphicsLayer()
                 val frostLayer = androidx.compose.ui.graphics.rememberGraphicsLayer()
                 val panelGlass = remember(panelLayer) { com.wdtt.client.ui.components.surface.GlassBackdrop(panelLayer) }
@@ -506,7 +519,8 @@ fun ArdttNavigationBar(
                         // stay in the flat middle, not curl along the rim.
                         bezel = 6.dp,
                         depth = 2.dp,
-                        zoom = 0.05f,
+                        // A little magnification, like a magnifying lens over the tab.
+                        zoom = 0.12f,
                         blur = 0.dp,
                         underlay = lerp(colors.surface, Color.White, if (dark) 0.06f else 0.5f),
                         fringe = 0.45f, dispersion = 0.2f,
@@ -562,49 +576,74 @@ private const val NavAccentSheenPeriodMs = 7000
 private const val NavAccentSheenPass = 0.2f
 
 /**
- * Colours the glyphs of the selected tab. Neon: the icon and the label are a stencil
- * over the flowing neon sheet, laid out in bar coordinates, so the colours run on from
- * one glyph to the next. Sheen: a light band of the same colour crosses the glyphs.
+ * Colours the glyphs of a tab where the droplet is over it: the accent colour, and per
+ * power level the sheen (balanced) or the neon sheet seen through the glyphs (maximum,
+ * laid out in bar coordinates so the colours run on from one glyph to the next). Outside
+ * the droplet the glyphs keep their plain colour, so the colour travels with the droplet.
+ *
+ * The same offscreen layer on every tab at all times: the droplet refracts a picture that
+ * refers to the tab layers, and a layer added only when a tab became selected was missing
+ * from it (the droplet showed an empty spot).
  */
 @Composable
-private fun Modifier.navAccent(accent: NavAccent, active: Boolean, clock: () -> Float): Modifier {
-    if (!active || accent is NavAccent.Plain) return this
-    var rootX by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
+private fun Modifier.navTint(
+    index: Int,
+    droplet: () -> Pair<Float, Float>,
+    color: Color,
+    accent: NavAccent,
+    clock: () -> Float,
+): Modifier {
     val period = with(androidx.compose.ui.platform.LocalDensity.current) { 220.dp.toPx() }
+    val trackPad = with(androidx.compose.ui.platform.LocalDensity.current) { NavBarDefaults.TrackPadding.toPx() }
     return this
-        .onGloballyPositioned { rootX = it.positionInRoot().x }
         .graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
         .drawWithContent {
             drawContent()
-            when (accent) {
-                is NavAccent.Neon -> {
-                    val shift = clock() * period - rootX
-                    drawRect(
-                        Brush.linearGradient(
-                            colors = accent.colors + accent.colors.first(),
-                            start = Offset(shift, 0f),
-                            end = Offset(shift + period, period * 0.35f),
-                            tileMode = androidx.compose.ui.graphics.TileMode.Repeated,
-                        ),
-                        blendMode = androidx.compose.ui.graphics.BlendMode.SrcIn,
-                    )
-                }
-                is NavAccent.Sheen -> {
-                    val pass = clock() / NavAccentSheenPass
-                    if (pass < 1f) {
-                        val band = size.width * 0.45f
-                        val x = -band + pass * (size.width + band * 2f)
-                        val light = lerp(accent.color, Color.White, 0.5f)
+            val (pos, half) = droplet()
+            val w = size.width
+            val c = w * (pos - index + 0.5f)
+            val l = c - half * w
+            val r = c + half * w
+            if (r <= 0f || l >= w) return@drawWithContent
+            val tall = size.height
+            clipRect(left = l, top = -tall, right = r, bottom = size.height + tall) {
+                val all = Offset(-w, -tall)
+                val area = Size(w * 3f, size.height + tall * 2f)
+                drawRect(color, all, area, blendMode = androidx.compose.ui.graphics.BlendMode.SrcAtop)
+                when (accent) {
+                    is NavAccent.Neon -> {
+                        // Bar coordinates from the tab's place (tabs are equal slots), so the
+                        // sheet runs on across the tabs; no position callbacks needed.
+                        val shift = clock() * period - (trackPad + w * index)
                         drawRect(
                             Brush.linearGradient(
-                                0f to Color.Transparent, 0.5f to light.copy(alpha = 0.75f), 1f to Color.Transparent,
-                                start = Offset(x - band / 2f, 0f), end = Offset(x + band / 2f, size.height * 0.3f),
+                                colors = accent.colors + accent.colors.first(),
+                                start = Offset(shift, 0f),
+                                end = Offset(shift + period, period * 0.35f),
+                                tileMode = androidx.compose.ui.graphics.TileMode.Repeated,
                             ),
+                            all, area,
                             blendMode = androidx.compose.ui.graphics.BlendMode.SrcAtop,
                         )
                     }
+                    is NavAccent.Sheen -> {
+                        val pass = clock() / NavAccentSheenPass
+                        if (pass < 1f) {
+                            val band = w * 0.45f
+                            val x = -band + pass * (w + band * 2f)
+                            val light = lerp(accent.color, Color.White, 0.5f)
+                            drawRect(
+                                Brush.linearGradient(
+                                    0f to Color.Transparent, 0.5f to light.copy(alpha = 0.75f), 1f to Color.Transparent,
+                                    start = Offset(x - band / 2f, 0f), end = Offset(x + band / 2f, size.height * 0.3f),
+                                ),
+                                all, area,
+                                blendMode = androidx.compose.ui.graphics.BlendMode.SrcAtop,
+                            )
+                        }
+                    }
+                    NavAccent.Plain -> Unit
                 }
-                NavAccent.Plain -> Unit
             }
         }
 }
@@ -665,6 +704,41 @@ private fun BoxScope.SelectionDroplet(count: Int, pos: Float, velocity: Float, d
 }
 
 /**
+ * The sheet of the profiles icon: a landscape page, nearly as wide as the folder, with
+ * lines of text. It comes down from above the open folder and disappears behind its front
+ * panel (top edge y = 8 of the 24-unit icon).
+ */
+@Composable
+private fun PaperIntoFolder(progress: Float, tint: Color, modifier: Modifier) {
+    Canvas(modifier) {
+        val u = size.minDimension / 24f
+        val t = ((progress - 0.06f) / 0.6f).coerceIn(0f, 1f)
+        val eased = androidx.compose.animation.core.FastOutSlowInEasing.transform(t)
+        val top = (-7f + 16f * eased) * u
+        val appear = ((progress - 0.04f) / 0.08f).coerceIn(0f, 1f)
+        // Only the part above the front panel shows: below it the sheet is inside the folder.
+        clipRect(left = -4f * u, top = -12f * u, right = size.width + 4f * u, bottom = 8f * u) {
+            val left = 4.5f * u
+            val w = 15f * u
+            val h = 7.5f * u
+            drawRoundRect(
+                tint, Offset(left, top), Size(w, h), CornerRadius(1.2f * u),
+                alpha = appear, style = Stroke(width = 1.7f * u),
+            )
+            // Two lines of text, the second one shorter.
+            for (i in 0..1) {
+                val y = top + (2.7f + 2.2f * i) * u
+                val end = left + w - (if (i == 0) 2.6f else 6f) * u
+                drawLine(
+                    tint, Offset(left + 2.6f * u, y), Offset(end, y),
+                    strokeWidth = 1.3f * u, cap = androidx.compose.ui.graphics.StrokeCap.Round, alpha = appear,
+                )
+            }
+        }
+    }
+}
+
+/**
  * Filter glyph (three centred lines, widest on top) whose lines narrow in turn from
  * top to bottom and spring back: things passing through the filter.
  */
@@ -691,6 +765,8 @@ private fun SiftIcon(progress: Float, tint: Color, modifier: Modifier) {
 
 @Composable
 private fun NavBarTab(
+    index: Int,
+    droplet: () -> Pair<Float, Float>,
     accent: NavAccent,
     accentClock: () -> Float,
     item: ArdttNavItem,
@@ -703,7 +779,6 @@ private fun NavBarTab(
     modifier: Modifier = Modifier,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
     val haptics = com.wdtt.client.ui.motion.LocalAppHaptics.current
     val iconMotion = tabIconMotionFor(item.route)
     val iconProgress = remember { Animatable(0f) }
@@ -720,31 +795,40 @@ private fun NavBarTab(
         )
     }
     val iconPose = tabIconPose(iconMotion, iconProgress.value)
-    // Over clear glass the page shows right behind the tab: a halo of the background
-    // colour follows the outline of the icon and the label, and the faded grey of the
-    // other tabs turns full-strength, so they stand apart from the text of the page.
+    // Over clear glass the page shows right behind the tab: a halo follows the outline of
+    // the icon and the label, and the faded grey of the other tabs turns full-strength, so
+    // they stand apart from the text of the page.
     val glass = LocalGlassBackdrop.current
     val legible = if (glass != null && LiquidGlass.supported) glass.legibility() else 0f
+    // The glyphs are drawn in the plain colour; the accent colour is laid over them only
+    // inside the droplet (see navTint), so it moves exactly with the droplet.
+    val baseColor = lerp(unselectedColor, MaterialTheme.colorScheme.onSurface, legible)
     val paint = navTabPaint(
-        selected = selected,
-        pending = pending,
-        pressed = pressed,
+        selected = false,
+        pending = false,
+        pressed = false,
         emphasis = emphasis,
         selectedColor = selectedColor,
-        unselectedColor = lerp(unselectedColor, MaterialTheme.colorScheme.onSurface, legible),
-    ).let { it.copy(labelAlpha = it.labelAlpha + (1f - it.labelAlpha) * legible) }
-    val haloColor = MaterialTheme.colorScheme.background
-    val haloPx = with(androidx.compose.ui.platform.LocalDensity.current) { 3.dp.toPx() }
-    val halo = remember(legible, haloColor, haloPx) {
-        if (legible > 0.01f && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-            com.wdtt.client.ui.components.surface.glyphHalo(haloColor, haloPx, legible)
+        unselectedColor = baseColor,
+    ).let { it.copy(color = baseColor, labelAlpha = it.labelAlpha + (1f - it.labelAlpha) * legible) }
+    val dark = isDarkSurface()
+    // Light theme: the page colour. Dark: a quiet grey a little above the page, so the
+    // border separates the glyphs without reading as a black outline.
+    val haloColor = if (dark) lerp(MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.onBackground, 0.12f)
+        else MaterialTheme.colorScheme.background
+    // A thin border; under the frosted droplet it fades out.
+    val haloPx = with(androidx.compose.ui.platform.LocalDensity.current) { 1.8.dp.toPx() }
+    val haloStrength = (legible * (1f - emphasis) * 20f).roundToInt() / 20f
+    val halo = remember(haloStrength, haloColor, haloPx) {
+        if (haloStrength > 0.01f && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            com.wdtt.client.ui.components.surface.glyphHalo(haloColor, haloPx, haloStrength)
         } else null
     }
     Column(
         modifier = modifier
             .fillMaxHeight()
             .graphicsLayer { renderEffect = halo }
-            .navAccent(accent, active = paint.color == selectedColor, clock = accentClock)
+            .navTint(index, droplet, selectedColor, accent, clock = accentClock)
             .selectable(
                 selected = selected,
                 interactionSource = interactionSource,
@@ -752,7 +836,8 @@ private fun NavBarTab(
                 role = Role.Tab,
                 onClick = {
                     if (!selected) haptics.perform(com.wdtt.client.ui.motion.Haptic.Click)
-                    if (!iconProgress.isRunning) iconPlay++
+                    // Liquid glass: the icons stay still (their motion under the lens looked busy).
+                    if (!iconProgress.isRunning && !(glass != null && LiquidGlass.supported)) iconPlay++
                     onSelect()
                 },
             )
@@ -765,17 +850,24 @@ private fun NavBarTab(
             if (iconMotion == TabIconMotion.Sift) {
                 SiftIcon(iconProgress.value, paint.color, glyph)
             } else if (iconMotion == TabIconMotion.FolderOpen) {
-                // Open for the middle of the motion, closed at both ends.
-                val open = iconProgress.value in 0.12f..0.78f
-                Icon(
-                    imageVector = if (open) Icons.Outlined.FolderOpen else item.icon,
-                    contentDescription = null,
-                    modifier = glyph.graphicsLayer {
+                // A sheet of paper is put into the folder: the folder opens, the sheet comes
+                // down from above and goes in behind its front, the folder closes.
+                val p = iconProgress.value
+                val open = p in 0.08f..0.74f
+                Box(
+                    glyph.graphicsLayer {
                         scaleX = iconPose.scale
                         scaleY = iconPose.scale
                     },
-                    tint = paint.color,
-                )
+                ) {
+                    Icon(
+                        imageVector = if (open) Icons.Outlined.FolderOpen else item.icon,
+                        contentDescription = null,
+                        modifier = Modifier.matchParentSize(),
+                        tint = paint.color,
+                    )
+                    if (p in 0.04f..0.74f) PaperIntoFolder(p, paint.color, Modifier.matchParentSize())
+                }
             } else if (iconMotion == TabIconMotion.ServerLights) {
                 ArdttServersTabIcon(
                     lightAlpha = tabIconServerLightAlpha(iconProgress.value),

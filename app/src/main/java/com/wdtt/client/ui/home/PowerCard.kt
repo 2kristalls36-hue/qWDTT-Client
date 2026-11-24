@@ -113,22 +113,26 @@ fun PowerCard(
     val scheme = MaterialTheme.colorScheme
     val k = ((pos.value - 0.5f) * 2f).coerceIn(0f, 1f)
     val titleBlend = lerp(levelColors(PowerLevel.Stable).accent, levelColors(PowerLevel.Balanced).accent, (pos.value * 2f).coerceIn(0f, 1f))
-    val cardColor = lerp(scheme.surface, Neon.Night, k)
+    val cardColor = lerp(com.wdtt.client.ui.theme.liteCardColor(), Neon.Night, k)
     // Text switches to night colors faster than the panel darkens, so it never sits
     // grey-on-grey in the middle of the blend.
     val tk = ((k - 0.3f) / 0.2f).coerceIn(0f, 1f)
     val textMuted = lerp(scheme.onSurfaceVariant, Neon.NightMuted, tk)
     val textFaint = lerp(scheme.outline, Neon.NightFaint, tk)
     val shape = RoundedCornerShape(24.dp)
+    // Where the thumb is, in card coordinates: the neon light of the maximum level comes from it.
+    var cardRoot by remember { mutableStateOf(Offset.Zero) }
+    val puck = remember { PuckAnchor() }
 
     Box(
         modifier
             .fillMaxWidth()
+            .onGloballyPositioned { cardRoot = it.positionInRoot() }
             .clip(shape)
             .background(cardColor)
             .then(if (k > 0.01f) Modifier.border(1.dp, colors.neon[1].copy(alpha = 0.45f * k), shape) else Modifier),
     ) {
-        if (k > 0.01f) NeonAura(colors.neon, k)
+        if (k > 0.01f) NeonAura(colors.neon, k) { puck.center(pos.value) - cardRoot }
         Column(
             Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -150,11 +154,12 @@ fun PowerCard(
                 else SheenTitle(l.title, titleBlend, (1f - abs(pos.value - 0.5f) * 2f).coerceIn(0f, 1f))
             }
             PowerSlider(
+                puck = puck,
                 level = level,
                 pos = pos,
                 neon = colors.neon,
                 locked = locked,
-                trackColor = lerp(scheme.surfaceVariant, Neon.NightTrack, k),
+                trackColor = lerp(com.wdtt.client.ui.theme.liteInsetColor(), Neon.NightTrack, k),
                 onLevelChange = onLevelChange,
             )
             AnimatedVisibility(
@@ -247,19 +252,37 @@ private fun NeonTitle(text: String, neon: List<Color>) {
     }
 }
 
-/** Slowly turning blurred neon wash behind the card content. */
+/**
+ * Neon light of the maximum level, coming from the thumb: the colours turn slowly around
+ * it and fade with the distance from it. Follows the thumb while it is dragged.
+ */
 @Composable
-private fun androidx.compose.foundation.layout.BoxScope.NeonAura(neon: List<Color>, strength: Float) {
+private fun androidx.compose.foundation.layout.BoxScope.NeonAura(neon: List<Color>, strength: Float, source: () -> Offset) {
     val motion = rememberMotionScale()
     val t = rememberInfiniteTransition(label = "aura")
     val angle by t.animateFloat(
         0f, 360f, infiniteRepeatable(tween((9000 / motion).toInt(), easing = LinearEasing)), label = "a",
     )
-    Canvas(Modifier.matchParentSize().alpha(0.22f * strength)) {
-        val c = center
+    Canvas(
+        Modifier
+            .matchParentSize()
+            .graphicsLayer {
+                alpha = 0.34f * strength
+                compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen
+            },
+    ) {
+        val c = source()
+        val reach = size.maxDimension * 1.6f
         rotate(angle, c) {
-            drawCircle(Brush.sweepGradient(neon + neon.first(), c), radius = size.maxDimension, center = c)
+            drawCircle(Brush.sweepGradient(neon + neon.first(), c), radius = reach, center = c)
         }
+        drawRect(
+            Brush.radialGradient(
+                0f to Color.Black, 0.25f to Color.Black.copy(alpha = 0.7f), 1f to Color.Transparent,
+                center = c, radius = size.maxDimension * 0.85f,
+            ),
+            blendMode = androidx.compose.ui.graphics.BlendMode.DstIn,
+        )
     }
 }
 
@@ -289,8 +312,18 @@ internal fun magnet(f: Float): Float {
  * (title, colors) switches when the nearest stop changes, and on release the thumb
  * glides to the stop. Tapping anywhere on the track jumps to the nearest stop.
  */
+/** Slider geometry in root coordinates, for whatever follows the thumb. */
+private class PuckAnchor {
+    var origin by mutableStateOf(Offset.Zero)
+    var width by mutableFloatStateOf(0f)
+    var height by mutableFloatStateOf(0f)
+    var pad = 0f
+    fun center(p: Float): Offset = origin + Offset(pad + (width - 2 * pad) * p, height / 2f)
+}
+
 @Composable
 private fun PowerSlider(
+    puck: PuckAnchor,
     level: PowerLevel,
     pos: Animatable<Float, androidx.compose.animation.core.AnimationVector1D>,
     neon: List<Color>,
@@ -302,7 +335,8 @@ private fun PowerSlider(
     val scope = rememberCoroutineScope()
     val stable = levelColors(PowerLevel.Stable).accent
     val balanced = levelColors(PowerLevel.Balanced).accent
-    val surface = MaterialTheme.colorScheme.surface
+    // The card behind the track (the lens bends an opaque picture of both).
+    val surface = com.wdtt.client.ui.theme.liteCardColor()
     var dragging by remember { mutableStateOf(false) }
     var caught by remember { mutableStateOf(-1) }
     // Read through state: gesture handlers outlive recompositions.
@@ -357,7 +391,13 @@ private fun PowerSlider(
             .fillMaxWidth()
             .height(44.dp)
             .onSizeChanged { widthPx = it.width.toFloat() }
-            .onGloballyPositioned { trackGlass.origin = it.positionInRoot() }
+            .onGloballyPositioned {
+                trackGlass.origin = it.positionInRoot()
+                puck.origin = it.positionInRoot()
+                puck.width = it.size.width.toFloat()
+                puck.height = it.size.height.toFloat()
+                puck.pad = pad
+            }
             // Fade without an offscreen buffer: one would clip the glass thumb where it
             // reaches past these bounds (at the end stops).
             .graphicsLayer {

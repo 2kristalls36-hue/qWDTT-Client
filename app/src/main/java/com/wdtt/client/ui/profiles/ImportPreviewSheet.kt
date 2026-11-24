@@ -1,5 +1,6 @@
 package com.wdtt.client.ui.profiles
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -84,6 +85,7 @@ private fun ProfileCheckCard(profile: ConnectionProfile, check: ProfileStatusCli
     Column(
         Modifier
             .fillMaxWidth()
+            .animateContentSize()
             .clip(RoundedCornerShape(20.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .padding(16.dp),

@@ -83,7 +83,16 @@ fun AppRoot(settingsStore: SettingsStore) {
         ArdttBackdrop(modifier = Modifier.fillMaxSize())
         AnimatedContent(
             targetState = route,
-            transitionSpec = { fadeIn() togetherWith fadeOut() },
+            // A short slide toward the side of the chosen tab, with a fade: the page
+            // arrives from where its tab is.
+            transitionSpec = {
+                val order = listOf(Routes.HOME, Routes.PROFILES, Routes.APPS, Routes.SETTINGS)
+                val dir = if (order.indexOf(targetState) > order.indexOf(initialState)) 1 else -1
+                (fadeIn(androidx.compose.animation.core.tween(240, delayMillis = 60)) +
+                    androidx.compose.animation.slideInHorizontally(androidx.compose.animation.core.tween(300)) { w -> dir * w / 14 }) togetherWith
+                    (fadeOut(androidx.compose.animation.core.tween(140)) +
+                        androidx.compose.animation.slideOutHorizontally(androidx.compose.animation.core.tween(220)) { w -> -dir * w / 20 })
+            },
             label = "tab",
             modifier = Modifier.fillMaxSize(),
         ) { current ->

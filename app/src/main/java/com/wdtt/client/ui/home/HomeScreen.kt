@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -58,6 +59,10 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
@@ -172,11 +177,8 @@ fun HomeScreen(settingsStore: SettingsStore, onOpenProfiles: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
         Row(Modifier.fillMaxWidth().widthIn(max = 460.dp), verticalAlignment = Alignment.CenterVertically) {
-            com.wdtt.client.ui.components.control.FitText(
-                "qWDTT Client",
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.onBackground,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Start,
+            BrandTitle(
+                blend = powerPos.value,
                 modifier = Modifier
                     .weight(1f)
                     .padding(end = 8.dp)
@@ -300,6 +302,8 @@ private fun ProfileChip(name: String, value: String?, tone: SubscriptionTone, pi
     val dot by animateColorAsState(PingColors.of(ping) ?: scheme.outline.copy(alpha = 0.5f), tween(300), label = "dot")
     Row(
         Modifier
+            // Another profile or a new term: the chip eases to its new width.
+            .animateContentSize(tween(260))
             .clip(RoundedCornerShape(50))
             .background(bg)
             .clickable(role = Role.Button, onClickLabel = "Открыть сведения о профиле", onClick = onClick)
@@ -358,6 +362,71 @@ private fun StatusLine(state: TunnelUiState, level: PowerLevel, stage: com.wdtt.
         if (counter != null) {
             Text(counter, style = MaterialTheme.typography.bodySmall, color = scheme.outline)
         }
+    }
+}
+
+/**
+ * «qWDTT» in the colour of the power level and the handwritten «Client» of the app icon.
+ * Follows the slider like the rest of the screen: blue, green, and at the maximum level
+ * the neon of its card flows through the letters.
+ */
+@Composable
+private fun BrandTitle(blend: Float, modifier: Modifier = Modifier) {
+    val g = (blend * 2f).coerceIn(0f, 1f)
+    val k = ((blend - 0.5f) * 2f).coerceIn(0f, 1f)
+    val accent = lerp(levelColors(PowerLevel.Stable).accent, levelColors(PowerLevel.Balanced).accent, g)
+    val neon = levelColors(PowerLevel.Maximum).neon
+    val motion = rememberMotionScale()
+    // The neon drifts only while it is visible.
+    val drift = if (k > 0.01f && motion > 0.01f) {
+        val t = androidx.compose.animation.core.rememberInfiniteTransition(label = "brand")
+        t.animateFloat(
+            0f, 1f,
+            androidx.compose.animation.core.infiniteRepeatable(tween((2600 / motion).toInt(), easing = androidx.compose.animation.core.LinearEasing)),
+            label = "brandDrift",
+        )
+    } else null
+    val period = with(androidx.compose.ui.platform.LocalDensity.current) { 220.dp.toPx() }
+    // Two-tone level colour, deeper at the start of the word; neon laid over it by k.
+    val fill = Modifier
+        .graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
+        .drawWithContent {
+            drawContent()
+            drawRect(
+                Brush.linearGradient(listOf(lerp(accent, Color.Black, 0.12f), lerp(accent, Color.White, 0.18f)), end = Offset(size.width, size.height)),
+                blendMode = androidx.compose.ui.graphics.BlendMode.SrcIn,
+            )
+            if (k > 0.01f) {
+                val shift = (drift?.value ?: 0.3f) * period
+                drawRect(
+                    Brush.linearGradient(
+                        colors = neon + neon.first(),
+                        start = Offset(shift, 0f),
+                        end = Offset(shift + period, period * 0.35f),
+                        tileMode = androidx.compose.ui.graphics.TileMode.Repeated,
+                    ),
+                    alpha = k,
+                    blendMode = androidx.compose.ui.graphics.BlendMode.SrcAtop,
+                )
+            }
+        }
+    Row(
+        modifier.clearAndSetSemantics { contentDescription = "qWDTT Client" },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            "qWDTT",
+            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold, fontSize = 25.sp, letterSpacing = (-0.3).sp),
+            color = Color.Black,
+            maxLines = 1,
+            modifier = fill,
+        )
+        ClientScript(
+            Modifier
+                .padding(start = 4.dp)
+                .size(38.dp)
+                .then(fill),
+        )
     }
 }
 

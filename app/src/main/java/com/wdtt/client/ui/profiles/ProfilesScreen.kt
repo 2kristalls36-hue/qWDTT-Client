@@ -141,12 +141,14 @@ fun ProfilesScreen(settingsStore: SettingsStore) {
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 items(profiles, key = { it.id }) { p ->
-                    ProfileRow(
-                        profile = p,
-                        active = p.id == activeId,
-                        ping = if (running && p.id == activeId) ping else 0L,
-                        onClick = { detailsId = p.id },
-                    )
+                    Box(Modifier.animateItem(fadeInSpec = androidx.compose.animation.core.tween(240), fadeOutSpec = androidx.compose.animation.core.tween(160))) {
+                        ProfileRow(
+                            profile = p,
+                            active = p.id == activeId,
+                            ping = if (running && p.id == activeId) ping else 0L,
+                            onClick = { detailsId = p.id },
+                        )
+                    }
                 }
             }
         }

@@ -5,6 +5,7 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -122,7 +123,7 @@ internal fun TrustedWifiSettings(lite: LiteSettings) {
         else "Приложение не приостанавливает подключение в сетях Wi‑Fi."
     )
     AnimatedVisibility(enabled) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.animateContentSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (ssids.isEmpty()) {
                 Hint("Доверенные сети не добавлены.")
             }

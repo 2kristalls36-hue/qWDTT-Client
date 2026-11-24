@@ -7,6 +7,7 @@ import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.performTouchInput
@@ -150,7 +151,7 @@ class UiTour {
 
 
         // Hidden log.
-        compose.onNodeWithText("qWDTT Client").performTouchInput { longClick() }
+        compose.onNodeWithContentDescription("qWDTT Client").performTouchInput { longClick() }
         settle(8)
         shot(dir, "06_logs")
         pressBack(); settle(8)

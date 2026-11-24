@@ -324,7 +324,14 @@ fun ConnectButton(
                     tint = glyph,
                     modifier = Modifier
                         .size(46.dp)
-                        .alpha(if (state == TunnelUiState.Connecting) 0.55f + 0.45f * ((sin(phase * 9f) + 1f) / 2f) else 1f),
+                        .alpha(
+                            when {
+                                state == TunnelUiState.Connecting -> 0.55f + 0.45f * ((sin(phase * 9f) + 1f) / 2f)
+                                // Paused: a slow breath, the session is waiting.
+                                paused -> 0.6f + 0.4f * ((sin(phase * 8.5f) + 1f) / 2f)
+                                else -> 1f
+                            },
+                        ),
                 )
                 Text(
                     label,

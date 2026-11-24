@@ -94,7 +94,8 @@ val ArdttLightColorScheme = lightColorScheme(
     onBackground = Color(0xFF1C1B1A),
     surface = Color(0xFFFAFCFF),
     onSurface = Color(0xFF1C1B1A),
-    surfaceVariant = Color(0xFFE8EFF8),
+    // Cards: a shade darker than the page so they do not melt into it.
+    surfaceVariant = Color(0xFFDFE7F2),
     onSurfaceVariant = Color(0xFF3A4A5F),
     outline = Color(0xFF6B7F96),
     outlineVariant = Color(0xFFD2DDEC),

@@ -5,6 +5,8 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.material.icons.outlined.Apps
+import androidx.compose.material.icons.outlined.Language
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,7 +36,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.material.icons.outlined.ImportExport
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.draw.alpha
@@ -164,7 +165,7 @@ fun AppsScreen(settingsStore: SettingsStore) {
         backdrop = screenGlass,
         actions = {
             ArdttButton(
-                icon = androidx.compose.material.icons.Icons.Outlined.ImportExport,
+                icon = com.wdtt.client.ui.components.icons.TransferIcon,
                 contentDescription = "Экспорт и импорт",
                 variant = ArdttButtonVariant.Icon,
                 onClick = { transferOpen = true },
@@ -228,8 +229,8 @@ fun AppsScreen(settingsStore: SettingsStore) {
                 label = "shift",
             ).value
         } else 0f
-        val stubBase = MaterialTheme.colorScheme.surfaceVariant
-        val stubLight = MaterialTheme.colorScheme.surface
+        val stubBase = com.wdtt.client.ui.theme.liteInsetColor()
+        val stubLight = com.wdtt.client.ui.theme.liteCardColor()
         val shimmer = Brush.horizontalGradient(listOf(stubBase, stubLight, stubBase), startX = shift, endX = shift + 420f)
         LazyColumn(
             state = listState,
@@ -241,16 +242,24 @@ fun AppsScreen(settingsStore: SettingsStore) {
             modifier = Modifier.fillMaxSize(),
         ) {
             item(key = "panes") {
-                ArdttChoiceChipRow(
-                    choices = listOf(ArdttChoice(false, "Приложения"), ArdttChoice(true, "Сайты")),
-                    selected = sitesPane,
-                    onSelect = { sitesPane = it },
+                // Tabs, not buttons: the section the actions apply to is always marked.
+                com.wdtt.client.ui.components.control.ArdttTabRow(
+                    tabs = listOf(
+                        com.wdtt.client.ui.components.control.ArdttTab(
+                            "Приложения", androidx.compose.material.icons.Icons.Outlined.Apps, count = selected.size,
+                        ),
+                        com.wdtt.client.ui.components.control.ArdttTab(
+                            "Сайты", androidx.compose.material.icons.Icons.Outlined.Language, count = sites.size,
+                        ),
+                    ),
+                    selected = if (sitesPane) 1 else 0,
+                    onSelect = { sitesPane = it == 1 },
                     modifier = Modifier.padding(bottom = 6.dp),
                 )
             }
             if (sitesPane) {
                 item(key = "sites-hint") {
-                    Column(Modifier.padding(bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(Modifier.animateItem(fadeInSpec = tween(220), fadeOutSpec = tween(120)).padding(bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
                             "Сайты и IP-адреса из списка открываются вне туннеля.",
                             style = MaterialTheme.typography.bodySmall,
@@ -270,7 +279,7 @@ fun AppsScreen(settingsStore: SettingsStore) {
                 }
                 if (sites.isEmpty()) {
                     item(key = "sites-empty") {
-                        Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
+                        Box(Modifier.animateItem(fadeInSpec = tween(220), fadeOutSpec = tween(120)).fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
                             Text("Список пуст.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
@@ -288,7 +297,7 @@ fun AppsScreen(settingsStore: SettingsStore) {
                 }
             } else {
             item(key = "controls") {
-                Column(Modifier.padding(bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.animateItem(fadeInSpec = tween(220), fadeOutSpec = tween(120)).padding(bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     ArdttChoiceChipRow(
                         choices = listOf(
                             ArdttChoice(false, "Мимо туннеля"),
@@ -310,7 +319,16 @@ fun AppsScreen(settingsStore: SettingsStore) {
                             color = MaterialTheme.colorScheme.primary,
                         )
                     }
-                    ArdttSwitchRow(title = "Системные приложения", checked = showSystem, onCheckedChange = { showSystem = it })
+                    // A tinted card: the switch is a list filter and should not get lost among the rows.
+                    ArdttSwitchRow(
+                        title = "Системные приложения",
+                        checked = showSystem,
+                        onCheckedChange = { showSystem = it },
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.09f))
+                            .padding(horizontal = 14.dp),
+                    )
                 }
             }
             when {
@@ -318,7 +336,7 @@ fun AppsScreen(settingsStore: SettingsStore) {
                     AppRowStub(shimmer, titleWidth = listOf(0.62f, 0.48f, 0.7f, 0.55f)[i % 4], subtitleWidth = listOf(0.4f, 0.52f, 0.34f, 0.46f)[i % 4])
                 }
                 visible.isEmpty() -> item(key = "empty") {
-                    Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
+                    Box(Modifier.animateItem(fadeInSpec = tween(220), fadeOutSpec = tween(120)).fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
                         Text(
                             if (query.isNotBlank()) "Нет совпадений." else "Нет приложений.",
                             style = MaterialTheme.typography.bodyMedium,
@@ -367,7 +385,7 @@ private fun SiteRow(rule: String, modifier: Modifier = Modifier, onRemove: () ->
         modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surface)
+            .background(com.wdtt.client.ui.theme.liteCardColor())
             .padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -415,7 +433,7 @@ internal fun AppRow(
             .toggleable(value = checked, role = Role.Switch, onValueChange = onToggle),
         icon = { m ->
             icon?.let { Image(it, contentDescription = null, modifier = m) }
-                ?: Box(m.background(MaterialTheme.colorScheme.surfaceVariant))
+                ?: Box(m.background(com.wdtt.client.ui.theme.liteInsetColor()))
         },
         title = { Text(app.name, style = AppRowTitle(), maxLines = 1, overflow = TextOverflow.Ellipsis) },
         subtitle = { Text(app.packageName, style = AppRowSubtitle(), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) },
@@ -442,7 +460,7 @@ private fun AppRowFrame(
         modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surface)
+            .background(com.wdtt.client.ui.theme.liteCardColor())
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),

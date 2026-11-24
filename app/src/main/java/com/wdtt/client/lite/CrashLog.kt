@@ -40,8 +40,24 @@ object CrashLog {
         }
     }
 
-    fun isCrashProcess(context: Context): Boolean =
-        android.app.Application.getProcessName().endsWith(":crash")
+    fun isCrashProcess(context: Context): Boolean = processName(context).endsWith(":crash")
+
+    /**
+     * Name of the current process. Application.getProcessName() exists only on Android 9+;
+     * on 8.x it is read from /proc, with ActivityManager as a fallback.
+     */
+    private fun processName(context: Context): String {
+        if (android.os.Build.VERSION.SDK_INT >= 28) return android.app.Application.getProcessName()
+        runCatching {
+            val raw = File("/proc/self/cmdline").readBytes()
+            val end = raw.indexOf(0.toByte()).let { if (it < 0) raw.size else it }
+            val name = String(raw, 0, end).trim()
+            if (name.isNotEmpty()) return name
+        }
+        val pid = android.os.Process.myPid()
+        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
+        return am?.runningAppProcesses?.firstOrNull { it.pid == pid }?.processName.orEmpty()
+    }
 
     fun read(context: Context): String? =
         File(context.filesDir, FILE).takeIf { it.exists() }?.readText()?.takeIf { it.isNotBlank() }

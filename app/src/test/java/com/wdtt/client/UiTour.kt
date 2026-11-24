@@ -51,6 +51,7 @@ class UiTour {
         val lite = LiteSettings(ctx)
         lite.savePowerLevel(level)
         lite.saveLiquidGlass(glass)
+        SettingsStore(ctx).saveGlobalVkHashes("DefaultCallHash0123456789")
         SettingsStore(ctx).saveBypassRoutes("example.com\n*.example.org\n203.0.113.0/24")
         lite.saveGlassTransparency(clear)
         lite.saveSubscription(
@@ -97,6 +98,12 @@ class UiTour {
         settle(8)
         shot(dir, "00b_stage_failed")
         TunnelManager.connectionPipeline.value = ConnectionPipelineState()
+        settle(4)
+        // Stopped because another VPN took over.
+        TunnelManager.stopNotice.value = TunnelManager.NOTICE_VPN_TAKEN
+        settle(6)
+        shot(dir, "00c_vpn_taken")
+        TunnelManager.stopNotice.value = null
         settle(4)
         if (connected) {
             TunnelManager.running.value = true
@@ -162,6 +169,10 @@ class UiTour {
         compose.onNodeWithText("Обход").performClick()
         settle(14)
         shot(dir, "11_apps")
+        compose.onAllNodesWithContentDescription("Экспорт и импорт")[0].performClick()
+        settle(10)
+        shot(dir, "11x_transfer_sheet")
+        pressBack(); settle(8)
         compose.onNodeWithText("Сайты").performClick()
         settle(10)
         shot(dir, "11a_sites")
@@ -172,6 +183,8 @@ class UiTour {
         shot(dir, "11b_settings")
         swipeSheetUp("ОФОРМЛЕНИЕ")
         shot(dir, "11c_settings_bottom")
+        swipeSheetUp("ОТКЛИК", optional = true)
+        shot(dir, "11d_settings_vk")
         compose.onNodeWithText("Главная").performClick()
         settle(8)
         shot(dir, "12_home_again")

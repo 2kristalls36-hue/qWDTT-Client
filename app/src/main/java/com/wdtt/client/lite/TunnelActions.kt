@@ -29,8 +29,10 @@ object TunnelActions {
         prepareSettings(context, profileId)
         // Without a VK call link the tunnel service stops silently; say so instead —
         // unless the VK account is signed in: then the link is created automatically.
+        // Neither the profile nor the settings have a link: with a signed-in VK account a
+        // default link is created (then every profile without its own link uses it).
         if (settings.vkHashes.first().isBlank()) {
-            if (!createCallLink(context, profileId).isSuccess) return Problem.NoCallLink
+            if (!createDefaultCallLink(context).isSuccess) return Problem.NoCallLink
             prepareSettings(context, profileId)
         }
         return null
@@ -76,6 +78,36 @@ object TunnelActions {
             saveCallLink(context, profileId, "https://vk.com/call/join/$hash")
         }.onFailure { RawLog.add("[VK] call link not created: ${it.message}") }
         return result
+    }
+
+    /**
+     * Creates a VK call through the signed-in account and saves it as the default link in
+     * the settings (used by profiles without their own link).
+     */
+    suspend fun createDefaultCallLink(context: Context): Result<String> {
+        val signedIn = withContext(Dispatchers.Main) { com.wdtt.client.vkauth.VkSession.hasSessionCookie() }
+        if (!signedIn) return Result.failure(IllegalStateException("Вход в аккаунт VK не выполнен."))
+        val result = com.wdtt.client.vkauth.VkCallHashGenerator.generateOne(context)
+        result.onSuccess { hash ->
+            RawLog.add("[VK] default call link created")
+            saveDefaultCallLink(context, hash)
+        }.onFailure { RawLog.add("[VK] call link not created: ${it.message}") }
+        return result
+    }
+
+    /** Saves the default call link (or hash) and re-applies the active profile. */
+    suspend fun saveDefaultCallLink(context: Context, link: String) {
+        val clean = link.split(Regex("[,\\s]+"))
+            .map { com.wdtt.client.stripVkUrlStatic(it) }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .joinToString(",")
+        val settings = SettingsStore(context)
+        settings.saveGlobalVkHashes(clean)
+        val active = settings.currentProfileId.first()
+        if (active.isNotBlank() && ProfilesStore(context).getProfileOnce(active) != null) {
+            ProfilesStore(context).applyProfile(context, active)
+        }
     }
 
     /** Saves the VK call link (or hash) into the profile and re-applies it if active. */

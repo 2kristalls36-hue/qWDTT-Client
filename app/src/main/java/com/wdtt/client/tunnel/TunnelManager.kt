@@ -2,6 +2,7 @@ package com.wdtt.client
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -328,6 +329,7 @@ object TunnelManager {
         if (!isSwitching) {
             clearLogs()
             lastFatalError.value = null
+            stopNotice.value = null
             diagnostics.value = DiagnosticsState(requested = pendingManualDiag)
             // Флаг обновится в startJob через first()/collect; пока — кэш.
             currentParams = params
@@ -768,9 +770,25 @@ object TunnelManager {
         runBlocking { runCatching { RawTunEngine.stop(ctx) } }
     }
 
-    /** Вызывается из RawTunVpnService.onRevoke() — система сама отозвала VPN-разрешение. */
+    /** Why the last connection ended without the user stopping it; shown under the button until the next attempt. */
+    val stopNotice = MutableStateFlow<String?>(null)
+    // The same revoke comes when the user turns the VPN off in system settings.
+    const val NOTICE_VPN_TAKEN = "Подключение прервано: VPN отключён в системе или используется другим приложением."
+
+    /**
+     * Called from RawTunVpnService.onRevoke(): Android gave the VPN to another app.
+     * Only one VPN can be active, so the connection is stopped completely (client,
+     * service, notification, widget, tile) instead of looking connected.
+     */
     fun onRawTunRevoked() {
         RawTunEngine.onVpnRevoked()
+        if (!running.value && !isConnecting.value) return
+        stopNotice.value = NOTICE_VPN_TAKEN
+        com.wdtt.client.lite.RawLog.add("[RAW] VPN передан другому приложению — подключение остановлено")
+        val ctx = lastContext?.get() ?: run { stop(force = true); return }
+        runCatching {
+            ctx.startService(Intent(ctx, TunnelService::class.java).apply { action = TunnelService.ACTION_STOP_REVOKED })
+        }.onFailure { stop(force = true) }
     }
 
     private fun handleReconnectFailed(reason: String) {

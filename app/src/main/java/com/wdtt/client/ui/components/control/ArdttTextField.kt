@@ -46,6 +46,8 @@ fun ArdttTextField(
     modifier: Modifier = Modifier,
     label: String? = null,
     placeholder: String? = null,
+    /** Colour of the placeholder; null — the standard one. */
+    placeholderColor: androidx.compose.ui.graphics.Color? = null,
     supportingText: String? = null,
     isError: Boolean = false,
     enabled: Boolean = true,
@@ -69,7 +71,9 @@ fun ArdttTextField(
         enabled = enabled,
         readOnly = readOnly,
         label = label?.let { { Text(it) } },
-        placeholder = placeholder?.let { { Text(it) } },
+        placeholder = placeholder?.let {
+            { if (placeholderColor != null) Text(it, color = placeholderColor, maxLines = 1) else Text(it) }
+        },
         supportingText = supportingText?.let { { Text(it) } },
         isError = isError,
         singleLine = singleLine,

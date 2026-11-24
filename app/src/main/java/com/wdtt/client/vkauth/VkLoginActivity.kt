@@ -67,8 +67,8 @@ class VkLoginActivity : ComponentActivity() {
         CookieManager.getInstance().setAcceptCookie(true)
 
         val title = when (mode) {
-            Mode.LOGIN -> "Авторизация во ВКонтакте"
-            Mode.TOKEN -> "Получение доступа к API ВКонтакте…"
+            Mode.LOGIN -> "Вход в VK"
+            Mode.TOKEN -> "Получение доступа к VK…"
         }
         val startUrl = when (mode) {
             Mode.LOGIN -> VkSession.loginStartUrl(0)
@@ -194,7 +194,7 @@ class VkLoginActivity : ComponentActivity() {
         if (loginFlowAttempt >= 2) {
             AppLog.e(TAG_ACT, "All login variants exhausted ($reason)")
             pendingLogin.getAndSet(null)?.complete(
-                Result.failure(IllegalStateException("Не удалось открыть авторизацию ВКонтакте ($reason)")),
+                Result.failure(IllegalStateException("Не удалось открыть вход в VK.")),
             )
             finish()
             return
@@ -392,8 +392,8 @@ class VkLoginActivity : ComponentActivity() {
         }
 
         private fun notifyCancelled() {
-            pendingLogin.getAndSet(null)?.complete(Result.failure(IllegalStateException("Вход отменён")))
-            pendingToken.getAndSet(null)?.complete(Result.failure(IllegalStateException("Токен отменён")))
+            pendingLogin.getAndSet(null)?.complete(Result.failure(IllegalStateException("Вход отменён.")))
+            pendingToken.getAndSet(null)?.complete(Result.failure(IllegalStateException("Доступ не получен.")))
         }
     }
 }

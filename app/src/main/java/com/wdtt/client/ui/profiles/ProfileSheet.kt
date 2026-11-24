@@ -28,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -115,16 +116,30 @@ fun ProfileSheet(
         Block("Звонок VK") {
             var link by remember(profile.id, profile.vkHashes) { mutableStateOf(profile.vkHashes) }
             val saved = profile.vkHashes.isNotBlank()
+            // The default link from the settings applies when the profile has none.
+            val defaultLink by remember { com.wdtt.client.SettingsStore(context).globalVkHashes }.collectAsStateWithLifecycle("")
+            val usesDefault = !saved && defaultLink.isNotBlank()
             Text(
-                if (saved) "Ссылка указана." else "Для подключения нужна ссылка на звонок VK.",
+                when {
+                    saved -> "Ссылка указана."
+                    usesDefault -> VkAccountText.USING_DEFAULT
+                    else -> "Для подключения нужна ссылка на звонок VK."
+                },
                 style = MaterialTheme.typography.bodySmall,
-                color = if (saved) MaterialTheme.colorScheme.onSurfaceVariant else ToneColors.Critical,
+                color = if (saved || usesDefault) MaterialTheme.colorScheme.onSurfaceVariant else ToneColors.Critical,
             )
+            // While the field is empty and not active, the default link shows in it
+            // half-transparent as a preview; typing replaces it with the profile's own link.
+            var focused by remember { mutableStateOf(false) }
+            val preview = usesDefault && !focused && link.isEmpty()
             ArdttTextField(
                 value = link,
                 onValueChange = { link = it },
-                placeholder = "https://vk.com/call/join/…",
-                modifier = Modifier.fillMaxWidth(),
+                placeholder = if (preview) defaultLink else "https://vk.com/call/join/…",
+                placeholderColor = if (preview) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f) else null,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { focused = it.isFocused },
             )
             if (link.trim() != profile.vkHashes.trim()) {
                 ArdttButton(

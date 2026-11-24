@@ -27,8 +27,8 @@ fun rememberVkSignedIn(): MutableState<Boolean> {
 
 /** Formal texts of the VK account features. */
 object VkAccountText {
-    const val SIGNED_IN = "Вход в аккаунт VK выполнен.\nПриложение создаёт ссылку на звонок, если она не указана в профиле."
-    const val SIGNED_OUT = "Вход в аккаунт VK не выполнен.\nСсылку на звонок можно указать в профиле вручную."
+    const val SIGNED_IN = "Вход в аккаунт VK выполнен.\nПриложение создаёт ссылку на звонок, если она не указана ни в профиле, ни в настройках."
+    const val SIGNED_OUT = "Вход в аккаунт VK не выполнен.\nСсылку на звонок можно указать вручную."
     const val SIGN_IN = "Войти через VK"
     const val SIGN_OUT = "Выйти из аккаунта"
     const val SIGN_OUT_TITLE = "Выйти из аккаунта VK?"
@@ -38,4 +38,13 @@ object VkAccountText {
     const val CREATING = "Создание ссылки…"
     const val CREATED = "Ссылка на звонок создана."
     const val LOGIN_CANCELLED = "Вход не выполнен."
+    const val DEFAULT_TITLE = "Ссылка на звонок по умолчанию"
+    const val DEFAULT_HINT = "Ссылка используется для профилей, в которых ссылка на звонок не указана.\nСсылка, указанная в профиле, имеет приоритет."
+    const val USING_DEFAULT = "Используется ссылка из настроек."
+
+    /** VK refused: the reason in plain words on the next line. */
+    fun notCreated(error: Throwable): String {
+        val reason = error.message?.trim().orEmpty()
+        return if (reason.isEmpty()) "Ссылка на звонок не создана." else "Ссылка на звонок не создана.\n$reason"
+    }
 }

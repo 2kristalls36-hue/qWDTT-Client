@@ -215,7 +215,8 @@ fun HomeScreen(settingsStore: SettingsStore, onOpenProfiles: () -> Unit) {
                     }
                 },
             )
-            StatusLine(state, level, stageView)
+            val notice by TunnelManager.stopNotice.collectAsStateWithLifecycle()
+            StatusLine(state, level, stageView, notice.takeIf { state == TunnelUiState.Off })
             StatsRow(
                 visible = state == TunnelUiState.On,
                 sinceMs = since,
@@ -312,7 +313,7 @@ private fun ProfileChip(name: String, value: String?, tone: SubscriptionTone, pi
 }
 
 @Composable
-private fun StatusLine(state: TunnelUiState, level: PowerLevel, stage: com.wdtt.client.lite.StageView?) {
+private fun StatusLine(state: TunnelUiState, level: PowerLevel, stage: com.wdtt.client.lite.StageView?, notice: String? = null) {
     val colors = levelColors(level)
     val scheme = MaterialTheme.colorScheme
     val led = when (state) {
@@ -323,6 +324,8 @@ private fun StatusLine(state: TunnelUiState, level: PowerLevel, stage: com.wdtt.
     val ledColor by animateColorAsState(if (failed) PingColors.Bad else led, tween(300), label = "led")
     val text = when {
         stage != null -> com.wdtt.client.lite.ConnectionStages.line(stage)
+        // Stopped by the system (e.g. another VPN took over): say why.
+        notice != null -> notice
         state == TunnelUiState.Off -> "Не подключено"
         state == TunnelUiState.Connecting -> "Подключение…"
         else -> "Подключено"

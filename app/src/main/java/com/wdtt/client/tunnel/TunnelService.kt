@@ -31,6 +31,11 @@ private const val TUNNEL_NOTIFICATION_CHANNEL_ID = NotificationHelper.TUNNEL_CHA
 private const val TUNNEL_NOTIFICATION_ID = 1
 
 class TunnelService : Service() {
+    companion object {
+        /** Stop because Android gave the VPN to another app: forced, no connect grace. */
+        const val ACTION_STOP_REVOKED = "STOP_REVOKED"
+    }
+
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
     private var updateJob: Job? = null
@@ -168,6 +173,7 @@ class TunnelService : Service() {
                 }
             }
             "STOP" -> stopTunnel()
+            ACTION_STOP_REVOKED -> stopTunnel(force = true)
             "SWITCH_MODE" -> switchMode(intent.getStringExtra("connection_mode"))
         }
         return START_STICKY
@@ -286,13 +292,13 @@ class TunnelService : Service() {
         }
     }
 
-    private fun stopTunnel() {
+    private fun stopTunnel(force: Boolean = false) {
         updateJob?.cancel()
 
         // Уничтожаем текущий WebView (если капча решается) и чистим контекст
         CaptchaWebViewManager.onTunnelStop()
 
-        TunnelManager.stop()
+        TunnelManager.stop(force = force)
         releaseWakeLock()
         releaseWifiLock()
         stopForeground(STOP_FOREGROUND_REMOVE)

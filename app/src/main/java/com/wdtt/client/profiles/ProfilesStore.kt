@@ -485,12 +485,9 @@ class ProfilesStore(context: Context) {
     suspend fun applyProfile(context: Context, id: String) {
         val p = getProfileOnce(id) ?: return
         // save to settings
-        val finalHashes = if (p.useGlobalHashes) {
-            val global = settings.globalVkHashes.first()
-            global.ifEmpty { p.vkHashes }
-        } else {
-            p.vkHashes
-        }
+        // qWDTT Client: the profile's own call link has priority; the default link from
+        // the settings is used only when the profile has none (useGlobalHashes is ignored).
+        val finalHashes = p.vkHashes.ifBlank { settings.globalVkHashes.first() }
         val manualPorts = settings.manualPortsEnabled.first()
         val serverDtlsPort = if (manualPorts) settings.serverDtlsPort.first() else 56000
         val peerWithPort = PeerAddress.ensurePort(p.peer, serverDtlsPort)

@@ -19,6 +19,8 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -121,7 +123,11 @@ private fun ProfileCheckCard(profile: ConnectionProfile, check: ProfileStatusCli
                 )
             }
         }
-        if (profile.vkHashes.isBlank()) {
+        val ctx = LocalContext.current
+        val defaultLink by remember { com.wdtt.client.SettingsStore(ctx).globalVkHashes }.collectAsState("")
+        if (profile.vkHashes.isBlank() && defaultLink.isNotBlank()) {
+            CheckLine(Good, "Ссылка на звонок VK не указана.\nБудет использоваться ссылка из настроек.")
+        } else if (profile.vkHashes.isBlank()) {
             CheckLine(ToneColors.Warn, "Ссылка на звонок VK не указана.\nЕё можно добавить в настройках профиля.")
         } else {
             CheckLine(Good, "Ссылка на звонок VK указана.")

@@ -38,9 +38,9 @@ data class CallHashFailure(
             CallHashErrorKind.TransientNetwork -> TRANSIENT_NETWORK_MESSAGE
             CallHashErrorKind.AuthRequired -> AUTH_REQUIRED_MESSAGE
             CallHashErrorKind.Captcha ->
-                "Требуется проверка капчи. Выберите способ «Капча» в настройках обхода."
+                "VK запросил дополнительную проверку."
             CallHashErrorKind.ApiError ->
-                message.takeIf { it.isNotBlank() } ?: "ВКонтакте отклонил создание звонка"
+                message.takeIf { it.isNotBlank() } ?: "VK отклонил создание звонка."
             CallHashErrorKind.InvalidResponse -> INVALID_RESPONSE_MESSAGE
         }
 }
@@ -144,6 +144,6 @@ private fun safeCallHashErrorMessage(error: Throwable): String {
     return cut.take(180).ifBlank { error.javaClass.simpleName }
 }
 
-internal const val TRANSIENT_NETWORK_MESSAGE = "Нет связи с ВКонтакте"
-internal const val AUTH_REQUIRED_MESSAGE = "Нужна авторизация ВКонтакте"
-internal const val INVALID_RESPONSE_MESSAGE = "Некорректный ответ ВКонтакте"
+internal const val TRANSIENT_NETWORK_MESSAGE = "Нет связи с VK."
+internal const val AUTH_REQUIRED_MESSAGE = "Требуется вход в аккаунт VK."
+internal const val INVALID_RESPONSE_MESSAGE = "Некорректный ответ VK."

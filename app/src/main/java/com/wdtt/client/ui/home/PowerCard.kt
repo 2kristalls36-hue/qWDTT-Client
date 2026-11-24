@@ -434,7 +434,11 @@ private fun PowerSlider(
                 if (k > 0f) {
                     drawRoundRect(neon[0].copy(alpha = 0.35f * k), Offset(left, cy - trackH), Size(x - left, trackH * 2), CornerRadius(trackH))
                 }
-                drawRoundRect(fillBrush, Offset(left, cy - trackH / 2f), Size((x - left).coerceAtLeast(trackH), trackH), r)
+                // Exactly up to the thumb: at the first stop there is nothing to fill (a minimum
+                // width used to leave a stub that the glass thumb showed magnified).
+                if (x - left > 0.5f) {
+                    drawRoundRect(fillBrush, Offset(left, cy - trackH / 2f), Size(x - left, trackH), r)
+                }
                 // Balanced: a faint light band running along the fill.
                 val bal = (1f - abs(p - 0.5f) * 2f).coerceIn(0f, 1f)
                 if (bal > 0.01f && x - left > trackH) {

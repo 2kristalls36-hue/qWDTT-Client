@@ -34,6 +34,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.material.icons.outlined.ImportExport
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.draw.alpha
@@ -152,6 +153,8 @@ fun AppsScreen(settingsStore: SettingsStore) {
         newSite = ""
     }
 
+    var transferOpen by remember { mutableStateOf(false) }
+    if (transferOpen) BypassTransferSheet(onDismiss = { transferOpen = false })
     val screenGlass = com.wdtt.client.ui.components.surface.rememberScreenGlass()
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     com.wdtt.client.ui.motion.MagnetSnapTick(listState)
@@ -159,6 +162,14 @@ fun AppsScreen(settingsStore: SettingsStore) {
         title = "Обход",
         scrolled = listState.canScrollBackward,
         backdrop = screenGlass,
+        actions = {
+            ArdttButton(
+                icon = androidx.compose.material.icons.Icons.Outlined.ImportExport,
+                contentDescription = "Экспорт и импорт",
+                variant = ArdttButtonVariant.Icon,
+                onClick = { transferOpen = true },
+            )
+        },
         overlay = {
             // Search floats above the tab pill; with the keyboard open it rides on top of it.
             androidx.compose.runtime.CompositionLocalProvider(LocalGlassBackdrop provides screenGlass) {

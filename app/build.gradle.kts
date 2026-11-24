@@ -20,7 +20,8 @@ android {
     
     defaultConfig {
         applicationId = "net.qwdttclient.app"
-        minSdk = 28
+        // Android 8.0+: one API newer than 26 was used (process name), now version-guarded.
+        minSdk = 26
         targetSdk = 35
         // Minutes since 2020-01-01: grows with every build, local or CI,
         // so a newer APK always installs over an older one.

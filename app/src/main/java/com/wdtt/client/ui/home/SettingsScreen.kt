@@ -213,14 +213,66 @@ fun SettingsScreen() {
                                         vkNote = com.wdtt.client.ui.profiles.VkAccountText.LOGIN_CANCELLED
                                         haptics.perform(com.wdtt.client.ui.motion.Haptic.Reject)
                                     } else {
-                                        vkNote = null
-                                        haptics.perform(com.wdtt.client.ui.motion.Haptic.Confirm)
+                                        // Right after sign-in a call link is created and saved as the default.
+                                        vkNote = com.wdtt.client.ui.profiles.VkAccountText.CREATING
+                                        val made = com.wdtt.client.lite.TunnelActions.createDefaultCallLink(context)
+                                        vkNote = made.fold({ com.wdtt.client.ui.profiles.VkAccountText.CREATED }, { com.wdtt.client.ui.profiles.VkAccountText.notCreated(it) })
+                                        haptics.perform(if (made.isSuccess) com.wdtt.client.ui.motion.Haptic.Confirm else com.wdtt.client.ui.motion.Haptic.Reject)
                                     }
                                     vkBusy = false
                                 }
                             },
                             modifier = Modifier.fillMaxWidth(),
                         )
+
+                        // Default call link: used by profiles without their own link.
+                        val defaultLink by settings.globalVkHashes.collectAsStateWithLifecycle("")
+                        var linkDraft by remember(defaultLink) { mutableStateOf(defaultLink) }
+                        Text(
+                            com.wdtt.client.ui.profiles.VkAccountText.DEFAULT_TITLE,
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                        Hint(com.wdtt.client.ui.profiles.VkAccountText.DEFAULT_HINT)
+                        com.wdtt.client.ui.components.control.ArdttTextField(
+                            value = linkDraft,
+                            onValueChange = { linkDraft = it },
+                            placeholder = "https://vk.com/call/join/…",
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        if (linkDraft.trim() != defaultLink.trim()) {
+                            ArdttButton(
+                                text = "Сохранить",
+                                onClick = {
+                                    scope.launch {
+                                        com.wdtt.client.lite.TunnelActions.saveDefaultCallLink(context, linkDraft)
+                                        vkNote = null
+                                        haptics.perform(com.wdtt.client.ui.motion.Haptic.Confirm)
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                        if (vkSignedIn) {
+                            var creating by remember { mutableStateOf(false) }
+                            ArdttButton(
+                                text = if (defaultLink.isBlank()) com.wdtt.client.ui.profiles.VkAccountText.CREATE_LINK else com.wdtt.client.ui.profiles.VkAccountText.CREATE_NEW_LINK,
+                                variant = ArdttButtonVariant.Outlined,
+                                busy = creating,
+                                enabled = !creating && !vkBusy,
+                                onClick = {
+                                    scope.launch {
+                                        creating = true
+                                        vkNote = com.wdtt.client.ui.profiles.VkAccountText.CREATING
+                                        val made = com.wdtt.client.lite.TunnelActions.createDefaultCallLink(context)
+                                        vkNote = made.fold({ com.wdtt.client.ui.profiles.VkAccountText.CREATED }, { com.wdtt.client.ui.profiles.VkAccountText.notCreated(it) })
+                                        haptics.perform(if (made.isSuccess) com.wdtt.client.ui.motion.Haptic.Confirm else com.wdtt.client.ui.motion.Haptic.Reject)
+                                        creating = false
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
                     }
                     if (confirmSignOut) {
                         com.wdtt.client.ui.components.surface.ArdttDialog(

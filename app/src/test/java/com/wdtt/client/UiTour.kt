@@ -54,6 +54,8 @@ class UiTour {
         lite.saveLiquidGlass(glass)
         SettingsStore(ctx).saveGlobalVkHashes("DefaultCallHash0123456789")
         SettingsStore(ctx).saveBypassRoutes("example.com\n*.example.org\n203.0.113.0/24")
+        SettingsStore(ctx).saveExcludedApps("org.example.one,org.example.two,org.example.three")
+        SettingsStore(ctx).saveAllowedApps("org.example.four")
         lite.saveGlassTransparency(clear)
         lite.saveTrustedWifi(true)
         lite.addTrustedSsid("Домашняя сеть")

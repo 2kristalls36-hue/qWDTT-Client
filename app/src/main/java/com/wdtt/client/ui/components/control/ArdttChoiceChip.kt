@@ -1,6 +1,10 @@
 package com.wdtt.client.ui.components.control
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.animation.togetherWith
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -42,6 +46,8 @@ data class ArdttChoice<T>(
     val dimmed: Boolean = false,
     /** Runs instead of `onSelect` when the option cannot be applied yet. */
     val onBlocked: (() -> Unit)? = null,
+    /** A count shown after the label (how many items the option holds); null — none. */
+    val count: Int? = null,
 )
 
 private object ChoiceChipDefaults {
@@ -88,6 +94,7 @@ fun <T> ArdttChoiceChipRow(
                 selectedContainer = choice.accent,
                 dimmed = choice.dimmed,
                 height = chipHeight,
+                count = choice.count,
             )
         }
     }
@@ -104,6 +111,7 @@ fun ArdttChoiceChip(
     dimmed: Boolean = false,
     minWidth: Dp? = null,
     height: Dp = ArdttSize.Chip,
+    count: Int? = null,
 ) {
     val colors = MaterialTheme.colorScheme
     val haptics = com.wdtt.client.ui.motion.LocalAppHaptics.current
@@ -143,7 +151,7 @@ fun ArdttChoiceChip(
             ),
             contentPadding = ChoiceChipDefaults.ContentPadding,
         ) {
-            FitText(label, fontWeight = FontWeight.Medium)
+            ChipLabel(label, count, FontWeight.Medium, Color.Unspecified)
         }
         return
     }
@@ -188,14 +196,42 @@ fun ArdttChoiceChip(
         },
         contentPadding = ChoiceChipDefaults.ContentPadding,
     ) {
-        FitText(
+        ChipLabel(
             label,
-            fontWeight = FontWeight.SemiBold,
-            color = if (dimmed) {
-                (accentContent ?: colors.primary).copy(alpha = ArdttAlpha.Subtle)
-            } else {
-                Color.Unspecified
-            },
+            count,
+            FontWeight.SemiBold,
+            if (dimmed) (accentContent ?: colors.primary).copy(alpha = ArdttAlpha.Subtle) else Color.Unspecified,
         )
+    }
+}
+
+/** Chip label with an optional count in a small pill after it; the count rolls when it changes. */
+@Composable
+private fun ChipLabel(label: String, count: Int?, weight: FontWeight, color: Color) {
+    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        FitText(label, fontWeight = weight, color = color, modifier = Modifier.weight(1f, fill = false))
+        androidx.compose.animation.AnimatedVisibility(
+            visible = (count ?: 0) > 0,
+            enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.expandHorizontally(),
+            exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.shrinkHorizontally(),
+        ) {
+            val content = androidx.compose.material3.LocalContentColor.current
+            val tint = if (color == Color.Unspecified) content else color
+            androidx.compose.animation.AnimatedContent(
+                targetState = count ?: 0,
+                transitionSpec = {
+                    val up = targetState > initialState
+                    (androidx.compose.animation.slideInVertically { h -> if (up) h else -h } + androidx.compose.animation.fadeIn())
+                        .togetherWith(androidx.compose.animation.slideOutVertically { h -> if (up) -h else h } + androidx.compose.animation.fadeOut())
+                },
+                label = "chipCount",
+                modifier = Modifier
+                    .padding(start = 6.dp)
+                    .background(tint.copy(alpha = 0.12f), androidx.compose.foundation.shape.RoundedCornerShape(50))
+                    .padding(horizontal = 6.dp, vertical = 1.dp),
+            ) { n ->
+                Text(n.toString(), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = tint)
+            }
+        }
     }
 }

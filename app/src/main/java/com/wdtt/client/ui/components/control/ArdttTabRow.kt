@@ -35,7 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 /** One tab: label and icon, with an optional count after the label. */
-data class ArdttTab(val label: String, val icon: ImageVector, val count: Int? = null)
+data class ArdttTab(val label: String, val icon: ImageVector? = null, val count: Int? = null)
 
 /**
  * Tabs of a screen section: the current one is in the accent colour with a line under
@@ -78,13 +78,12 @@ fun ArdttTabRow(
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(tab.icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
+                    tab.icon?.let { Icon(it, contentDescription = null, tint = tint, modifier = Modifier.padding(end = 8.dp).size(20.dp)) }
                     Text(
                         tab.label,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium,
                         color = tint,
-                        modifier = Modifier.padding(start = 8.dp),
                     )
                     // The count rolls up or down when it changes.
                     androidx.compose.animation.AnimatedVisibility(

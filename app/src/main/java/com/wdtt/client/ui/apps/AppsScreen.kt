@@ -5,8 +5,6 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.material.icons.outlined.Apps
-import androidx.compose.material.icons.outlined.Language
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -245,12 +243,8 @@ fun AppsScreen(settingsStore: SettingsStore) {
                 // Tabs, not buttons: the section the actions apply to is always marked.
                 com.wdtt.client.ui.components.control.ArdttTabRow(
                     tabs = listOf(
-                        com.wdtt.client.ui.components.control.ArdttTab(
-                            "Приложения", androidx.compose.material.icons.Icons.Outlined.Apps, count = selected.size,
-                        ),
-                        com.wdtt.client.ui.components.control.ArdttTab(
-                            "Сайты", androidx.compose.material.icons.Icons.Outlined.Language, count = sites.size,
-                        ),
+                        com.wdtt.client.ui.components.control.ArdttTab("Приложения"),
+                        com.wdtt.client.ui.components.control.ArdttTab("Сайты"),
                     ),
                     selected = if (sitesPane) 1 else 0,
                     onSelect = { sitesPane = it == 1 },
@@ -265,6 +259,17 @@ fun AppsScreen(settingsStore: SettingsStore) {
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        // How full the list is: the count against the limit, right above the rows.
+                        if (sites.isNotEmpty()) {
+                            val full = sites.size >= com.wdtt.client.BypassRoutes.MAX_RULES
+                            Text(
+                                "Записей: ${sites.size} из ${com.wdtt.client.BypassRoutes.MAX_RULES}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (full) com.wdtt.client.ui.home.ToneColors.Warn else MaterialTheme.colorScheme.outline,
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                            )
+                        }
                         if (running) {
                             Text(
                                 "Изменения применяются при следующем подключении.",
@@ -299,9 +304,10 @@ fun AppsScreen(settingsStore: SettingsStore) {
             item(key = "controls") {
                 Column(Modifier.animateItem(fadeInSpec = tween(220), fadeOutSpec = tween(120)).padding(bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     ArdttChoiceChipRow(
+                        // Each mode keeps its own list; the count shows how many apps it holds.
                         choices = listOf(
-                            ArdttChoice(false, "Мимо туннеля"),
-                            ArdttChoice(true, "Только выбранные"),
+                            ArdttChoice(false, "Мимо туннеля", count = countApps(excludedRaw)),
+                            ArdttChoice(true, "Только выбранные", count = countApps(allowedRaw)),
                         ),
                         selected = onlySelected,
                         onSelect = { scope.launch { settingsStore.saveExceptionsMode(it) } },
@@ -522,3 +528,6 @@ private fun loadApps(context: Context): List<AppItem> {
         }
         .toList()
 }
+
+/** Apps in a saved comma-separated list. */
+private fun countApps(raw: String): Int = raw.split(',').count { it.isNotBlank() }

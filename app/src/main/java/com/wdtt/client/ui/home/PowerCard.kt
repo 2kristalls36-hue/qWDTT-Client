@@ -364,7 +364,8 @@ private fun PowerSlider(
     val halo by t.animateFloat(0.85f, 1.1f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "halo")
     val alpha by animateFloatAsState(if (locked) 0.45f else 1f, tween(300), label = "lock")
     var widthPx by remember { mutableFloatStateOf(1f) }
-    val pad = with(LocalDensity.current) { 14.dp.toPx() }
+    // Track ends inset so the (large) thumb stays inside the card at both stops.
+    val pad = with(LocalDensity.current) { 22.dp.toPx() }
 
     // Gesture handlers live across level changes (keyed on Unit), so a drag is never
     // cut off when the level switches under the finger; they read the latest values here.
@@ -389,7 +390,7 @@ private fun PowerSlider(
         Modifier
             .testTag("power-slider")
             .fillMaxWidth()
-            .height(44.dp)
+            .height(52.dp)
             .onSizeChanged { widthPx = it.width.toFloat() }
             .onGloballyPositioned {
                 trackGlass.origin = it.positionInRoot()
@@ -515,27 +516,28 @@ private fun PowerSlider(
             drawTrack(true)
             if (k > 0f) {
                 drawCircle(
-                    Brush.radialGradient(listOf(neon[0].copy(alpha = 0.55f * k), neon[1].copy(alpha = 0.2f * k), Color.Transparent), Offset(x, cy), 32.dp.toPx() * halo),
-                    32.dp.toPx() * halo, Offset(x, cy),
+                    Brush.radialGradient(listOf(neon[0].copy(alpha = 0.55f * k), neon[1].copy(alpha = 0.2f * k), Color.Transparent), Offset(x, cy), 48.dp.toPx() * halo),
+                    48.dp.toPx() * halo, Offset(x, cy),
                 )
             }
             val solid = 1f - lens
             if (solid > 0.01f) {
-                drawCircle(Color.Black.copy(alpha = 0.12f * solid), 15.dp.toPx(), Offset(x, cy + 1.5.dp.toPx()))
+                drawCircle(Color.Black.copy(alpha = 0.12f * solid), 22.5.dp.toPx(), Offset(x, cy + 2.25.dp.toPx()))
                 // The thumb itself takes the level color: blue → green, then a light core in a neon ring.
-                drawCircle(lerp(base, Neon.NightText, k), 14.dp.toPx(), Offset(x, cy), alpha = solid)
-                drawCircle(Color.White, 12.5.dp.toPx(), Offset(x, cy), alpha = 0.9f * (1f - k) * solid, style = Stroke(2.dp.toPx()))
+                drawCircle(lerp(base, Neon.NightText, k), 21.dp.toPx(), Offset(x, cy), alpha = solid)
+                drawCircle(Color.White, 18.75.dp.toPx(), Offset(x, cy), alpha = 0.9f * (1f - k) * solid, style = Stroke(3.dp.toPx()))
                 if (k > 0f) {
-                    drawCircle(Brush.sweepGradient(blended + blended.first(), Offset(x, cy)), 12.5.dp.toPx(), Offset(x, cy), alpha = k * solid, style = Stroke(3.dp.toPx()))
+                    drawCircle(Brush.sweepGradient(blended + blended.first(), Offset(x, cy)), 18.75.dp.toPx(), Offset(x, cy), alpha = k * solid, style = Stroke(4.5.dp.toPx()))
                 }
-                drawCircle(Color.White, 4.dp.toPx(), Offset(x, cy), alpha = 0.85f * (1f - k) * solid)
+                drawCircle(Color.White, 6.dp.toPx(), Offset(x, cy), alpha = 0.85f * (1f - k) * solid)
             }
         }
         // Liquid glass lens: a capsule that bends the track along its rim (the fill wraps
         // around the edge, the background is squeezed into a bright band) and magnifies the middle.
         if (lens > 0.01f) {
             val dark = com.wdtt.client.ui.theme.isDarkSurface()
-            val h = (30f + 12f * lift).dp
+            // 1.5× the former 30 dp capsule.
+            val h = (45f + 18f * lift).dp
             val w = h * (1.4f + 0.22f * lift)
             val density = LocalDensity.current
             Box(

@@ -311,6 +311,8 @@ fun ArdttNavigationBar(
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
     accent: NavAccent = NavAccent.Plain,
+    /** The droplet position in tabs, on every move (drag, travel after a tap). */
+    onPosition: ((Float) -> Unit)? = null,
 ) {
     val colors = MaterialTheme.colorScheme
     val shell = ArdttFloatingShell.shellColor()
@@ -360,6 +362,10 @@ fun ArdttNavigationBar(
     val count = items.size
     val committedIndex = items.indexOfFirst { it.route == (pendingRoute ?: selectedRoute) }.coerceAtLeast(0)
     val selPos = remember { Animatable(committedIndex.toFloat()) }
+    val positionSink = rememberUpdatedState(onPosition)
+    LaunchedEffect(selPos) {
+        androidx.compose.runtime.snapshotFlow { selPos.value }.collect { positionSink.value?.invoke(it) }
+    }
     // Read through state: gesture handlers outlive recompositions.
     val magnetOn by androidx.compose.runtime.rememberUpdatedState(com.wdtt.client.ui.motion.LocalMagnetEnabled.current)
     var dragging by remember { mutableStateOf(false) }

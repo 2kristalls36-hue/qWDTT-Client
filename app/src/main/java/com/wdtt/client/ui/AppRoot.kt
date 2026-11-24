@@ -1,9 +1,5 @@
 package com.wdtt.client.ui
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
@@ -36,6 +32,16 @@ internal object Routes {
 @Composable
 fun AppRoot(settingsStore: SettingsStore) {
     var route by rememberSaveable { mutableStateOf(Routes.HOME) }
+    val pageOrder = listOf(Routes.HOME, Routes.PROFILES, Routes.APPS, Routes.SETTINGS)
+    val pager = androidx.compose.foundation.pager.rememberPagerState(initialPage = pageOrder.indexOf(route).coerceAtLeast(0)) { pageOrder.size }
+    // Position of the tab bar droplet, in tabs; the page strip is kept at the same place.
+    var dropletPos by androidx.compose.runtime.remember { androidx.compose.runtime.mutableFloatStateOf(pageOrder.indexOf(route).coerceAtLeast(0).toFloat()) }
+    androidx.compose.runtime.LaunchedEffect(pager) {
+        androidx.compose.runtime.snapshotFlow { dropletPos }.collect { p ->
+            val page = kotlin.math.round(p).toInt().coerceIn(0, pageOrder.size - 1)
+            pager.scrollToPage(page, (p - page).coerceIn(-0.5f, 0.5f))
+        }
+    }
     val context = androidx.compose.ui.platform.LocalContext.current
     val update by com.wdtt.client.lite.AppUpdate.available.collectAsState()
     androidx.compose.runtime.LaunchedEffect(Unit) { com.wdtt.client.lite.AppUpdate.checkIfDue(context) }
@@ -84,22 +90,16 @@ fun AppRoot(settingsStore: SettingsStore) {
         // Everything under the tab bar is recorded once per frame for the glass to refract.
         Box(Modifier.fillMaxSize().glassBackdropSource(backdrop)) {
         ArdttBackdrop(modifier = Modifier.fillMaxSize())
-        AnimatedContent(
-            targetState = route,
-            // A short slide toward the side of the chosen tab, with a fade: the page
-            // arrives from where its tab is.
-            transitionSpec = {
-                val order = listOf(Routes.HOME, Routes.PROFILES, Routes.APPS, Routes.SETTINGS)
-                val dir = if (order.indexOf(targetState) > order.indexOf(initialState)) 1 else -1
-                (fadeIn(androidx.compose.animation.core.tween(240, delayMillis = 60)) +
-                    androidx.compose.animation.slideInHorizontally(androidx.compose.animation.core.tween(300)) { w -> dir * w / 14 }) togetherWith
-                    (fadeOut(androidx.compose.animation.core.tween(140)) +
-                        androidx.compose.animation.slideOutHorizontally(androidx.compose.animation.core.tween(220)) { w -> -dir * w / 20 })
-            },
-            label = "tab",
+        // The screens are pages of one strip that follows the droplet of the tab bar: drag
+        // the droplet and the screens slide along with it; a tap moves both together. The
+        // content itself does not swipe between screens (lists and sliders keep the gesture).
+        androidx.compose.foundation.pager.HorizontalPager(
+            state = pager,
+            userScrollEnabled = false,
+            key = { pageOrder[it] },
             modifier = Modifier.fillMaxSize(),
-        ) { current ->
-            when (current) {
+        ) { page ->
+            when (pageOrder[page]) {
                 Routes.HOME -> com.wdtt.client.ui.home.HomeScreen(
                     settingsStore = settingsStore,
                     onOpenProfiles = { route = Routes.PROFILES },
@@ -116,6 +116,7 @@ fun AppRoot(settingsStore: SettingsStore) {
             items = items,
             selectedRoute = route,
             onSelect = { route = it },
+            onPosition = { dropletPos = it },
             modifier = Modifier.align(Alignment.BottomCenter),
             accent = when (level) {
                 com.wdtt.client.lite.PowerLevel.Stable -> com.wdtt.client.ui.components.layout.NavAccent.Plain

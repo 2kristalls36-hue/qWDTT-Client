@@ -62,6 +62,12 @@ class GlassBackdrop(val layer: GraphicsLayer) {
 
     /** Frost (blur) of what is behind; gone at full transparency. */
     fun frost(): Dp = (7f * (1f - transparency)).coerceIn(0f, 7f).dp
+
+    /**
+     * How much labels on the glass need help to stay legible: 0 up to the default
+     * transparency (the veil and the frost are enough), 1 at fully clear glass.
+     */
+    fun legibility(): Float = ((transparency - 0.5f) / 0.5f).coerceIn(0f, 1f)
 }
 
 val LocalGlassBackdrop = compositionLocalOf<GlassBackdrop?> { null }

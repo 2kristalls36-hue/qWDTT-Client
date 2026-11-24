@@ -628,17 +628,30 @@ private fun NavBarTab(
         )
     }
     val iconPose = tabIconPose(iconMotion, iconProgress.value)
+    // Over clear glass the page shows right behind the tab: a halo of the background
+    // colour follows the outline of the icon and the label, and the faded grey of the
+    // other tabs turns full-strength, so they stand apart from the text of the page.
+    val glass = LocalGlassBackdrop.current
+    val legible = if (glass != null && LiquidGlass.supported) glass.legibility() else 0f
     val paint = navTabPaint(
         selected = selected,
         pending = pending,
         pressed = pressed,
         emphasis = emphasis,
         selectedColor = selectedColor,
-        unselectedColor = unselectedColor,
-    )
+        unselectedColor = lerp(unselectedColor, MaterialTheme.colorScheme.onSurface, legible),
+    ).let { it.copy(labelAlpha = it.labelAlpha + (1f - it.labelAlpha) * legible) }
+    val haloColor = MaterialTheme.colorScheme.background
+    val haloPx = with(androidx.compose.ui.platform.LocalDensity.current) { 3.dp.toPx() }
+    val halo = remember(legible, haloColor, haloPx) {
+        if (legible > 0.01f && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            com.wdtt.client.ui.components.surface.glyphHalo(haloColor, haloPx, legible)
+        } else null
+    }
     Column(
         modifier = modifier
             .fillMaxHeight()
+            .graphicsLayer { renderEffect = halo }
             .selectable(
                 selected = selected,
                 interactionSource = interactionSource,
@@ -709,18 +722,11 @@ private fun NavBarTab(
             }
         }
         Spacer(modifier = Modifier.height(ArdttSpacing.Hairline))
-        // Over clear glass the page shows right behind the label: a soft halo of the
-        // background colour keeps it legible at any transparency.
-        val glass = LocalGlassBackdrop.current
-        val halo = if (glass != null && glass.veil(isDarkSurface()) < 0.25f) {
-            androidx.compose.ui.graphics.Shadow(MaterialTheme.colorScheme.background, blurRadius = with(androidx.compose.ui.platform.LocalDensity.current) { 7.dp.toPx() })
-        } else null
         // One line; with a large system font the label shrinks instead of breaking mid-word.
         com.wdtt.client.ui.components.control.FitText(
             text = item.label,
             modifier = Modifier.fillMaxWidth(),
             style = ArdttNavigationLabelStyle.copy(
-                shadow = halo,
                 platformStyle = PlatformTextStyle(includeFontPadding = false),
                 lineHeightStyle = LineHeightStyle(
                     alignment = LineHeightStyle.Alignment.Center,

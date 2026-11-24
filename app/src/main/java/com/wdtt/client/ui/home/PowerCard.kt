@@ -536,9 +536,10 @@ private fun PowerSlider(
         // around the edge, the background is squeezed into a bright band) and magnifies the middle.
         if (lens > 0.01f) {
             val dark = com.wdtt.client.ui.theme.isDarkSurface()
-            // 1.5× the former 30 dp capsule.
-            val h = (45f + 18f * lift).dp
-            val w = h * (1.4f + 0.22f * lift)
+            // 1.5× the former 30 dp capsule. Held, it grows only a little: at the end stops
+            // it must still fit inside the card (track inset + card padding ≈ 42 dp each side).
+            val h = (45f + 3f * lift).dp
+            val w = h * (1.4f + 0.12f * lift)
             val density = LocalDensity.current
             Box(
                 Modifier
@@ -560,7 +561,9 @@ private fun PowerSlider(
                     bezel = h * 0.22f,
                     depth = h * 0.42f,
                     zoom = 0.04f,
-                    fringe = 0.3f, steepRim = true, dispersion = 0.3f,
+                    // Almost no colour split: on the large capsule it showed as rainbow
+                    // bands along the top and bottom edges.
+                    fringe = 0.08f, steepRim = true, dispersion = 0.04f,
                     blur = 0.dp,
                     underlay = lerp(surface, Neon.Night, ((pos.value - 0.5f) * 2f).coerceIn(0f, 1f)),
                     modifier = Modifier.fillMaxSize().graphicsLayer { this.alpha = lens.coerceIn(0f, 1f) },

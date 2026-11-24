@@ -182,7 +182,8 @@ fun HomeScreen(settingsStore: SettingsStore, onOpenProfiles: () -> Unit) {
                 blend = powerPos.value,
                 modifier = Modifier
                     .weight(1f)
-                    .padding(end = 8.dp)
+                    // A little air between the logo and the screen edge.
+                    .padding(start = 6.dp, end = 8.dp)
                     .pointerInput(Unit) { detectTapGestures(onLongPress = { haptics.perform(com.wdtt.client.ui.motion.Haptic.LongPress); logsOpen = true }) },
             )
             ProfileChip(

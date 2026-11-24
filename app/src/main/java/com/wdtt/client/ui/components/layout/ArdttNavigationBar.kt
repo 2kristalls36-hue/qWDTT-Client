@@ -2,6 +2,7 @@ package com.wdtt.client.ui.components.layout
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -285,6 +286,17 @@ internal fun tabIconPoseAtRest(pose: TabIconPose): Boolean {
         abs(pose.scale - 1f) < 0.01f
 }
 
+/**
+ * How the selected tab is coloured, after the power level: plain (stable), the level
+ * colour with a rare faint sheen (balanced), or a cut-out through which the neon sheet
+ * of the maximum level shows (maximum) — the same colours as its card, no light of its own.
+ */
+sealed interface NavAccent {
+    data object Plain : NavAccent
+    data class Sheen(val color: Color) : NavAccent
+    data class Neon(val colors: List<Color>) : NavAccent
+}
+
 /** Floating pill bottom bar. The current tab is the icon and label, with no fill behind it. */
 @Composable
 fun ArdttNavigationBar(
@@ -292,10 +304,17 @@ fun ArdttNavigationBar(
     selectedRoute: String,
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
+    accent: NavAccent = NavAccent.Plain,
 ) {
     val colors = MaterialTheme.colorScheme
     val shell = ArdttFloatingShell.shellColor()
-    val selectedColor = colors.primary
+    val selectedColor = when (accent) {
+        NavAccent.Plain -> colors.primary
+        is NavAccent.Sheen -> accent.color
+        is NavAccent.Neon -> accent.colors[1]
+    }
+    // One clock for the accent of the selected tab; read only while drawing.
+    val accentClock = rememberNavAccentClock(accent)
     val unselectedColor = colors.onSurfaceVariant
     var pendingRoute by remember { mutableStateOf<String?>(null) }
     val selectTab = rememberUpdatedState(onSelect)
@@ -383,6 +402,8 @@ fun ArdttNavigationBar(
         ) {
             items.forEachIndexed { index, item ->
                 NavBarTab(
+                    accent = accent,
+                    accentClock = accentClock,
                     item = item,
                     selected = if (shownIndex >= 0) index == shownIndex else item.route == selectedRoute,
                     pending = shownIndex < 0 && item.route == pendingRoute,
@@ -519,6 +540,75 @@ fun ArdttNavigationBar(
     }
 }
 
+/** 0..1, looping: a slow neon drift, or the sheen cycle (one pass, then a long rest). */
+@Composable
+private fun rememberNavAccentClock(accent: NavAccent): () -> Float {
+    if (accent is NavAccent.Plain) return { 0f }
+    val motion = com.wdtt.client.ui.home.rememberMotionScale()
+    if (motion <= 0.01f) return { 0.3f }
+    val periodMs = if (accent is NavAccent.Neon) NavAccentNeonPeriodMs else NavAccentSheenPeriodMs
+    val t = androidx.compose.animation.core.rememberInfiniteTransition(label = "navAccent")
+    val p = t.animateFloat(
+        0f, 1f,
+        androidx.compose.animation.core.infiniteRepeatable(tween((periodMs / motion).toInt(), easing = LinearEasing)),
+        label = "navAccentPhase",
+    )
+    return { p.value }
+}
+
+private const val NavAccentNeonPeriodMs = 2600
+/** Balanced: one faint pass about every seven seconds. */
+private const val NavAccentSheenPeriodMs = 7000
+private const val NavAccentSheenPass = 0.2f
+
+/**
+ * Colours the glyphs of the selected tab. Neon: the icon and the label are a stencil
+ * over the flowing neon sheet, laid out in bar coordinates, so the colours run on from
+ * one glyph to the next. Sheen: a light band of the same colour crosses the glyphs.
+ */
+@Composable
+private fun Modifier.navAccent(accent: NavAccent, active: Boolean, clock: () -> Float): Modifier {
+    if (!active || accent is NavAccent.Plain) return this
+    var rootX by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
+    val period = with(androidx.compose.ui.platform.LocalDensity.current) { 220.dp.toPx() }
+    return this
+        .onGloballyPositioned { rootX = it.positionInRoot().x }
+        .graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
+        .drawWithContent {
+            drawContent()
+            when (accent) {
+                is NavAccent.Neon -> {
+                    val shift = clock() * period - rootX
+                    drawRect(
+                        Brush.linearGradient(
+                            colors = accent.colors + accent.colors.first(),
+                            start = Offset(shift, 0f),
+                            end = Offset(shift + period, period * 0.35f),
+                            tileMode = androidx.compose.ui.graphics.TileMode.Repeated,
+                        ),
+                        blendMode = androidx.compose.ui.graphics.BlendMode.SrcIn,
+                    )
+                }
+                is NavAccent.Sheen -> {
+                    val pass = clock() / NavAccentSheenPass
+                    if (pass < 1f) {
+                        val band = size.width * 0.45f
+                        val x = -band + pass * (size.width + band * 2f)
+                        val light = lerp(accent.color, Color.White, 0.5f)
+                        drawRect(
+                            Brush.linearGradient(
+                                0f to Color.Transparent, 0.5f to light.copy(alpha = 0.75f), 1f to Color.Transparent,
+                                start = Offset(x - band / 2f, 0f), end = Offset(x + band / 2f, size.height * 0.3f),
+                            ),
+                            blendMode = androidx.compose.ui.graphics.BlendMode.SrcAtop,
+                        )
+                    }
+                }
+                NavAccent.Plain -> Unit
+            }
+        }
+}
+
 /**
  * Magnet between tabs while dragging: near a tab the droplet is drawn in faster the
  * closer it gets and is caught on it; between tabs it follows the finger.
@@ -601,6 +691,8 @@ private fun SiftIcon(progress: Float, tint: Color, modifier: Modifier) {
 
 @Composable
 private fun NavBarTab(
+    accent: NavAccent,
+    accentClock: () -> Float,
     item: ArdttNavItem,
     selected: Boolean,
     pending: Boolean,
@@ -652,6 +744,7 @@ private fun NavBarTab(
         modifier = modifier
             .fillMaxHeight()
             .graphicsLayer { renderEffect = halo }
+            .navAccent(accent, active = paint.color == selectedColor, clock = accentClock)
             .selectable(
                 selected = selected,
                 interactionSource = interactionSource,

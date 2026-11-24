@@ -102,7 +102,9 @@ fun HomeScreen(settingsStore: SettingsStore, onOpenProfiles: () -> Unit) {
     val upMb by TunnelManager.trafficUpMb.collectAsStateWithLifecycle()
     val downActive by TunnelManager.downActive.collectAsStateWithLifecycle()
     val upActive by TunnelManager.upActive.collectAsStateWithLifecycle()
+    val trustedPause by TunnelManager.trustedPause.collectAsStateWithLifecycle()
     val state = when {
+        trustedPause != null -> TunnelUiState.Paused
         connecting || reconnecting -> TunnelUiState.Connecting
         running -> TunnelUiState.On
         else -> TunnelUiState.Off
@@ -140,7 +142,8 @@ fun HomeScreen(settingsStore: SettingsStore, onOpenProfiles: () -> Unit) {
     // Real connection stages from the client, for the ring and the line under the button.
     val pipeline by TunnelManager.connectionPipeline.collectAsStateWithLifecycle()
     val stageView = com.wdtt.client.lite.ConnectionStages.view(pipeline)
-        ?.takeIf { state == TunnelUiState.Connecting || it.failed }
+        // While paused on a trusted network the line names the pause, not the last attempt.
+        ?.takeIf { state != TunnelUiState.Paused && (state == TunnelUiState.Connecting || it.failed) }
 
     // Vibration on results: connected, or an attempt that ended without connecting.
     val haptics = com.wdtt.client.ui.motion.LocalAppHaptics.current
@@ -216,7 +219,11 @@ fun HomeScreen(settingsStore: SettingsStore, onOpenProfiles: () -> Unit) {
                 },
             )
             val notice by TunnelManager.stopNotice.collectAsStateWithLifecycle()
-            StatusLine(state, level, stageView, notice.takeIf { state == TunnelUiState.Off })
+            StatusLine(
+                state, level, stageView,
+                notice = notice.takeIf { state == TunnelUiState.Off }
+                    ?: trustedPause?.let { "Пауза: доверенная сеть «$it»." },
+            )
             StatsRow(
                 visible = state == TunnelUiState.On,
                 sinceMs = since,

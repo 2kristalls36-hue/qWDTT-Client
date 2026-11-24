@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 private const val TUNNEL_NOTIFICATION_CHANNEL_ID = NotificationHelper.TUNNEL_CHANNEL_ID
 private const val TUNNEL_NOTIFICATION_ID = 1
@@ -55,6 +56,12 @@ class TunnelService : Service() {
     private val networkFingerprints = mutableMapOf<Network, String>()
     private var lastUnderlyingFingerprint = ""
     private var isTunnelPaused = false
+    // Trusted Wi‑Fi: a Wi‑Fi watcher, a settings watcher and one pending evaluation.
+    private var trustedCallback: ConnectivityManager.NetworkCallback? = null
+    private var trustedSettingsJob: Job? = null
+    private var trustedEvalJob: Job? = null
+    private var startGateJob: Job? = null
+    private var lastWifiEventMs = 0L
     private var recoveringFromNetworkLoss = false
     private var lastVpnReconnectAttemptMs = 0L
     private var wasOnWifi = false
@@ -249,7 +256,22 @@ class TunnelService : Service() {
         }
     }
 
+    /**
+     * Every start passes here: on a trusted Wi‑Fi network the connection is paused
+     * right away instead of being brought up.
+     */
     private fun startTunnel(params: TunnelParams, forceStart: Boolean = false) {
+        watchTrustedWifi()
+        startGateJob?.cancel()
+        startGateJob = TunnelManager.scope.launch {
+            val trusted = trustedSsidNow()
+            launch(Dispatchers.Main) {
+                if (trusted != null) enterTrustedPause(trusted) else launchTunnel(params, forceStart)
+            }
+        }
+    }
+
+    private fun launchTunnel(params: TunnelParams, forceStart: Boolean) {
         // Учитываем и невалидированный Wi‑Fi: иначе через секунду VALIDATED
         // выглядит как «переход на Wi‑Fi» и стоп по опции убивает ручной старт.
         wasOnWifi = isUnderlyingWifiActive() || isUnderlyingWifiPresent()
@@ -294,6 +316,8 @@ class TunnelService : Service() {
 
     private fun stopTunnel(force: Boolean = false) {
         updateJob?.cancel()
+        unwatchTrustedWifi()
+        TunnelManager.trustedPause.value = null
 
         // Уничтожаем текущий WebView (если капча решается) и чистим контекст
         CaptchaWebViewManager.onTunnelStop()
@@ -308,6 +332,140 @@ class TunnelService : Service() {
         AppShortcuts.refreshAsync(applicationContext)
         stopSelf()
     }
+
+    // ── Trusted Wi‑Fi ──────────────────────────────────────────────────────────
+
+    /** The trusted network the device is on now, or null (feature off, other network, name unknown). */
+    private suspend fun trustedSsidNow(): String? {
+        val lite = com.wdtt.client.lite.LiteSettings(applicationContext)
+        val ssids = lite.trustedSsids.first()
+        if (!lite.trustedWifi.first() || ssids.isEmpty()) return null
+        var wifi = com.wdtt.client.lite.TrustedWifi.read(applicationContext, requireBackground = false)
+        // Wi‑Fi is up but its name is not known yet: it usually comes within seconds. Without
+        // access in the background it may never come there, so the start is not held up.
+        val canRead = com.wdtt.client.lite.TrustedWifi.hasBackgroundPermission(applicationContext)
+        val deadline = System.currentTimeMillis() + com.wdtt.client.lite.TrustedWifi.SSID_WAIT_MS
+        while (canRead && wifi.connected && wifi.problem == null && wifi.ssid.isBlank() && System.currentTimeMillis() < deadline) {
+            delay(com.wdtt.client.lite.TrustedWifi.SSID_RETRY_MS)
+            wifi = com.wdtt.client.lite.TrustedWifi.read(applicationContext, requireBackground = false)
+        }
+        return wifi.ssid.takeIf { wifi.ssidKnown && com.wdtt.client.lite.TrustedWifi.isTrusted(it, ssids) }
+    }
+
+    /** Wi‑Fi events and the settings both lead to one evaluation. */
+    private fun watchTrustedWifi() {
+        val cm = connectivityManager ?: return
+        if (trustedCallback == null) {
+            val callback = object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) {
+                    lastWifiEventMs = System.currentTimeMillis()
+                    scheduleTrustedEval(
+                        if (TunnelManager.trustedPause.value != null) com.wdtt.client.lite.TrustedWifi.EXIT_DELAY_MS
+                        else com.wdtt.client.lite.TrustedWifi.ENTER_DELAY_MS,
+                    )
+                }
+
+                override fun onLost(network: Network) {
+                    lastWifiEventMs = System.currentTimeMillis()
+                    // A moment for the lost network to leave the system list, then resume.
+                    scheduleTrustedEval(
+                        if (TunnelManager.trustedPause.value != null) 1_500L else com.wdtt.client.lite.TrustedWifi.EXIT_DELAY_MS,
+                    )
+                }
+
+                override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
+                    // Signal strength changes often: do not push back an evaluation already pending.
+                    if (TunnelManager.trustedPause.value != null || trustedEvalJob?.isActive == true) return
+                    scheduleTrustedEval(com.wdtt.client.lite.TrustedWifi.ENTER_DELAY_MS)
+                }
+            }
+            val request = NetworkRequest.Builder()
+                .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+                .build()
+            runCatching { cm.registerNetworkCallback(request, callback) }
+                .onSuccess { trustedCallback = callback }
+        }
+        if (trustedSettingsJob?.isActive != true) {
+            val lite = com.wdtt.client.lite.LiteSettings(applicationContext)
+            trustedSettingsJob = TunnelManager.scope.launch {
+                kotlinx.coroutines.flow.combine(lite.trustedWifi, lite.trustedSsids) { on, list -> on to list }
+                    .distinctUntilChanged()
+                    .collect { scheduleTrustedEval(0L) }
+            }
+        }
+    }
+
+    private fun unwatchTrustedWifi() {
+        startGateJob?.cancel()
+        trustedEvalJob?.cancel()
+        trustedSettingsJob?.cancel()
+        trustedSettingsJob = null
+        trustedCallback?.let { cb -> runCatching { connectivityManager?.unregisterNetworkCallback(cb) } }
+        trustedCallback = null
+    }
+
+    private fun scheduleTrustedEval(delayMs: Long) {
+        trustedEvalJob?.cancel()
+        trustedEvalJob = TunnelManager.scope.launch {
+            delay(delayMs)
+            evaluateTrustedWifi()
+        }
+    }
+
+    private suspend fun evaluateTrustedWifi() {
+        val lite = com.wdtt.client.lite.LiteSettings(applicationContext)
+        val enabled = lite.trustedWifi.first()
+        val ssids = lite.trustedSsids.first()
+        val wifi = com.wdtt.client.lite.TrustedWifi.read(applicationContext, requireBackground = false)
+        val paused = TunnelManager.trustedPause.value != null
+        val active = TunnelManager.running.value || TunnelManager.isConnecting.value
+        when (com.wdtt.client.lite.TrustedWifi.decide(enabled, active, paused, wifi, ssids)) {
+            com.wdtt.client.lite.TrustedWifi.Transition.Pause ->
+                kotlinx.coroutines.withContext(Dispatchers.Main) { enterTrustedPause(wifi.ssid) }
+            com.wdtt.client.lite.TrustedWifi.Transition.Resume ->
+                kotlinx.coroutines.withContext(Dispatchers.Main) { resumeFromTrustedPause() }
+            com.wdtt.client.lite.TrustedWifi.Transition.None -> {
+                // Shortly after a Wi‑Fi event its name may still be unknown: look again.
+                val fresh = System.currentTimeMillis() - lastWifiEventMs < com.wdtt.client.lite.TrustedWifi.SSID_WAIT_MS
+                if (enabled && ssids.isNotEmpty() && !paused && active && wifi.connected &&
+                    wifi.problem == null && !wifi.ssidKnown && fresh
+                ) {
+                    scheduleTrustedEval(com.wdtt.client.lite.TrustedWifi.SSID_RETRY_MS)
+                }
+            }
+        }
+    }
+
+    /** Tunnel and VPN down, the service stays with its notification and waits. */
+    private fun enterTrustedPause(ssid: String) {
+        if (TunnelManager.trustedPause.value != null) return
+        com.wdtt.client.lite.RawLog.add("[СЕТЬ] Доверенная сеть Wi‑Fi «$ssid»: подключение приостановлено")
+        updateJob?.cancel()
+        networkRecoveryJob?.cancel()
+        CaptchaWebViewManager.onTunnelStop()
+        TunnelManager.stop(force = true)
+        TunnelManager.trustedPause.value = ssid
+        releaseWakeLock()
+        releaseWifiLock()
+        updateNotification(pausedText(ssid))
+    }
+
+    private fun resumeFromTrustedPause() {
+        if (TunnelManager.trustedPause.value == null) return
+        com.wdtt.client.lite.RawLog.add("[СЕТЬ] Выход из доверенной сети Wi‑Fi: подключение восстанавливается")
+        // While paused the VPN may have been given to another app: do not take it back.
+        if (runCatching { android.net.VpnService.prepare(this) != null }.getOrDefault(true)) {
+            TunnelManager.stopNotice.value = TunnelManager.NOTICE_VPN_TAKEN
+            stopTunnel(force = true)
+            return
+        }
+        TunnelManager.trustedPause.value = null
+        TunnelManager.beginConnecting()
+        onStartCommand(Intent(applicationContext, TunnelService::class.java).apply { action = "START_SAVED" }, 0, 0)
+    }
+
+    private fun pausedText(ssid: String) = "Пауза: доверенная сеть «$ssid»."
 
     /**
      * Порты сервера для диагностики (go_client -diag-ports). Порт WG берём из
@@ -791,6 +949,7 @@ class TunnelService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        unwatchTrustedWifi()
         networkRecoveryJob?.cancel()
         wakeRecoveryJob?.cancel()
         screenStateReceiver?.let { unregisterReceiver(it) }

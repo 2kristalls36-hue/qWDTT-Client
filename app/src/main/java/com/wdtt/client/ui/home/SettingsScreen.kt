@@ -319,6 +319,7 @@ fun SettingsScreen() {
                         if (onBoot) "Приложение подключится к активному профилю после включения устройства."
                         else "Приложение не будет подключаться автоматически."
                     )
+                    TrustedWifiSettings(lite)
                 }
                 }
             }
@@ -492,7 +493,7 @@ private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) 
 }
 
 @Composable
-private fun SwitchLine(title: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+internal fun SwitchLine(title: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     val haptics = com.wdtt.client.ui.motion.LocalAppHaptics.current
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
@@ -505,7 +506,7 @@ private fun SwitchLine(title: String, checked: Boolean, onChange: (Boolean) -> U
 }
 
 @Composable
-private fun Hint(text: String) {
+internal fun Hint(text: String) {
     // The sentence changes with the switch: the old one fades out, the new one fades in.
     AnimatedContent(text, transitionSpec = { fadeIn(tween(300, 120)) togetherWith fadeOut(tween(200)) }, label = "hint") {
         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

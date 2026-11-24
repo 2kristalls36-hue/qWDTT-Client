@@ -772,6 +772,15 @@ object TunnelManager {
 
     /** Why the last connection ended without the user stopping it; shown under the button until the next attempt. */
     val stopNotice = MutableStateFlow<String?>(null)
+
+    /**
+     * Name of the trusted Wi‑Fi network the connection is paused on (tunnel and VPN down,
+     * the service waits for the device to leave it); null — not paused.
+     */
+    val trustedPause = MutableStateFlow<String?>(null)
+
+    /** Connected, connecting or paused on a trusted network: a tap on a toggle stops it. */
+    fun sessionActive(): Boolean = running.value || isConnecting.value || trustedPause.value != null
     // The same revoke comes when the user turns the VPN off in system settings.
     const val NOTICE_VPN_TAKEN = "Подключение прервано: VPN отключён в системе или используется другим приложением."
 

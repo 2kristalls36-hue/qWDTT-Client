@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -60,7 +61,8 @@ import com.wdtt.client.lite.PowerLevel
 import kotlin.math.cos
 import kotlin.math.sin
 
-enum class TunnelUiState { Off, Connecting, On }
+/** Paused: on a trusted Wi‑Fi network the tunnel is down and waits for the device to leave it. */
+enum class TunnelUiState { Off, Connecting, On, Paused }
 
 /**
  * Round connect button. Flat level-colored core; around it, depending on state and level:
@@ -87,8 +89,9 @@ fun ConnectButton(
     val neon = levelColors(PowerLevel.Maximum).neon
     val accent = lerp(stableColors.accent, balancedColors.accent, g)
     val onAccent = lerp(stableColors.onAccent, balancedColors.onAccent, g)
-    val live = state != TunnelUiState.Off
+    val live = state == TunnelUiState.Connecting || state == TunnelUiState.On
     val on = state == TunnelUiState.On
+    val paused = state == TunnelUiState.Paused
     val motion = rememberMotionScale()
     val reduced = motion < 1f
 
@@ -110,7 +113,8 @@ fun ConnectButton(
     }
 
     val surface = MaterialTheme.colorScheme.surface
-    val onF by animateFloatAsState(if (on) 1f else 0f, tween(400), label = "on")
+    // Paused: a pale core, the session is kept but nothing goes through the tunnel.
+    val onF by animateFloatAsState(if (on) 1f else if (paused) 0.22f else 0f, tween(400), label = "on")
     val core = lerp(lerp(surface, Neon.Night, k), lerp(accent, Neon.Night, k), onF)
     val glyph = lerp(lerp(accent, Neon.NightFaint, k), lerp(onAccent, Neon.NightText, k), onF)
     val neonGlow = k * (0.3f + 0.6f * onF)
@@ -152,6 +156,7 @@ fun ConnectButton(
         TunnelUiState.Off -> "Подключиться"
         TunnelUiState.Connecting -> "Подключение"
         TunnelUiState.On -> "Отключиться"
+        TunnelUiState.Paused -> "Пауза"
     }
 
     Box(modifier.size(236.dp), contentAlignment = Alignment.Center) {
@@ -308,13 +313,13 @@ fun ConnectButton(
                 .background(core, CircleShape)
                 .border(2.dp, accent.copy(alpha = 0.35f * (1f - onF) * (1f - k)), CircleShape)
                 .clickable(interactionSource = interaction, indication = null, onClick = onClick)
-                .semantics { contentDescription = label },
+                .semantics { contentDescription = if (paused) "Пауза. Отключиться" else label },
             contentAlignment = Alignment.Center,
         ) {
             val glow = k > 0.5f && on
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Icon(
-                    Icons.Rounded.PowerSettingsNew,
+                    if (paused) Icons.Rounded.Pause else Icons.Rounded.PowerSettingsNew,
                     contentDescription = null,
                     tint = glyph,
                     modifier = Modifier

@@ -29,7 +29,7 @@ class TunnelWidgetProvider : AppWidgetProvider() {
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
         if (intent.action != ACTION_TOGGLE) return
-        if (TunnelManager.running.value || TunnelManager.isConnecting.value) {
+        if (TunnelManager.sessionActive()) {
             TunnelControl.stop(context)
             return
         }
@@ -71,6 +71,7 @@ class TunnelWidgetProvider : AppWidgetProvider() {
 
         private fun render(context: Context, level: PowerLevel, profileName: String): RemoteViews {
             val running = TunnelManager.running.value
+            val paused = TunnelManager.trustedPause.value
             val connecting = TunnelManager.isConnecting.value || TunnelManager.isReconnecting.value
             val on = running && !connecting
             val ping = if (on) TunnelManager.pingMs.value else 0L
@@ -88,12 +89,13 @@ class TunnelWidgetProvider : AppWidgetProvider() {
             }
             views.setImageViewResource(R.id.widget_button_bg, bg)
             views.setInt(R.id.widget_button_icon, "setColorFilter", iconColor)
-            views.setContentDescription(R.id.widget_button_icon, if (running || connecting) "Отключиться" else "Подключиться")
+            views.setContentDescription(R.id.widget_button_icon, if (running || connecting || paused != null) "Отключиться" else "Подключиться")
 
             views.setTextViewText(R.id.widget_title, profileName.ifBlank { "qWDTT Client" })
             views.setTextViewText(
                 R.id.widget_status,
                 when {
+                    paused != null -> "Пауза: доверенная сеть"
                     connecting -> "Подключение…"
                     on && ping > 0 -> "Подключено · $ping мс"
                     on -> "Подключено"

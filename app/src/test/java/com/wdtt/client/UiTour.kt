@@ -54,6 +54,8 @@ class UiTour {
         SettingsStore(ctx).saveGlobalVkHashes("DefaultCallHash0123456789")
         SettingsStore(ctx).saveBypassRoutes("example.com\n*.example.org\n203.0.113.0/24")
         lite.saveGlassTransparency(clear)
+        lite.saveTrustedWifi(true)
+        lite.addTrustedSsid("Домашняя сеть")
         lite.saveSubscription(
             home.id,
             SubscriptionInfo(
@@ -104,6 +106,12 @@ class UiTour {
         settle(6)
         shot(dir, "00c_vpn_taken")
         TunnelManager.stopNotice.value = null
+        settle(4)
+        // Paused on a trusted Wi‑Fi network.
+        TunnelManager.trustedPause.value = "Домашняя сеть"
+        settle(8)
+        shot(dir, "00d_trusted_pause")
+        TunnelManager.trustedPause.value = null
         settle(4)
         if (connected) {
             TunnelManager.running.value = true
@@ -185,6 +193,8 @@ class UiTour {
         shot(dir, "11c_settings_bottom")
         swipeSheetUp("ОТКЛИК", optional = true)
         shot(dir, "11d_settings_vk")
+        swipeSheetUp("ПОДПИСКА", optional = true)
+        shot(dir, "11e_settings_connection")
         compose.onNodeWithText("Главная").performClick()
         settle(8)
         shot(dir, "12_home_again")

@@ -33,6 +33,8 @@ class LiteSettings(context: Context) {
         private val WARN_ENABLED = booleanPreferencesKey("expiry_warn_enabled")
         private val WARN_DAYS = intPreferencesKey("expiry_warn_days")
         private val CONNECT_ON_BOOT = booleanPreferencesKey("connect_on_boot")
+        private val TRUSTED_WIFI = booleanPreferencesKey("trusted_wifi")
+        private val TRUSTED_SSIDS = androidx.datastore.preferences.core.stringSetPreferencesKey("trusted_wifi_ssids")
         private val LIQUID_GLASS = booleanPreferencesKey("liquid_glass")
         private val HAPTICS = booleanPreferencesKey("haptics")
         private val MAGNET = booleanPreferencesKey("magnet")
@@ -74,6 +76,20 @@ class LiteSettings(context: Context) {
 
     val connectOnBoot: Flow<Boolean> = store.data.map { it[CONNECT_ON_BOOT] ?: false }
     suspend fun saveConnectOnBoot(enabled: Boolean) = store.edit { it[CONNECT_ON_BOOT] = enabled }
+
+    /** Pause on trusted Wi‑Fi networks, and the networks (names). */
+    val trustedWifi: Flow<Boolean> = store.data.map { it[TRUSTED_WIFI] ?: false }
+    val trustedSsids: Flow<Set<String>> = store.data.map { it[TRUSTED_SSIDS] ?: emptySet() }
+    suspend fun saveTrustedWifi(enabled: Boolean) = store.edit { it[TRUSTED_WIFI] = enabled }
+    suspend fun addTrustedSsid(ssid: String) = store.edit {
+        val clean = TrustedWifi.sanitize(ssid)
+        if (clean.isEmpty()) return@edit
+        val now = it[TRUSTED_SSIDS] ?: emptySet()
+        if (now.none { s -> s.equals(clean, ignoreCase = true) }) it[TRUSTED_SSIDS] = now + clean
+    }
+    suspend fun removeTrustedSsid(ssid: String) = store.edit {
+        it[TRUSTED_SSIDS] = (it[TRUSTED_SSIDS] ?: emptySet()) - ssid
+    }
 
     fun subscription(profileId: String): Flow<SubscriptionInfo?> = store.data.map { p ->
         val checked = p[checkedKey(profileId)] ?: return@map null

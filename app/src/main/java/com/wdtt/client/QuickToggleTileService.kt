@@ -25,7 +25,7 @@ class QuickToggleTileService : TileService() {
     override fun onClick() {
         super.onClick()
         runCatching {
-            if (TunnelManager.running.value || TunnelManager.isConnecting.value) {
+            if (TunnelManager.sessionActive()) {
                 TunnelControl.stop(applicationContext)
                 updateTile(false)
                 return
@@ -66,7 +66,9 @@ class QuickToggleTileService : TileService() {
     }
 
     private fun updateTileState() {
-        if (TunnelManager.isConnecting.value || TunnelManager.isReconnecting.value) {
+        if (TunnelManager.trustedPause.value != null) {
+            updateTilePaused()
+        } else if (TunnelManager.isConnecting.value || TunnelManager.isReconnecting.value) {
             updateTileConnecting()
         } else {
             updateTile(TunnelManager.running.value)
@@ -79,6 +81,16 @@ class QuickToggleTileService : TileService() {
         tile.label = "qWDTT"
         if (Build.VERSION.SDK_INT >= 29) {
             tile.subtitle = "Подключение…"
+        }
+        tile.updateTile()
+    }
+
+    private fun updateTilePaused() {
+        val tile = qsTile ?: return
+        tile.state = Tile.STATE_ACTIVE
+        tile.label = "qWDTT Client"
+        if (Build.VERSION.SDK_INT >= 29) {
+            tile.subtitle = "Пауза"
         }
         tile.updateTile()
     }

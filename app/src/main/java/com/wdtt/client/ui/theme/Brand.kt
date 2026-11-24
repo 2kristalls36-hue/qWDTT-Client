@@ -1,43 +1,85 @@
-package com.wdtt.client.ui.home
+package com.wdtt.client.ui.theme
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Matrix
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.vector.PathParser
 
 /**
- * The handwritten «Client» of the app icon in its thin cut (the same outline as the
- * launcher icon and the tile) with a fine wave under it. Drawn in black; the caller
- * colours it (the title lays the level colour over it).
+ * The brand, as described in docs/brand/BRANDBOOK.md: colours and the logo outlines.
+ * The same outlines are in the launcher icon, the monochrome icon, the quick settings
+ * tile and the SVG files in docs/brand; change them together.
+ */
+object Brand {
+    /** Ground of the app icon. */
+    val Night = Color(0xFF0D0D0F)
+    /** The wave of the app icon (at 95 percent opacity over [Night]). */
+    val Red = Color(0xFFE0142A)
+    /** The deep wave under it. */
+    val DeepRed = Color(0xFF8E000C)
+    val White = Color(0xFFFFFFFF)
+
+    /**
+     * The logo: «Client» above «qWDTT», both tilted up by 6° as on the app icon, in the
+     * icon's units. The box is [LOGO_X], [LOGO_Y], [LOGO_WIDTH] × [LOGO_HEIGHT]; the
+     * capitals of «qWDTT» are [CAP_HEIGHT] high.
+     */
+    const val LOGO_X = 26.8f
+    const val LOGO_Y = 32.6f
+    const val LOGO_WIDTH = 58.4f
+    const val LOGO_HEIGHT = 37.6f
+    const val CAP_HEIGHT = 7.33f
+}
+
+/**
+ * The logo in two lines, drawn in black to the size of [modifier]; the caller colours it
+ * (the home title lays the colour of the power level over it). Keep the box at
+ * [Brand.LOGO_WIDTH] : [Brand.LOGO_HEIGHT].
  */
 @Composable
-internal fun ClientScript(modifier: Modifier = Modifier) {
-    val letters = remember { PathParser().parsePathString(CLIENT_LETTERS).toPath() }
-    val wave = remember { PathParser().parsePathString(CLIENT_WAVE).toPath() }
+fun BrandWordmark(modifier: Modifier = Modifier) {
+    val qwdtt = remember { PathParser().parsePathString(QWDTT_OUTLINE).toPath() }
+    val client = remember { PathParser().parsePathString(CLIENT_LETTERS).toPath() }
     Canvas(modifier) {
-        // The icon's 64-unit box, its offset and its slant (as in ic_tile_lite.xml).
-        val k = size.minDimension / 64f
+        val k = size.width / Brand.LOGO_WIDTH
         withTransform({
-            scale(k, k, pivot = androidx.compose.ui.geometry.Offset.Zero)
-            translate(-22f, -15f)
-            rotate(-6f, pivot = androidx.compose.ui.geometry.Offset(54f, 50f))
+            scale(k, k, pivot = Offset.Zero)
+            translate(-Brand.LOGO_X, -Brand.LOGO_Y)
         }) {
-            drawPath(letters, Color.Black)
-            drawPath(wave, Color.Black, style = Stroke(width = 2.0f, cap = StrokeCap.Round))
+            // As on the app icon: each line tilted up by 6° about its own point.
+            withTransform({ rotate(-6f, pivot = Offset(54f, 50f)) }) { drawPath(client, Color.Black) }
+            withTransform({ rotate(-6f, pivot = Offset(54f, 62f)) }) { drawPath(qwdtt, Color.Black) }
         }
     }
 }
 
-private const val CLIENT_WAVE = "M30,66 C40,60 50,70 60,64 C68,59 74,60 80,63"
+/** «qWDTT» of the app icon (Poppins, bold italic, as outlines). */
+internal const val QWDTT_OUTLINE =
+        "M39.401 59.099Q40.021 59.099 40.462 59.335Q40.903 59.572 41.113 59.939L41.249 59.183H42.73L41.218 67.772" +
+        "H39.737L40.357 64.202Q40 64.58 39.47 64.832Q38.939 65.084 38.309 65.084Q37.669 65.084 37.165 64.79" +
+        "Q36.661 64.496 36.377 63.96Q36.094 63.425 36.094 62.721Q36.094 62.407 36.157 62.081" +
+        "Q36.314 61.209 36.797 60.532Q37.28 59.855 37.968 59.477Q38.656 59.099 39.401 59.099ZM40.766 61.703" +
+        "Q40.766 61.073 40.404 60.727Q40.042 60.38 39.506 60.38Q39.118 60.38 38.729 60.579Q38.341 60.779 38.052 61.162" +
+        "Q37.763 61.545 37.669 62.081Q37.637 62.281 37.637 62.469Q37.637 63.089 38.005 63.446" +
+        "Q38.372 63.803 38.897 63.803Q39.296 63.803 39.68 63.603Q40.063 63.404 40.352 63.016Q40.64 62.627 40.735 62.091" +
+        "Q40.766 61.882 40.766 61.703ZM54.438 57.671 51.088 65H49.356L48.904 59.782L46.552 65L44.83 65.01L44.148 57.671" +
+        "H45.723L46.017 63.362L48.505 57.671H50.143L50.542 63.331L52.852 57.671ZM61.442 60.569" +
+        "Q61.442 60.968 61.368 61.346Q61.179 62.449 60.555 63.273Q59.93 64.097 58.974 64.548Q58.019 65 56.853 65H54.291" +
+        "L55.593 57.671H58.155Q59.174 57.671 59.914 58.023Q60.654 58.374 61.048 59.025Q61.442 59.676 61.442 60.569Z" +
+        "M59.867 61.346Q59.919 60.999 59.919 60.748Q59.919 59.865 59.4 59.383Q58.88 58.9 57.882 58.9H56.853" +
+        "L55.992 63.803H57.021Q58.176 63.803 58.916 63.152Q59.657 62.501 59.867 61.346ZM68.309 57.671 68.099 58.826" +
+        "H66.157L65.065 65H63.584L64.676 58.826H62.723L62.933 57.671ZM74.568 57.671 74.358 58.826H72.415L71.323 65" +
+        "H69.843L70.935 58.826H68.982L69.192 57.671Z"
 
-/** The script of the icon, thinned once (contours merged, a band taken off the edge); the same path as in the launcher icon and the tile. */
-private const val CLIENT_LETTERS =
+/**
+ * «Client» of the app icon (Great Vibes) in its thin cut: contours merged, a band of
+ * 0.575 taken off every edge. The same outline as the launcher icon and the tile.
+ */
+internal const val CLIENT_LETTERS =
         "M28.043 47.344Q28.043 44.243 29.206 41.854Q30.358 39.488 32.316 38.199Q34.262 36.919 36.642 36.919" +
         "Q38.781 36.919 39.845 37.973Q40.907 39.026 40.907 40.788Q40.907 41.975 40.512 42.655" +
         "Q40.205 43.183 39.656 43.183Q39.244 43.183 39.051 43.026Q38.911 42.912 38.911 42.636" +

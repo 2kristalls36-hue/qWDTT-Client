@@ -1,3 +1,10 @@
+<p>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/qwdtt-client-logo-dark.svg">
+    <img src="docs/brand/qwdtt-client-logo-light.svg" width="200" alt="qWDTT Client">
+  </picture>
+</p>
+
 # qWDTT Client
 
 Android-клиент для подключения к серверу [qWDTT](https://github.com/SpaceNeuroX/proxy-turn-vk-android) через TURN-инфраструктуру звонков VK.
@@ -70,3 +77,7 @@ export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018
 qWDTT Client основан на исходном коде [qWDTT](https://github.com/SpaceNeuroX/proxy-turn-vk-android) (SpaceNeuroX), который, в свою очередь, развивает оригинальный проект [WDTT](https://github.com/amurcanov/proxy-turn-vk-android).
 
 qWDTT Client не является официальной версией qWDTT или WDTT.
+
+## Бренд
+
+Логотип, цвета и шрифты: [docs/brand/BRANDBOOK.md](docs/brand/BRANDBOOK.md).

@@ -411,21 +411,14 @@ private fun BrandTitle(blend: Float, modifier: Modifier = Modifier) {
                 )
             }
         }
-    Row(
-        modifier.clearAndSetSemantics { contentDescription = "qWDTT Client" },
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            "qWDTT",
-            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold, fontSize = 25.sp, letterSpacing = (-0.3).sp),
-            color = Color.Black,
-            maxLines = 1,
-            modifier = fill,
-        )
-        ClientScript(
+    // The logo of the brandbook, in two lines as on the app icon, 50 dp tall.
+    Box(modifier.clearAndSetSemantics { contentDescription = "qWDTT Client" }) {
+        com.wdtt.client.ui.theme.BrandWordmark(
             Modifier
-                .padding(start = 4.dp)
-                .size(38.dp)
+                .size(
+                    width = (50f * com.wdtt.client.ui.theme.Brand.LOGO_WIDTH / com.wdtt.client.ui.theme.Brand.LOGO_HEIGHT).dp,
+                    height = 50.dp,
+                )
                 .then(fill),
         )
     }

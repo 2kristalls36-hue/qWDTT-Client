@@ -334,8 +334,9 @@ fun ArdttNavigationBar(
     // and its corners run concentric with the screen's (radius = screen radius − gap).
     // Otherwise (buttons at the bottom, unknown corners) it keeps its usual place.
     val screen = LocalScreenShape.current
-    val fitted = screen.gestureNav && screen.bottomCorner > 0.dp
-    val gap = NavBarDefaults.OuterPadding
+    val fittedGap = screen.tabBarGap(NavBarDefaults.OuterPadding, ArdttSize.NavTrack / 2)
+    val fitted = fittedGap != null
+    val gap = fittedGap ?: NavBarDefaults.OuterPadding
     val barRadius = if (fitted) (screen.bottomCorner - gap).coerceIn(NavBarDefaults.MinCorner, ArdttSize.NavTrack / 2)
         else NavBarDefaults.GlassCorner
     val barShape = androidx.compose.foundation.shape.RoundedCornerShape(barRadius)

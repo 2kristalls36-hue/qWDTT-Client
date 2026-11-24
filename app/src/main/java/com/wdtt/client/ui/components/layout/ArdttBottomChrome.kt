@@ -29,9 +29,9 @@ object ArdttBottomChrome {
      */
     @Composable
     fun navigationReserve(): Dp {
-        val screen = LocalScreenShape.current
-        return if (screen.gestureNav && screen.bottomCorner > 0.dp) {
-            ArdttSize.NavTrack + ArdttSpacing.Small + ArdttSpacing.SmallPlus
+        val gap = LocalScreenShape.current.tabBarGap(ArdttSpacing.SmallPlus, ArdttSize.NavTrack / 2)
+        return if (gap != null) {
+            ArdttSize.NavTrack + ArdttSpacing.Small + gap
         } else {
             NavZoneHeight + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
         }

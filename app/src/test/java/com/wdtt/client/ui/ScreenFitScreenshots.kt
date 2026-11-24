@@ -74,6 +74,10 @@ class ScreenFitScreenshots {
     @Test @Config(sdk = [35], qualifiers = "w411dp-h891dp-xxhdpi")
     fun gesture56Plain() = run("g56_plain", ScreenShape(56.dp, true, null), PowerLevel.Stable, glass = false)
 
+    // The values a ColorOS phone reported: 58 dp corners, gesture navigation.
+    @Test @Config(sdk = [35], qualifiers = "w411dp-h891dp-night-xxhdpi")
+    fun gesture58GlassColorOs() = run("g58_glass_coloros", ScreenShape(58.dp, true, hole), PowerLevel.Balanced, glass = true, clear = 0.9f)
+
     @Test @Config(sdk = [35], qualifiers = "w411dp-h891dp-xxhdpi")
     fun buttons44() = run("b44", ScreenShape(44.dp, false, hole), PowerLevel.Balanced, glass = true)
 }

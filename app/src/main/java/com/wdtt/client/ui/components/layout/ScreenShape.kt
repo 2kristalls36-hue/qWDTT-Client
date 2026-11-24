@@ -111,13 +111,28 @@ private fun readScreenShape(view: View, density: Density): ScreenShape {
     val hole = pathBounds?.let { roundHole(it.left, it.top, it.right, it.bottom) }
         ?: rects.firstNotNullOfOrNull { roundHole(it.left.toFloat(), it.top.toFloat(), it.right.toFloat(), it.bottom.toFloat()) }
 
-    val shape = ScreenShape(bottomCorner = corner, gestureNav = gesture, cameraHole = hole)
+    // Some firmware (ColorOS) reports a punch hole as the band of the status bar it sits
+    // in: from the top edge down, as wide as the hole. The hole is then a circle as wide
+    // as the band, in its vertical middle (the status bar is centred on the camera).
+    val bandHole = if (hole != null) null else {
+        val band = pathBounds?.let { Rect(it.left, it.top, it.right, it.bottom) }
+            ?: rects.firstOrNull()?.let { Rect(it.left.toFloat(), it.top.toFloat(), it.right.toFloat(), it.bottom.toFloat()) }
+        band?.takeIf { b ->
+            b.top <= 1f && b.height > b.width && b.height <= b.width * 3f &&
+                with(density) { b.width.toDp() } <= 64.dp && b.width <= screenW * 0.3f
+        }?.let { b ->
+            val d = b.width
+            val cy = b.top + b.height / 2f
+            Rect(b.center.x - d / 2f, cy - d / 2f, b.center.x + d / 2f, cy + d / 2f)
+        }
+    }
+    val shape = ScreenShape(bottomCorner = corner, gestureNav = gesture, cameraHole = hole ?: bandHole)
     // Once per distinct reading: what the phone reported, for the connection log.
     val report = "[ЭКРАН] углы: API ${apiCorner}px, ресурсы ${resCorner}px → ${corner.value.toInt()}dp; " +
         "навигация: ${if (gesture) "жесты" else "кнопки"} (снизу ${navBottom}px, нажимаемые ${tappableBottom}px); " +
         "вырез: ${rects.joinToString { "${it.left},${it.top}-${it.right},${it.bottom}" }.ifEmpty { "нет" }}" +
         (pathBounds?.let { "; контур ${it.left.toInt()},${it.top.toInt()}-${it.right.toInt()},${it.bottom.toInt()}" } ?: "") +
-        "; камера: ${if (hole != null) "круглая" else "нет"}"
+        "; камера: ${when { hole != null -> "круглая"; bandHole != null -> "круглая (по полосе выреза)"; else -> "нет" }}"
     if (report != lastReport) {
         lastReport = report
         runCatching { com.wdtt.client.lite.RawLog.add(report) }
@@ -138,4 +153,15 @@ private fun systemCornerRadiusPx(view: View): Int {
         }
     }
     return 0
+}
+
+/**
+ * Gap between the fitted tab bar and the screen edges, or null when the bar keeps its
+ * usual place (button navigation, unknown corners). The bar runs concentric with the
+ * screen corners: its radius is the screen radius minus the gap. A bar cannot be rounder
+ * than half its height, so on very round screens the gap grows instead.
+ */
+fun ScreenShape.tabBarGap(minGap: Dp, maxBarRadius: Dp): Dp? {
+    if (!gestureNav || bottomCorner <= 0.dp) return null
+    return maxOf(minGap, bottomCorner - maxBarRadius)
 }

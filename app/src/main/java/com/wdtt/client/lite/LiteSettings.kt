@@ -39,7 +39,8 @@ class LiteSettings(context: Context) {
         private val HAPTICS = booleanPreferencesKey("haptics")
         private val MAGNET = booleanPreferencesKey("magnet")
         private val GLASS_TRANSPARENCY = androidx.datastore.preferences.core.floatPreferencesKey("glass_transparency")
-        const val DEFAULT_GLASS_TRANSPARENCY = 0.5f
+        /** Set whenever the glass is turned on. */
+        const val DEFAULT_GLASS_TRANSPARENCY = 0.9f
         const val DEFAULT_WARN_DAYS = 3
         val WARN_DAY_CHOICES = listOf(1, 3, 7)
 

@@ -119,7 +119,14 @@ fun SettingsScreen() {
                         com.wdtt.client.ui.components.control.LiteSwitch(
                             checked = glass && glassSupported,
                             enabled = glassSupported,
-                            onCheckedChange = { haptics.toggle(it); scope.launch { lite.saveLiquidGlass(it) } },
+                            onCheckedChange = { on ->
+                                haptics.toggle(on)
+                                scope.launch {
+                                    // Turning the glass on starts from the default transparency.
+                                    if (on) lite.saveGlassTransparency(LiteSettings.DEFAULT_GLASS_TRANSPARENCY)
+                                    lite.saveLiquidGlass(on)
+                                }
+                            },
                         )
                     }
                     androidx.compose.animation.AnimatedVisibility(

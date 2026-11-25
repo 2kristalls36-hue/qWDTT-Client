@@ -77,7 +77,6 @@ fun SnowGlobe(dropletPos: () -> Float, tabs: Int, corner: Float, modifier: Modif
             return@LaunchedEffect
         }
         launch { snapshotFlow { pos() }.collect { wake.trySend(Unit) } }
-        wake.trySend(Unit) // the snow of the just-shaken globe settles when the bar appears
         val half = 0.51f / tabs * sim.aspect
         var lastX = Float.NaN
         while (true) {
@@ -101,7 +100,8 @@ fun SnowGlobe(dropletPos: () -> Float, tabs: Int, corner: Float, modifier: Modif
     Canvas(
         modifier.onSizeChanged {
             if (holder.sim == null && it.height > 0) {
-                holder.sim = SnowGlobePhysics(it.width / it.height.toFloat(), corner.coerceIn(0.05f, 0.5f)).apply { scatter() }
+                // The snow already lies on the bottom when the bar appears.
+                holder.sim = SnowGlobePhysics(it.width / it.height.toFloat(), corner.coerceIn(0.05f, 0.5f)).apply { settleAll() }
             }
         },
     ) {
@@ -111,29 +111,37 @@ fun SnowGlobe(dropletPos: () -> Float, tabs: Int, corner: Float, modifier: Modif
         val dp = density
         val t = festive.time()
 
-        // ---- The body of the drift, a little under the flakes lying on top of it, so its
-        // top edge is made of flakes and looks fluffy.
+        // ---- The bodies of the two drifts (on the bottom, and on the top wall when the
+        // phone is upside down), a little under the flakes lying on top of them, so their
+        // edges are made of flakes and look fluffy.
         val n = 140
-        val body = Path()
         var any = false
-        for (i in 0..n) {
-            val px = sim.aspect * i / n
-            val d = max(0f, sim.depthAt(px) - 0.022f)
-            if (d > 0.002f) any = true
-            val sy = (sim.bottomAt(px) - d) * k
-            if (i == 0) { body.moveTo(px * k, sim.bottomAt(px) * k + 1f); body.lineTo(px * k, sy) } else body.lineTo(px * k, sy)
-        }
-        if (any) {
+        for (side in 0..1) {
+            val down = side == SnowGlobePhysics.BOTTOM
+            val wall = { px: Float -> if (down) sim.bottomAt(px) else 1f - sim.bottomAt(px) }
+            val body = Path()
+            var here = false
+            for (i in 0..n) {
+                val px = sim.aspect * i / n
+                val d = max(0f, sim.depthAt(side, px) - 0.022f)
+                if (d > 0.002f) here = true
+                val sy = (wall(px) + (if (down) -d else d)) * k
+                val edge = wall(px) * k + if (down) 1f else -1f
+                if (i == 0) { body.moveTo(px * k, edge); body.lineTo(px * k, sy) } else body.lineTo(px * k, sy)
+            }
+            if (!here) continue
+            any = true
             for (i in n downTo 0) {
                 val px = sim.aspect * i / n
-                body.lineTo(px * k, sim.bottomAt(px) * k + 1f)
+                body.lineTo(px * k, wall(px) * k + if (down) 1f else -1f)
             }
             body.close()
             drawPath(
                 body,
                 Brush.verticalGradient(
-                    listOf(Color.White.copy(alpha = 0.95f), Color(0xFFE2EAF6).copy(alpha = 0.95f)),
-                    startY = k * 0.75f, endY = k,
+                    if (down) listOf(Color.White.copy(alpha = 0.95f), Color(0xFFE2EAF6).copy(alpha = 0.95f))
+                    else listOf(Color(0xFFE2EAF6).copy(alpha = 0.95f), Color.White.copy(alpha = 0.95f)),
+                    startY = if (down) k * 0.7f else 0f, endY = if (down) k else k * 0.3f,
                 ),
             )
         }
@@ -146,7 +154,12 @@ fun SnowGlobe(dropletPos: () -> Float, tabs: Int, corner: Float, modifier: Modif
             if (sim.lying[i]) {
                 // Only the top layer of the drift shows; the flakes under it are hidden by
                 // its body anyway, so they are not drawn.
-                if (sim.y[i] > sim.bottomAt(sim.x[i]) - sim.depthAt(sim.x[i]) + 0.05f) continue
+                val inside = if (sim.side[i] == SnowGlobePhysics.BOTTOM) {
+                    sim.y[i] > sim.bottomAt(sim.x[i]) - sim.depthAt(SnowGlobePhysics.BOTTOM, sim.x[i]) + 0.05f
+                } else {
+                    sim.y[i] < 1f - sim.bottomAt(sim.x[i]) + sim.depthAt(SnowGlobePhysics.TOP, sim.x[i]) - 0.05f
+                }
+                if (inside) continue
                 drawCircle(Color.White, r * 1.35f, c, alpha = 0.95f)
                 continue
             }

@@ -20,30 +20,41 @@ class SnowGlobeFilm {
     @Test fun film() {
         val dir = File("build/outputs/snowglobe").apply { mkdirs(); listFiles()?.forEach { it.delete() } }
         val sim = SnowGlobePhysics(5.5f)
-        sim.scatter()
+        sim.settleAll()
         val dt = 1f / 60f
         val hPx = 120
         val wPx = (hPx * sim.aspect).toInt()
         var frame = 0
         var dropletX = 0.5f / 4 * sim.aspect + 0.0f
         var lastX = dropletX
-        val total = 60 * 20
+        val total = 60 * 30
         for (s in 0 until total) {
             val t = s * dt
-            // Script: droplet runs from the first tab to the last at 6..6.6 s.
+            // Script: tilt right 1..5 s; droplet sweep 6..6.6 s; shake 9..9.6 s;
+            // upside down 15..23 s; upright again after.
             val pos = when {
-                t < 6f -> 0f
-                t < 6.6f -> (t - 6f) / 0.6f * 3f
+                t < 8f -> 0f
+                t < 8.6f -> (t - 8f) / 0.6f * 3f
                 else -> 3f
             }
             dropletX = (pos + 0.5f) / 4f * sim.aspect
             val dv = (dropletX - lastX) / dt
             lastX = dropletX
-            val shaking = t in 9f..9.6f
+            val shaking = t in 11f..11.6f
             val sx = if (shaking) (if (((t * 10).toInt()) % 2 == 0) 16f else -16f) else 0f
             val sy = if (shaking) (if (((t * 10).toInt()) % 2 == 0) -10f else 10f) else 0f
-            val tilt = t >= 15f
-            sim.step(dt, dropletX, 0.51f / 4 * sim.aspect, dv, if (tilt) 0.26f else 0f, if (tilt) 0.97f else 1f, sx, sy)
+            // 15° from 1 s, 30° from 4 s, upright at 7 s; upside down 17..25 s.
+            val angle = when {
+                t in 1f..4f -> 15.0
+                t in 4f..7f -> 30.0
+                t in 17f..25f -> 180.0
+                else -> 0.0
+            }
+            val a = Math.toRadians(angle)
+            sim.step(
+                dt, dropletX, 0.51f / 4 * sim.aspect, dv,
+                Math.sin(a).toFloat(), Math.cos(a).toFloat(), sx, sy,
+            )
             if (s % 3 != 0) continue
             val img = BufferedImage(wPx + 40, hPx + 60, BufferedImage.TYPE_INT_RGB)
             val g = img.createGraphics()
@@ -77,6 +88,20 @@ class SnowGlobeFilm {
             body.closePath()
             g.color = Color(0xF2, 0xF6, 0xFC)
             g.fill(body)
+            val topBody = Path2D.Float()
+            for (i in 0..n) {
+                val px = sim.aspect * i / n
+                val d = maxOf(0f, sim.depthAt(SnowGlobePhysics.TOP, px) - 0.022f)
+                val wallY = (1f - sim.bottomAt(px)) * hPx
+                if (i == 0) topBody.moveTo(px * hPx, wallY - 1) else topBody.lineTo(px * hPx, wallY + d * hPx)
+                if (i == 0) topBody.lineTo(px * hPx, wallY + d * hPx)
+            }
+            for (i in n downTo 0) {
+                val px = sim.aspect * i / n
+                topBody.lineTo(px * hPx, (1f - sim.bottomAt(px)) * hPx - 1)
+            }
+            topBody.closePath()
+            g.fill(topBody)
             for (i in 0 until sim.flakes) {
                 val r = (0.4f + 0.7f * sim.size[i]) * hPx / 64f * 1.0f
                 val cx = sim.x[i] * hPx
@@ -97,10 +122,14 @@ class SnowGlobeFilm {
             g.draw(bar)
             g.color = Color(0xC7, 0xD0, 0xE6)
             val label = when {
-                t < 6f -> "snowfall"
-                t < 9f -> "droplet sweep"
-                t < 15f -> if (t < 9.6f) "shake" else "blizzard settles"
-                else -> "tilt 15° right"
+                t < 1f -> "start: snow lies"
+                t < 4f -> "tilt 15° right"
+                t < 7f -> "tilt 30° right"
+                t < 8f -> "upright"
+                t < 11f -> "droplet sweep"
+                t < 17f -> if (t < 11.6f) "shake" else "blizzard settles"
+                t < 25f -> "upside down"
+                else -> "upright again"
             }
             g.drawString("t=%.1fs  %s".format(t, label), 0, -10)
             g.dispose()

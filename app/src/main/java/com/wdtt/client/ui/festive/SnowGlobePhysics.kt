@@ -57,6 +57,11 @@ class SnowGlobePhysics(
     private val vy = FloatArray(flakes)
     /** Size of a flake, 0..1. */
     val size = FloatArray(flakes)
+    /**
+     * Weight of a flake, one of [WEIGHTS]: light fluff drifts down slowly and is easily
+     * carried, heavier crumbs sink and roll faster. More light ones than heavy.
+     */
+    val weight = FloatArray(flakes)
     private val phase = FloatArray(flakes)
     /** Lying in a drift (else moving). */
     val lying = BooleanArray(flakes)
@@ -111,6 +116,9 @@ class SnowGlobePhysics(
             phase[i] = rnd() * 6.28f
             thickness[i] = mean * (0.45f + 1.1f * size[i] * size[i]) / 0.82f
             cohesion[i] = rnd()
+            // The class: mostly the lighter ones; bigger flakes lean to the heavier.
+            val r = (rnd() * 0.75f + size[i] * 0.25f)
+            weight[i] = WEIGHTS[(r * r * WEIGHTS.size).toInt().coerceIn(0, WEIGHTS.size - 1)]
         }
     }
 
@@ -506,8 +514,9 @@ class SnowGlobePhysics(
                 if (raw < holdAt(top[s][from]) && slope < REST_SLOPE + 0.1f) { avalanche[s][c] = false; break }
                 // Off it goes downhill with a little hop away from the wall.
                 val down = if (from == c) 1f else -1f
-                val speed = 0.3f + 0.25f * rnd()
-                val hop = 0.08f + 0.12f * rnd()
+                val wt = weight[top[s][from]]
+                val speed = (0.16f + 0.14f * rnd()) * (0.6f + 0.6f * wt)
+                val hop = (0.05f + 0.07f * rnd()) * (0.6f + 0.6f * wt)
                 val i = rise(s, from, down * speed - hop * gravityX * sign(s), -hop * gravityY)
                 if (i >= 0) {
                     x[i] += down * columnWidth * 0.4f
@@ -579,9 +588,10 @@ class SnowGlobePhysics(
             val s = size[i]
             val fu = sample(u, x[i], y[i])
             val fv = sample(v, x[i], y[i])
-            // Slow sinking, bigger flakes a little faster; they follow the liquid softly.
-            val sink = 0.035f + 0.08f * s
-            val tau = 0.14f + 0.18f * s
+            // Slow sinking, by weight; the light ones follow the liquid closely.
+            val w = weight[i]
+            val sink = 0.025f + 0.11f * w
+            val tau = 0.1f + 0.25f * w
             phase[i] += h * (3.2f + 2.4f * s)
             val sway = sin(phase[i]) * sink * 0.8f
             val tx = fu + sink * gravityX - sway * gravityY
@@ -591,8 +601,8 @@ class SnowGlobePhysics(
             vy[i] += (ty - vy[i]) * k
             // Heavier than the liquid, they lag behind the glass when it is shaken, and the
             // shaken liquid tosses them about.
-            vx[i] += -shakeX * 0.12f * h * (0.6f + s)
-            vy[i] += -shakeY * 0.12f * h * (0.6f + s)
+            vx[i] += -shakeX * 0.12f * h * (0.5f + w)
+            vy[i] += -shakeY * 0.12f * h * (0.5f + w)
             val gust = hypot(shakeX, shakeY)
             if (gust > 2f) {
                 vx[i] += (rnd() - 0.5f) * gust * 0.18f * h
@@ -611,9 +621,12 @@ class SnowGlobePhysics(
 
     /** One tumbling grain: a heavy crumb hopping down the slope until it settles. */
     private fun tumble(i: Int, h: Float, down: Int) {
-        vx[i] += gravityX * TUMBLE_GRAVITY * h
-        vy[i] += gravityY * TUMBLE_GRAVITY * h
-        val drag = exp(-1.2f * h)
+        // Rolling down through the liquid: heavier grains go faster, none drops sharply
+        // (the liquid holds them back: speeds of about 0.1 to 0.4 bar heights a second).
+        val g = TUMBLE_GRAVITY * (0.25f + weight[i])
+        vx[i] += gravityX * g * h
+        vy[i] += gravityY * g * h
+        val drag = exp(-3f * h)
         vx[i] *= drag
         vy[i] *= drag
         x[i] += vx[i] * h
@@ -627,8 +640,8 @@ class SnowGlobePhysics(
         val next = (c + if (along > 0f) 1 else -1).coerceIn(0, columns - 1)
         val pc = -(gravityX * columnX(c) + gravityY * surface(down, c))
         val pn = -(gravityX * columnX(next) + gravityY * surface(down, next))
-        val g = abs(gravityY).coerceAtLeast(0.15f)
-        if (abs(along) > 0.18f && pc - pn > REST_SLOPE * columnWidth * g) {
+        val gy = abs(gravityY).coerceAtLeast(0.15f)
+        if (abs(along) > 0.12f && pc - pn > REST_SLOPE * columnWidth * gy) {
             y[i] = surface(down, c) - sign(down) * thickness[i] * 0.5f
             val bounce = abs(along) * 0.35f
             vx[i] = vx[i] * 0.62f - bounce * gravityX
@@ -638,7 +651,7 @@ class SnowGlobePhysics(
             // where it set off for, or it would only start the slide again.
             val target = tumbleTo[i].coerceIn(0, columns - 1)
             val pt = -(gravityX * columnX(target) + gravityY * surface(down, target))
-            if (pc > pt + REST_SLOPE * columnWidth * g) {
+            if (pc > pt + REST_SLOPE * columnWidth * gy) {
                 x[i] = columnX(target) + (rnd() - 0.5f) * columnWidth * 0.8f
                 lie(i, down, target)
             } else {
@@ -686,8 +699,10 @@ class SnowGlobePhysics(
         private const val LET_GO_SPAN = 0.7f
         /** ...and a slide stops once it is down to this (about 19°). */
         private const val REST_SLOPE = 0.34f
-        /** Gravity on a tumbling grain, bar heights a second². */
-        private const val TUMBLE_GRAVITY = 2.6f
+        /** Gravity on a tumbling grain of weight 1 in the liquid, bar heights a second². */
+        private const val TUMBLE_GRAVITY = 1.0f
+        /** The weight classes, light to heavy. */
+        private val WEIGHTS = floatArrayOf(0.15f, 0.32f, 0.5f, 0.72f, 1f)
         /** Least part of gravity across the bar (see [step]). */
         private const val MIN_ACROSS = 0.3f
         /** How much more a slight tilt counts than it is (fading out at a quarter turn). */

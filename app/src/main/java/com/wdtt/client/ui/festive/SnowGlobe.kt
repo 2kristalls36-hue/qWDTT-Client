@@ -111,20 +111,17 @@ fun SnowGlobe(dropletPos: () -> Float, tabs: Int, corner: Float, modifier: Modif
         val dp = density
         val t = festive.time()
 
-        // ---- The snow lying on the bottom: one fluffy drift.
+        // ---- The body of the drift, a little under the flakes lying on top of it, so its
+        // top edge is made of flakes and looks fluffy.
         val n = 140
-        val top = Path()
         val body = Path()
         var any = false
         for (i in 0..n) {
             val px = sim.aspect * i / n
-            val d = sim.depthAt(px)
+            val d = max(0f, sim.depthAt(px) - 0.022f)
             if (d > 0.002f) any = true
-            // Small lumps on the surface, more where the snow is deeper.
-            val lump = (hash01(41, i) - 0.5f) * min(d, 0.03f) * 0.7f
-            val sy = (sim.bottomAt(px) - d - lump) * k
-            if (i == 0) { top.moveTo(px * k, sy); body.moveTo(px * k, sim.bottomAt(px) * k + 1f); body.lineTo(px * k, sy) }
-            else { top.lineTo(px * k, sy); body.lineTo(px * k, sy) }
+            val sy = (sim.bottomAt(px) - d) * k
+            if (i == 0) { body.moveTo(px * k, sim.bottomAt(px) * k + 1f); body.lineTo(px * k, sy) } else body.lineTo(px * k, sy)
         }
         if (any) {
             for (i in n downTo 0) {
@@ -135,29 +132,24 @@ fun SnowGlobe(dropletPos: () -> Float, tabs: Int, corner: Float, modifier: Modif
             drawPath(
                 body,
                 Brush.verticalGradient(
-                    listOf(Color.White.copy(alpha = 0.97f), Color(0xFFE4ECF7).copy(alpha = 0.95f)),
-                    startY = k * 0.8f, endY = k,
+                    listOf(Color.White.copy(alpha = 0.95f), Color(0xFFE2EAF6).copy(alpha = 0.95f)),
+                    startY = k * 0.75f, endY = k,
                 ),
             )
-            // The fluffy rim: a soft glow along the top of the drift.
-            drawPath(top, Color.White, alpha = 0.28f, style = Stroke(width = 2.6f * dp, cap = StrokeCap.Round, join = StrokeJoin.Round))
-            drawPath(top, Color.White, alpha = 0.55f, style = Stroke(width = 1.2f * dp, cap = StrokeCap.Round, join = StrokeJoin.Round))
-            // A few glints on the surface, slowly coming and going.
-            for (g in 0 until 14) {
-                val px = (0.04f + 0.92f * hash01(53, g)) * sim.aspect
-                val d = sim.depthAt(px)
-                if (d < 0.012f) continue
-                val glint = max(0f, sin(t * (0.7f + 0.6f * hash01(59, g)) + hash01(61, g) * 6.28f)).pow(3)
-                if (glint < 0.05f) continue
-                drawCircle(Color.White, 0.9f * dp, Offset(px * k, (sim.bottomAt(px) - d) * k + 0.6f * dp), alpha = glint)
-            }
         }
 
-        // ---- Flakes in the liquid: fine, soft, the bigger ones in small fluffy clumps.
-        for (i in 0 until sim.count) {
+        // ---- Every flake, lying or floating: the same flake all the time.
+        for (i in 0 until sim.flakes) {
             val s = sim.size[i]
-            val r = (0.38f + 0.72f * s) * dp
+            val r = (0.4f + 0.7f * s) * dp
             val c = Offset(sim.x[i] * k, sim.y[i] * k)
+            if (sim.lying[i]) {
+                // Only the top layer of the drift shows; the flakes under it are hidden by
+                // its body anyway, so they are not drawn.
+                if (sim.y[i] > sim.bottomAt(sim.x[i]) - sim.depthAt(sim.x[i]) + 0.05f) continue
+                drawCircle(Color.White, r * 1.35f, c, alpha = 0.95f)
+                continue
+            }
             drawCircle(Color.White, r * 2.3f, c, alpha = 0.14f)
             drawCircle(Color.White, r, c, alpha = 0.92f)
             if (s > 0.55f) {
@@ -165,6 +157,16 @@ fun SnowGlobe(dropletPos: () -> Float, tabs: Int, corner: Float, modifier: Modif
                 drawCircle(Color.White, r * 0.62f, c + Offset(cos(a) * r * 0.75f, sin(a) * r * 0.75f), alpha = 0.75f)
                 drawCircle(Color.White, r * 0.5f, c - Offset(cos(a + 1f) * r * 0.7f, sin(a + 1f) * r * 0.7f), alpha = 0.6f)
             }
+        }
+
+        // ---- A few glints on the drift, slowly coming and going.
+        if (any) for (g in 0 until 14) {
+            val px = (0.04f + 0.92f * hash01(53, g)) * sim.aspect
+            val d = sim.depthAt(px)
+            if (d < 0.03f) continue
+            val glint = max(0f, sin(t * (0.7f + 0.6f * hash01(59, g)) + hash01(61, g) * 6.28f)).pow(3)
+            if (glint < 0.05f) continue
+            drawCircle(Color.White, 0.9f * dp, Offset(px * k, (sim.bottomAt(px) - d) * k), alpha = glint)
         }
     }
 }

@@ -38,6 +38,7 @@ class LiteSettings(context: Context) {
         private val LIQUID_GLASS = booleanPreferencesKey("liquid_glass")
         private val HAPTICS = booleanPreferencesKey("haptics")
         private val MAGNET = booleanPreferencesKey("magnet")
+        private val SCREEN_FIT = booleanPreferencesKey("screen_fit")
         private val GLASS_TRANSPARENCY = androidx.datastore.preferences.core.floatPreferencesKey("glass_transparency")
         /** Set whenever the glass is turned on. */
         const val DEFAULT_GLASS_TRANSPARENCY = 0.9f
@@ -70,6 +71,10 @@ class LiteSettings(context: Context) {
     /** Beta: magnet motion (accelerating pull to stops, snapping lists); on by default. */
     val magnet: Flow<Boolean> = store.data.map { it[MAGNET] ?: true }
     suspend fun saveMagnet(enabled: Boolean) = store.edit { it[MAGNET] = enabled }
+
+    /** Beta: the tab bar and the corners of cards and fields follow the screen corners; on by default. */
+    val screenFit: Flow<Boolean> = store.data.map { it[SCREEN_FIT] ?: true }
+    suspend fun saveScreenFit(enabled: Boolean) = store.edit { it[SCREEN_FIT] = enabled }
 
     /** Vibration on presses, switches and results; on by default. */
     val haptics: Flow<Boolean> = store.data.map { it[HAPTICS] ?: true }

@@ -175,7 +175,8 @@ fun AppsScreen(settingsStore: SettingsStore) {
                 val bottom = Modifier
                     .align(Alignment.BottomCenter)
                     .zIndex(2f)
-                    .padding(horizontal = 16.dp)
+                    // As wide as the tab pill below it.
+                    .padding(horizontal = ArdttBottomChrome.barSideGap())
                     .padding(bottom = maxOf(ArdttBottomChrome.stickyBottomPadding(), imePad + 8.dp))
                 if (!sitesPane) {
                     ArdttSearchBar(
@@ -331,7 +332,7 @@ fun AppsScreen(settingsStore: SettingsStore) {
                         checked = showSystem,
                         onCheckedChange = { showSystem = it },
                         modifier = Modifier
-                            .clip(RoundedCornerShape(16.dp))
+                            .clip(com.wdtt.client.ui.components.layout.fitShape(16.dp))
                             .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.09f))
                             .padding(horizontal = 14.dp),
                     )
@@ -390,7 +391,7 @@ private fun SiteRow(rule: String, modifier: Modifier = Modifier, onRemove: () ->
     Row(
         modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(com.wdtt.client.ui.components.layout.fitShape(16.dp))
             .background(com.wdtt.client.ui.theme.liteCardColor())
             .padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -465,7 +466,7 @@ private fun AppRowFrame(
     Row(
         modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(com.wdtt.client.ui.components.layout.fitShape(16.dp))
             .background(com.wdtt.client.ui.theme.liteCardColor())
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,

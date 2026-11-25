@@ -91,104 +91,14 @@ fun SettingsScreen() {
         ) {
             item {
                 Box(Modifier.padding(horizontal = 16.dp)) {
-                Section("Оформление") {
-                    ArdttChoiceChipRow(
-                        choices = listOf(
-                            ArdttChoice("system", "Системная"),
-                            ArdttChoice("light", "Светлая"),
-                            ArdttChoice("dark", "Тёмная"),
-                        ),
-                        selected = theme,
-                        onSelect = { scope.launch { settings.saveThemeMode(it) } },
-                    )
-                    val glass by lite.liquidGlass.collectAsStateWithLifecycle(false)
-                    val glassSupported = com.wdtt.client.ui.components.surface.LiquidGlass.supported
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Жидкое стекло", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold))
-                            Text(
-                                "Бета",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(50))
-                                    .background(MaterialTheme.colorScheme.primaryContainer)
-                                    .padding(horizontal = 8.dp, vertical = 2.dp),
-                            )
-                        }
-                        com.wdtt.client.ui.components.control.LiteSwitch(
-                            checked = glass && glassSupported,
-                            enabled = glassSupported,
-                            onCheckedChange = { on ->
-                                haptics.toggle(on)
-                                scope.launch {
-                                    // Turning the glass on starts from the default transparency.
-                                    if (on) lite.saveGlassTransparency(LiteSettings.DEFAULT_GLASS_TRANSPARENCY)
-                                    lite.saveLiquidGlass(on)
-                                }
-                            },
-                        )
-                    }
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = glass && glassSupported,
-                        enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.expandVertically(),
-                        exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.shrinkVertically(),
-                    ) {
-                        val saved by lite.glassTransparency.collectAsStateWithLifecycle(LiteSettings.DEFAULT_GLASS_TRANSPARENCY)
-                        var value by remember { mutableStateOf<Float?>(null) }
-                        Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("Прозрачность", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                                Text(
-                                    "${((value ?: saved) * 100).roundToInt()}%",
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            // Applies live while dragging: the tab bar below changes at once.
-                            androidx.compose.material3.Slider(
-                                value = value ?: saved,
-                                onValueChange = { v -> value = v; scope.launch { lite.saveGlassTransparency(v) } },
-                                onValueChangeFinished = { value = null },
-                            )
-                        }
-                    }
+                Section("Подключение") {
+                    SwitchLine("Подключаться при включении устройства", onBoot) { scope.launch { lite.saveConnectOnBoot(it) } }
                     Hint(
-                        when {
-                            !glassSupported -> "Эффект доступен на Android 13 и новее."
-                            glass -> "Панель навигации отображается в виде стекла."
-                            else -> "Панель навигации отображается в стандартном виде."
-                        }
+                        if (onBoot) "Приложение подключится к активному профилю после включения устройства."
+                        else "Приложение не будет подключаться автоматически."
                     )
-                    // Magnet, beta as well.
-                    val magnet by lite.magnet.collectAsStateWithLifecycle(true)
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Магнит", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold))
-                            BetaBadge()
-                        }
-                        com.wdtt.client.ui.components.control.LiteSwitch(
-                            checked = magnet,
-                            onCheckedChange = { haptics.toggle(it); scope.launch { lite.saveMagnet(it) } },
-                        )
-                    }
-                    Hint(
-                        if (magnet) "Ползунки, вкладки и списки притягиваются к ближайшему положению."
-                        else "Ползунки, вкладки и списки останавливаются без притягивания."
-                    )
+                    TrustedWifiSettings(lite)
                 }
-                }
-            }
-            item {
-                Box(Modifier.padding(horizontal = 16.dp)) {
-                    val vibration by lite.haptics.collectAsStateWithLifecycle(true)
-                    Section("Отклик") {
-                        SwitchLine("Вибрация", vibration) { scope.launch { lite.saveHaptics(it) } }
-                        Hint(
-                            if (vibration) "Приложение подтверждает нажатия, переключения и результаты действий вибрацией."
-                            else "Приложение не использует вибрацию."
-                        )
-                    }
                 }
             }
             item {
@@ -320,13 +230,102 @@ fun SettingsScreen() {
             }
             item {
                 Box(Modifier.padding(horizontal = 16.dp)) {
-                Section("Подключение") {
-                    SwitchLine("Подключаться при включении устройства", onBoot) { scope.launch { lite.saveConnectOnBoot(it) } }
+                    val vibration by lite.haptics.collectAsStateWithLifecycle(true)
+                    Section("Интерфейс") {
+                        Text("Тема", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold))
+                        ArdttChoiceChipRow(
+                            choices = listOf(
+                                ArdttChoice("system", "Системная"),
+                                ArdttChoice("light", "Светлая"),
+                                ArdttChoice("dark", "Тёмная"),
+                            ),
+                            selected = theme,
+                            onSelect = { scope.launch { settings.saveThemeMode(it) } },
+                        )
+                        SwitchLine("Вибрация", vibration) { scope.launch { lite.saveHaptics(it) } }
+                        Hint(
+                            if (vibration) "Приложение подтверждает нажатия, переключения и результаты действий вибрацией."
+                            else "Приложение не использует вибрацию."
+                        )
+                    }
+                }
+            }
+            item {
+                Box(Modifier.padding(horizontal = 16.dp)) {
+                Section("Бета-функции") {
+                    Hint("Функции в разработке. Их вид и поведение могут измениться.")
+                    val glass by lite.liquidGlass.collectAsStateWithLifecycle(false)
+                    val glassSupported = com.wdtt.client.ui.components.surface.LiquidGlass.supported
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("Жидкое стекло", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold), modifier = Modifier.weight(1f))
+                        com.wdtt.client.ui.components.control.LiteSwitch(
+                            checked = glass && glassSupported,
+                            enabled = glassSupported,
+                            onCheckedChange = { on ->
+                                haptics.toggle(on)
+                                scope.launch {
+                                    // Turning the glass on starts from the default transparency.
+                                    if (on) lite.saveGlassTransparency(LiteSettings.DEFAULT_GLASS_TRANSPARENCY)
+                                    lite.saveLiquidGlass(on)
+                                }
+                            },
+                        )
+                    }
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = glass && glassSupported,
+                        enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.expandVertically(),
+                        exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.shrinkVertically(),
+                    ) {
+                        val saved by lite.glassTransparency.collectAsStateWithLifecycle(LiteSettings.DEFAULT_GLASS_TRANSPARENCY)
+                        var value by remember { mutableStateOf<Float?>(null) }
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Прозрачность", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                                Text(
+                                    "${((value ?: saved) * 100).roundToInt()}%",
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            // Applies live while dragging: the tab bar below changes at once.
+                            androidx.compose.material3.Slider(
+                                value = value ?: saved,
+                                onValueChange = { v -> value = v; scope.launch { lite.saveGlassTransparency(v) } },
+                                onValueChangeFinished = { value = null },
+                            )
+                        }
+                    }
                     Hint(
-                        if (onBoot) "Приложение подключится к активному профилю после включения устройства."
-                        else "Приложение не будет подключаться автоматически."
+                        when {
+                            !glassSupported -> "Эффект доступен на Android 13 и новее."
+                            glass -> "Панель навигации отображается в виде стекла."
+                            else -> "Панель навигации отображается в стандартном виде."
+                        }
                     )
-                    TrustedWifiSettings(lite)
+                    val magnet by lite.magnet.collectAsStateWithLifecycle(true)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("Магнит", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold), modifier = Modifier.weight(1f))
+                        com.wdtt.client.ui.components.control.LiteSwitch(
+                            checked = magnet,
+                            onCheckedChange = { haptics.toggle(it); scope.launch { lite.saveMagnet(it) } },
+                        )
+                    }
+                    Hint(
+                        if (magnet) "Ползунки, вкладки и списки притягиваются к ближайшему положению."
+                        else "Ползунки, вкладки и списки останавливаются без притягивания."
+                    )
+                    val screenFit by lite.screenFit.collectAsStateWithLifecycle(true)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("Форма под экран", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold), modifier = Modifier.weight(1f))
+                        com.wdtt.client.ui.components.control.LiteSwitch(
+                            checked = screenFit,
+                            onCheckedChange = { haptics.toggle(it); scope.launch { lite.saveScreenFit(it) } },
+                        )
+                    }
+                    Hint(
+                        if (screenFit) "Панель вкладок, карточки и поля повторяют скругление углов экрана."
+                        else "Панель вкладок, карточки и поля имеют стандартную форму."
+                    )
                 }
                 }
             }
@@ -468,24 +467,11 @@ private fun UpdateSection() {
 }
 
 @Composable
-private fun BetaBadge() {
-    Text(
-        "Бета",
-        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .background(MaterialTheme.colorScheme.primaryContainer)
-            .padding(horizontal = 8.dp, vertical = 2.dp),
-    )
-}
-
-@Composable
 private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
+            .clip(com.wdtt.client.ui.components.layout.fitShape(20.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),

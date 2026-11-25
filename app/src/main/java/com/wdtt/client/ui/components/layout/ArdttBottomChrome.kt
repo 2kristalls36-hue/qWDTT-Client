@@ -37,6 +37,14 @@ object ArdttBottomChrome {
         }
     }
 
+    /**
+     * Side gap of the tab pill. What sits right above the pill (search, sticky buttons)
+     * uses the same gap, so both have one width.
+     */
+    @Composable
+    fun barSideGap(): Dp =
+        LocalScreenShape.current.tabBarGap(ArdttSpacing.SmallPlus, ArdttSize.NavTrack / 2) ?: ArdttSpacing.SmallPlus
+
     /** Bottom offset of a sticky CTA sitting above the tab pill. */
     @Composable
     fun stickyBottomPadding(): Dp = navigationReserve() + StickyGap

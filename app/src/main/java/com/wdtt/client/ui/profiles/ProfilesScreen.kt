@@ -309,7 +309,7 @@ private fun ProfileRow(profile: ConnectionProfile, active: Boolean, ping: Long, 
         SubscriptionTone.Critical, SubscriptionTone.Expired -> ToneColors.Critical
         else -> scheme.onSurfaceVariant
     }
-    val shape = RoundedCornerShape(20.dp)
+    val shape = com.wdtt.client.ui.components.layout.fitShape(20.dp)
     Row(
         Modifier
             .fillMaxWidth()

@@ -104,9 +104,9 @@ private fun BoxScope.HeaderPlate(backdrop: GlassBackdrop?, alpha: Float) {
         // Without glass the plate is nearly opaque: the translucent shell let the list
         // text show through the title.
         Box(
-            m.clip(ArdttShapes.Section)
+            m.clip(fitShape(com.wdtt.client.ui.theme.ArdttRadius.Section, inset = 10.dp))
                 .background(colors.surface.copy(alpha = 0.96f))
-                .border(ArdttFloatingShell.shellBorder(), ArdttShapes.Section),
+                .border(ArdttFloatingShell.shellBorder(), fitShape(com.wdtt.client.ui.theme.ArdttRadius.Section, inset = 10.dp)),
         )
     }
 }

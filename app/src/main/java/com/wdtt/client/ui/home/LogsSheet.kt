@@ -77,6 +77,16 @@ fun LogsSheet(onDismiss: () -> Unit) {
                 }
             }
         }
+        ArdttButton(
+            text = "Поделиться",
+            variant = ArdttButtonVariant.Primary,
+            enabled = lines.isNotEmpty(),
+            onClick = {
+                haptics.perform(com.wdtt.client.ui.motion.Haptic.Click)
+                runCatching { com.wdtt.client.lite.JournalShare.share(context, lines) }
+                    .onFailure { Toast.makeText(context, "Не удалось подготовить файл журнала.", Toast.LENGTH_SHORT).show() }
+            },
+        )
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             ArdttButton(
                 text = "Скопировать",

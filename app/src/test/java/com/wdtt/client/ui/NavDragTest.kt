@@ -120,7 +120,7 @@ class NavDragTest {
             ArdttTheme {
                 var route by androidx.compose.runtime.remember { mutableStateOf("a") }
                 val glass = com.wdtt.client.ui.components.surface.GlassBackdrop(androidx.compose.ui.graphics.rememberGraphicsLayer())
-                androidx.compose.runtime.CompositionLocalProvider(
+                                androidx.compose.runtime.CompositionLocalProvider(
                     com.wdtt.client.ui.motion.LocalAppHaptics provides haptics,
                     com.wdtt.client.ui.components.surface.LocalGlassBackdrop provides glass,
                 ) {
@@ -236,11 +236,12 @@ class NavDragTest {
         assert(near > far)
     }
 
-    private fun lensShot(theme: String) {
+    private fun lensShot(theme: String, clear: Float = 0.5f) {
         compose.mainClock.autoAdvance = false
         compose.setContent {
             ArdttTheme(themeMode = theme) {
                 val glass = com.wdtt.client.ui.components.surface.GlassBackdrop(androidx.compose.ui.graphics.rememberGraphicsLayer())
+                glass.transparency = clear
                 androidx.compose.runtime.CompositionLocalProvider(com.wdtt.client.ui.components.surface.LocalGlassBackdrop provides glass) {
                     Box(Modifier.fillMaxWidth().background(androidx.compose.material3.MaterialTheme.colorScheme.background)) {
                         ArdttNavigationBar(
@@ -258,19 +259,24 @@ class NavDragTest {
             }
         }
         compose.mainClock.advanceTimeBy(500)
-        compose.onRoot().captureRoboImage("build/outputs/roborazzi/tab_lens_rest_$theme.png")
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/tab_lens_rest_$theme${if (clear > 0.5f) "_clear" else ""}.png")
         val a = compose.onNodeWithText("Главная").fetchSemanticsNode().boundsInRoot.center
         val b = compose.onNodeWithText("Профили").fetchSemanticsNode().boundsInRoot.center
         compose.onRoot().performTouchInput {
             down(Offset(a.x, a.y))
-            moveTo(Offset(a.x + 40f, a.y)); moveTo(Offset((a.x + b.x) / 2f + 30f, a.y)); moveTo(Offset(b.x - 10f, a.y))
+            moveTo(Offset(a.x + 40f, a.y)); moveTo(Offset((a.x + b.x) / 2f, a.y))
         }
+        compose.mainClock.advanceTimeBy(400)
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/tab_lens_mid_$theme${if (clear > 0.5f) "_clear" else ""}.png")
+        compose.onRoot().performTouchInput { moveTo(Offset((a.x + b.x) / 2f + 30f, a.y)); moveTo(Offset(b.x - 10f, a.y)) }
         compose.mainClock.advanceTimeBy(500)
-        compose.onRoot().captureRoboImage("build/outputs/roborazzi/tab_lens_$theme.png")
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/tab_lens_$theme${if (clear > 0.5f) "_clear" else ""}.png")
         compose.onRoot().performTouchInput { up() }
         compose.mainClock.advanceTimeBy(800)
     }
 
     @Test fun tabLensLight() = lensShot("light")
     @Test fun tabLensDark() = lensShot("dark")
+    @Test fun tabLensClearDark() = lensShot("dark", clear = 1f)
+    @Test fun tabLensClearLight() = lensShot("light", clear = 1f)
 }

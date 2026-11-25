@@ -168,7 +168,7 @@ fun ArdttButton(
                         onClick = onClick,
                         enabled = clickable,
                         modifier = sized,
-                        shape = ArdttShapes.Control,
+                        shape = controlShape(),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = pair.container,
                             contentColor = pair.content,
@@ -200,7 +200,7 @@ fun ArdttButton(
                 onClick = onClick,
                 enabled = clickable,
                 modifier = sized,
-                shape = ArdttShapes.Control,
+                shape = controlShape(),
                 colors = ButtonDefaults.filledTonalButtonColors(
                     containerColor = pair.container,
                     contentColor = pair.content,
@@ -214,7 +214,7 @@ fun ArdttButton(
                 onClick = onClick,
                 enabled = clickable,
                 modifier = sized,
-                shape = if (size == ArdttButtonSize.Compact) ArdttShapes.Icon else ArdttShapes.Control,
+                shape = if (size == ArdttButtonSize.Compact) ArdttShapes.Icon else controlShape(),
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = pair.content,
                     disabledContentColor = disabledPair.content,
@@ -304,9 +304,9 @@ private fun GlassFillButton(
 ) {
     Box(
         modifier = modifier
-            .clip(ArdttShapes.Control)
+            .clip(controlShape())
             .background(fill)
-            .border(ArdttFloatingShell.shellBorder(), ArdttShapes.Control)
+            .border(ArdttFloatingShell.shellBorder(), controlShape())
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -427,3 +427,13 @@ private fun buttonColors(
     }
     return ButtonPair(container, content)
 }
+
+/**
+ * Buttons stand inside cards (16 dp in from a card that is 16 dp in from the screen):
+ * their corners follow the screen corners at that depth.
+ */
+@Composable
+private fun controlShape(): androidx.compose.ui.graphics.Shape = com.wdtt.client.ui.components.layout.fitShape(
+    com.wdtt.client.ui.theme.ArdttRadius.Control,
+    inset = com.wdtt.client.ui.components.layout.ScreenFitInset * 2,
+)

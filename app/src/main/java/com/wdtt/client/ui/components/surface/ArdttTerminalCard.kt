@@ -48,7 +48,7 @@ fun ArdttTerminalCard(
         modifier = modifier.fillMaxWidth(),
         contentPadding = ArdttLayout.CompactCardPadding,
         verticalArrangement = Arrangement.Top,
-        shape = ArdttShapes.Panel,
+        shape = com.wdtt.client.ui.components.layout.fitShape(com.wdtt.client.ui.theme.ArdttRadius.Panel),
         color = terminalCardColor(),
         shadowElevation = terminalCardElevation(),
     ) {

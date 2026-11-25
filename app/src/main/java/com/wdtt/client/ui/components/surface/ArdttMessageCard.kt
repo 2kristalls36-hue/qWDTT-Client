@@ -63,7 +63,7 @@ fun ArdttMessageCard(
         color = containerColor,
         contentPadding = ArdttLayout.NoteCardPadding,
         verticalArrangement = Arrangement.spacedBy(ArdttLayout.NoteCardSpacing),
-        shape = ArdttShapes.Control,
+        shape = com.wdtt.client.ui.components.layout.fitShape(com.wdtt.client.ui.theme.ArdttRadius.Control),
         border = border,
         shadowElevation = ArdttElevation.None,
     ) {

@@ -375,8 +375,13 @@ fun ArdttNavigationBar(
     val scope = rememberCoroutineScope()
     val haptics = com.wdtt.client.ui.motion.LocalAppHaptics.current
     val range = (count - 1).coerceAtLeast(1).toFloat()
-    LaunchedEffect(committedIndex, dragging) {
-        if (!dragging) selPos.magnetTo(committedIndex.toFloat(), fullRange = range, enabled = magnetOn)
+    // Without glass the droplet never travels: it jumps to the chosen tab, and the screens
+    // (they follow the droplet position) change at once.
+    val instant = !(LocalGlassBackdrop.current != null && LiquidGlass.supported)
+    LaunchedEffect(committedIndex, dragging, instant) {
+        if (dragging) return@LaunchedEffect
+        if (instant) selPos.snapTo(committedIndex.toFloat())
+        else selPos.magnetTo(committedIndex.toFloat(), fullRange = range, enabled = magnetOn)
     }
     val currentItems by rememberUpdatedState(items)
     // The drag handler lives across recompositions: read the selected tab through state,
@@ -439,6 +444,19 @@ fun ArdttNavigationBar(
         // Vibration: once when the droplet is taken and once when it is let go, none on
         // the tabs it passes. Liquid glass vibrates on touch and release (see grabWatch).
         fun follow(x: Float) {
+            if (!glassNow) {
+                // Plain bar: the tab under the finger opens at once, nothing slides.
+                val slot = (size.width - pad * 2) / count
+                val at = kotlin.math.floor((x - pad) / slot).toInt().coerceIn(0, count - 1)
+                hover = at
+                if (selPos.value != at.toFloat()) scope.launch { selPos.snapTo(at.toFloat()) }
+                val route = currentItems[at].route
+                if (route != currentSelected && route != pendingRoute) {
+                    pendingRoute = route
+                    selectTab.value(route)
+                }
+                return
+            }
             val raw = positionAt(x)
             hover = raw.roundToInt()
             val shown = if (magnetOn) tabMagnet(raw) else raw
@@ -454,7 +472,8 @@ fun ArdttNavigationBar(
                 selectTab.value(route)
             }
             scope.launch {
-                selPos.magnetTo(target.toFloat(), fullRange = range, enabled = magnetOn)
+                if (glassNow) selPos.magnetTo(target.toFloat(), fullRange = range, enabled = magnetOn)
+                else selPos.snapTo(target.toFloat())
                 dragging = false
             }
         }
@@ -481,13 +500,16 @@ fun ArdttNavigationBar(
     // Where the droplet is, in tab slots: its centre and its half width. The tabs take
     // their colour only inside it, so the colour moves exactly with the droplet.
     val densityNow = androidx.compose.ui.platform.LocalDensity.current
+    val tintIndex = if (shownIndex >= 0) shownIndex
+        else items.indexOfFirst { it.route == (pendingRoute ?: selectedRoute) }
     val dropletSpan: () -> DropletSpan = {
         if (glassBar) {
             val lh = with(densityNow) { (ArdttSize.NavTrack - 8.dp).toPx() } * (0.86f + 0.14f * lens)
             DropletSpan(selPos.value, (NavDropletWidth + 0.2f * lens) / 2f, (with(densityNow) { ArdttSize.NavTrack.toPx() } - lh) / 2f)
         } else {
-            val stretch = (kotlin.math.abs(selPos.velocity) * 0.10f).coerceAtMost(0.45f)
-            DropletSpan(selPos.value, (0.86f + stretch) / 2f, with(densityNow) { (5.dp + 3.dp * stretch).toPx() })
+            // Without glass the colour does not travel with the droplet: the chosen tab
+            // takes it at once, the others lose it at once, as before the glass mode.
+            DropletSpan(tintIndex.toFloat(), 0.5f, 0f)
         }
     }
 
@@ -512,7 +534,8 @@ fun ArdttNavigationBar(
                     selected = if (shownIndex >= 0) index == shownIndex else item.route == selectedRoute,
                     pending = shownIndex < 0 && item.route == pendingRoute,
                     // How much of the droplet is over this tab (weight of the label, halo).
-                    emphasis = (1f - kotlin.math.abs(selPos.value - index)).coerceIn(0f, 1f),
+                    emphasis = if (glassBar) (1f - kotlin.math.abs(selPos.value - index)).coerceIn(0f, 1f)
+                        else if (index == tintIndex) 1f else 0f,
                     selectedColor = selectedColor,
                     unselectedColor = unselectedColor,
                     onSelect = {
@@ -687,6 +710,49 @@ private const val NavAccentSheenPass = 0.2f
  * refers to the tab layers, and a layer added only when a tab became selected was missing
  * from it (the droplet showed an empty spot).
  */
+/**
+ * This tab's part under the droplet, in the tab's own coordinates: from [first] to [second]
+ * along x. Tabs are equal slots, so it comes from the droplet span alone.
+ */
+private fun dropletRangeInTab(span: DropletSpan, index: Int, count: Int, w: Float, trackPad: Float): Pair<Float, Float> {
+    val barCx = dropletCenter(trackPad * 2f + w * count, trackPad, w, span.pos, span.half * w, span.inset)
+    val c = barCx - (trackPad + w * index)
+    return (c - span.half * w) to (c + span.half * w)
+}
+
+/**
+ * The legibility border around the glyphs, drawn only outside the droplet. Fading it by how
+ * far the droplet had come left it half-strong while the droplet was between two tabs, and
+ * the lens showed it around both labels.
+ */
+@Composable
+private fun Modifier.haloOutsideDroplet(
+    halo: androidx.compose.ui.graphics.RenderEffect?,
+    index: Int,
+    count: Int,
+    droplet: () -> DropletSpan,
+): Modifier {
+    if (halo == null) return this
+    val plain = androidx.compose.ui.graphics.rememberGraphicsLayer()
+    val bordered = androidx.compose.ui.graphics.rememberGraphicsLayer()
+    val trackPad = with(androidx.compose.ui.platform.LocalDensity.current) { NavBarDefaults.TrackPadding.toPx() }
+    return drawWithContent {
+        plain.record { this@drawWithContent.drawContent() }
+        bordered.renderEffect = halo
+        bordered.record { drawLayer(plain) }
+        val (l, r) = dropletRangeInTab(droplet(), index, count, size.width, trackPad)
+        val tall = size.height
+        if (r <= 0f || l >= size.width) {
+            drawLayer(bordered)
+            return@drawWithContent
+        }
+        // Left and right of the droplet: with the border. Under it: the glyphs alone.
+        clipRect(left = -size.width, top = -tall, right = l, bottom = size.height + tall) { drawLayer(bordered) }
+        clipRect(left = r, top = -tall, right = size.width * 2f, bottom = size.height + tall) { drawLayer(bordered) }
+        clipRect(left = l, top = -tall, right = r, bottom = size.height + tall) { drawLayer(plain) }
+    }
+}
+
 @Composable
 private fun Modifier.navTint(
     index: Int,
@@ -702,14 +768,9 @@ private fun Modifier.navTint(
         .graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
         .drawWithContent {
             drawContent()
-            val span = droplet()
             val w = size.width
-            // The droplet centre in bar coordinates (tabs are equal slots), kept inside the
-            // bar as the droplet itself is, then in this tab's coordinates.
-            val barCx = dropletCenter(trackPad * 2f + w * count, trackPad, w, span.pos, span.half * w, span.inset)
-            val c = barCx - (trackPad + w * index)
-            val l = c - span.half * w
-            val r = c + span.half * w
+            // The droplet in this tab's coordinates, kept inside the bar as the droplet is.
+            val (l, r) = dropletRangeInTab(droplet(), index, count, w, trackPad)
             if (r <= 0f || l >= w) return@drawWithContent
             val tall = size.height
             clipRect(left = l, top = -tall, right = r, bottom = size.height + tall) {
@@ -942,9 +1003,9 @@ private fun NavBarTab(
     // border separates the glyphs without reading as a black outline.
     val haloColor = if (dark) lerp(MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.onBackground, 0.12f)
         else MaterialTheme.colorScheme.background
-    // A thin border; under the frosted droplet it fades out.
+    // A thin border, never inside the droplet (see haloOutsideDroplet).
     val haloPx = with(androidx.compose.ui.platform.LocalDensity.current) { 1.8.dp.toPx() }
-    val haloStrength = (legible * (1f - emphasis) * 20f).roundToInt() / 20f
+    val haloStrength = (legible * 20f).roundToInt() / 20f
     val halo = remember(haloStrength, haloColor, haloPx) {
         if (haloStrength > 0.01f && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
             com.wdtt.client.ui.components.surface.glyphHalo(haloColor, haloPx, haloStrength)
@@ -953,7 +1014,7 @@ private fun NavBarTab(
     Column(
         modifier = modifier
             .fillMaxHeight()
-            .graphicsLayer { renderEffect = halo }
+            .haloOutsideDroplet(halo, index, count, droplet)
             .navTint(index, count, droplet, selectedColor, accent, clock = accentClock)
             .selectable(
                 selected = selected,

@@ -78,7 +78,10 @@ fun AppRoot(settingsStore: SettingsStore) {
         androidx.compose.material3.LocalContentColor provides androidx.compose.material3.MaterialTheme.colorScheme.onBackground,
     ) {
     // The physical screen (rounded corners, navigation): the tab bar fits itself to it.
-    val screenShape = com.wdtt.client.ui.components.layout.rememberScreenShape()
+    val screenFitOn by lite.screenFit.collectAsState(true)
+    val measuredShape = com.wdtt.client.ui.components.layout.rememberScreenShape()
+    // Setting off: as if the corners were unknown, everything keeps its usual shape.
+    val screenShape = if (screenFitOn) measuredShape else com.wdtt.client.ui.components.layout.ScreenShape.Unknown
     androidx.compose.runtime.CompositionLocalProvider(
         com.wdtt.client.ui.components.layout.LocalScreenShape provides screenShape,
         com.wdtt.client.ui.components.surface.LocalGlassBackdrop provides backdrop,

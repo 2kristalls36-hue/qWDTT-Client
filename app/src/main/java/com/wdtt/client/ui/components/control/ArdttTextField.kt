@@ -84,7 +84,7 @@ fun ArdttTextField(
         visualTransformation = visualTransformation,
         leadingIcon = leadingIcon,
         trailingIcon = trailingIcon,
-        shape = ArdttShapes.Field,
+        shape = com.wdtt.client.ui.components.layout.fitShape(com.wdtt.client.ui.theme.ArdttRadius.Chip, inset = com.wdtt.client.ui.components.layout.ScreenFitInset * 2),
     )
 }
 

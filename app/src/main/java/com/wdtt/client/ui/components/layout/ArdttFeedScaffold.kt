@@ -187,7 +187,7 @@ fun ArdttLazyFeedScaffold(
 @Composable
 fun BoxScope.ArdttStickyBottomBar(
     modifier: Modifier = Modifier,
-    horizontalPadding: Dp = ArdttLayout.ScreenPadding,
+    horizontalPadding: Dp = ArdttBottomChrome.barSideGap(),
     bottomPadding: Dp = ArdttBottomChrome.stickyBottomPadding(),
     content: @Composable BoxScope.() -> Unit,
 ) {

@@ -52,7 +52,10 @@ fun ArdttBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
         sheetState = sheetState,
-        shape = ArdttShapes.Sheet,
+        // The sheet runs edge to edge: its top corners take the screen's own radius.
+        shape = com.wdtt.client.ui.components.layout.fitRadius(com.wdtt.client.ui.theme.ArdttRadius.Section, inset = 0.dp).let {
+            androidx.compose.foundation.shape.RoundedCornerShape(topStart = it, topEnd = it)
+        },
         containerColor = sheetContainerColor(),
     ) {
         Column(

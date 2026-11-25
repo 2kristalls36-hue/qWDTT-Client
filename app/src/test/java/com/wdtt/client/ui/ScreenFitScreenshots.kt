@@ -54,8 +54,12 @@ class ScreenFitScreenshots {
         ActivityScenario.launch(MainActivity::class.java)
         settle(10)
         captureScreenRoboImage("build/outputs/roborazzi/screenfit/$dir/home.png")
+        compose.onNodeWithText("Обход").performClick()
+        settle(10)
+        captureScreenRoboImage("build/outputs/roborazzi/screenfit/$dir/apps.png")
         compose.onNodeWithText("Настройки").performClick()
         settle(10)
+        captureScreenRoboImage("build/outputs/roborazzi/screenfit/$dir/settings_top.png")
         compose.onRoot().performTouchInput { swipeUp(startY = height * 0.7f, endY = height * 0.7f - 700f, durationMillis = 700) }
         settle(8)
         captureScreenRoboImage("build/outputs/roborazzi/screenfit/$dir/settings.png")

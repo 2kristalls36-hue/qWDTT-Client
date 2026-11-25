@@ -134,7 +134,7 @@ fun ArdttSearchBar(
         )
         LiquidGlassPanel(
             backdrop = backdrop,
-            cornerRadius = ArdttRadius.Control,
+            cornerRadius = com.wdtt.client.ui.components.layout.fitRadius(ArdttRadius.Control, inset = com.wdtt.client.ui.components.layout.ArdttBottomChrome.barSideGap()),
             tint = colors.surface.copy(alpha = veil),
             dark = dark,
             blur = backdrop.frost(),
@@ -144,7 +144,7 @@ fun ArdttSearchBar(
     }
     Surface(
         modifier = modifier.then(tap),
-        shape = ArdttShapes.Control,
+        shape = com.wdtt.client.ui.components.layout.fitShape(ArdttRadius.Control, inset = com.wdtt.client.ui.components.layout.ArdttBottomChrome.barSideGap()),
         color = if (keyboardVisible) colors.surface else ArdttFloatingShell.shellColor(),
         border = ArdttFloatingShell.shellBorder(),
         shadowElevation = ArdttElevation.None,

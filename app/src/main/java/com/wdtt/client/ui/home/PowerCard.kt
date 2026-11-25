@@ -119,7 +119,7 @@ fun PowerCard(
     val tk = ((k - 0.3f) / 0.2f).coerceIn(0f, 1f)
     val textMuted = lerp(scheme.onSurfaceVariant, Neon.NightMuted, tk)
     val textFaint = lerp(scheme.outline, Neon.NightFaint, tk)
-    val shape = RoundedCornerShape(24.dp)
+    val shape = com.wdtt.client.ui.components.layout.fitShape(24.dp)
     // Where the thumb is, in card coordinates: the neon light of the maximum level comes from it.
     var cardRoot by remember { mutableStateOf(Offset.Zero) }
     val puck = remember { PuckAnchor() }

@@ -149,7 +149,7 @@ fun ArdttCompactCard(
         showBorder = showBorder,
         color = color,
         shadowElevation = shadowElevation,
-        shape = ArdttShapes.Card,
+        shape = com.wdtt.client.ui.components.layout.fitShape(com.wdtt.client.ui.theme.ArdttRadius.Card),
         content = content,
     )
 }

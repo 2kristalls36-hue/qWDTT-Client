@@ -121,3 +121,23 @@ fun ScreenShape.tabBarGap(minGap: Dp, maxBarRadius: Dp): Dp? {
     if (!gestureNav || bottomCorner <= 0.dp) return null
     return maxOf(minGap, bottomCorner - maxBarRadius)
 }
+
+/** Side inset of the screens' cards and fields. */
+val ScreenFitInset: Dp = 16.dp
+
+/**
+ * Radius concentric with the screen corners for something [inset] from the screen's side
+ * edges: the screen radius minus the inset, never less than [base]. Without known corners
+ * (or with the setting off, when the shape is [ScreenShape.Unknown]) it is [base].
+ */
+fun concentricRadius(screenCorner: Dp, inset: Dp, base: Dp): Dp =
+    if (screenCorner > 0.dp) maxOf(base, screenCorner - inset) else base
+
+/** [concentricRadius] for this screen. Nested: add the parent's padding to [inset]. */
+@Composable
+fun fitRadius(base: Dp, inset: Dp = ScreenFitInset): Dp =
+    concentricRadius(LocalScreenShape.current.bottomCorner, inset, base)
+
+@Composable
+fun fitShape(base: Dp, inset: Dp = ScreenFitInset): androidx.compose.foundation.shape.RoundedCornerShape =
+    androidx.compose.foundation.shape.RoundedCornerShape(fitRadius(base, inset))

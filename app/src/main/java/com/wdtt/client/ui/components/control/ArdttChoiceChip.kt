@@ -131,7 +131,7 @@ fun ArdttChoiceChip(
             onClick = tapped,
             enabled = enabled,
             modifier = sizeModifier,
-            shape = ArdttShapes.Chip,
+            shape = com.wdtt.client.ui.components.layout.fitShape(com.wdtt.client.ui.theme.ArdttRadius.Chip, inset = com.wdtt.client.ui.components.layout.ScreenFitInset * 2),
             border = BorderStroke(
                 ArdttSize.Border,
                 colors.outline.copy(
@@ -164,7 +164,7 @@ fun ArdttChoiceChip(
         onClick = onClick,
         enabled = enabled,
         modifier = sizeModifier,
-        shape = ArdttShapes.Chip,
+        shape = com.wdtt.client.ui.components.layout.fitShape(com.wdtt.client.ui.theme.ArdttRadius.Chip, inset = com.wdtt.client.ui.components.layout.ScreenFitInset * 2),
         colors = if (selectedContainer != null && accentContent != null) {
             ButtonDefaults.buttonColors(
                 containerColor = selectedContainer,

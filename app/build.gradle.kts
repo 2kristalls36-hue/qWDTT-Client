@@ -29,7 +29,7 @@ android {
         versionCode = buildMinute
         // Release version. The release workflow checks that the tag (v1.0.0) matches it;
         // the in-app update check compares it with the latest GitHub release.
-        versionName = "1.0.1"
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

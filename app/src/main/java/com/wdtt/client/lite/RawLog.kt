@@ -1,5 +1,6 @@
 package com.wdtt.client.lite
 
+import com.wdtt.client.BuildConfig
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -20,6 +21,7 @@ object RawLog {
     fun add(line: String) = synchronized(lines) {
         if (lines.size >= CAPACITY) lines.removeFirst()
         lines.addLast(line)
+        if (BuildConfig.LOGCAT_MIRROR) android.util.Log.i("qWDTT", line)
         version.value = version.value + 1
     }
 

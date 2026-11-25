@@ -31,6 +31,11 @@ android {
         // the in-app update check compares it with the latest GitHub release.
         versionName = "1.1.0"
 
+        // -PlogcatMirror=true: test builds copy the journal to logcat (tag qWDTT),
+        // so a phone on USB can be checked with adb. Off in published builds.
+        val logcatMirror = providers.gradleProperty("logcatMirror").orNull.toBoolean()
+        buildConfigField("boolean", "LOGCAT_MIRROR", logcatMirror.toString())
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true

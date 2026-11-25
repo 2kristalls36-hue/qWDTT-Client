@@ -272,6 +272,7 @@ object TunnelManager {
 
     fun addNetworkLog(message: String) {
         updateLog("network_event", message, 2, false)
+        runCatching { com.wdtt.client.lite.RawLog.add(message) }
     }
 
     /**
@@ -1703,6 +1704,13 @@ object TunnelManager {
                 transportRestartInProgress = true
                 preserveVpnDuringReconnect = preserveVpn
                 updateLog("reconnect", "🔄 Переподключение ($reason)...", 50, false)
+                // The raw journal is what users send: the reason must be in it, otherwise
+                // a restart looks like the connection dropped on its own.
+                runCatching {
+                    com.wdtt.client.lite.RawLog.marker(
+                        "приложение перезапускает подключение: $reason" + if (preserveVpn) ", VPN сохраняется" else ""
+                    )
+                }
                 try {
                     val previousWireGuardConfig = config.value?.trim()
                     keepWireGuardOnNextConfig = false

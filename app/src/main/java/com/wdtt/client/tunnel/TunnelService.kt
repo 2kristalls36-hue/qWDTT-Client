@@ -641,6 +641,7 @@ class TunnelService : Service() {
             return
         }
         if (fingerprint == lastUnderlyingFingerprint) return
+        TunnelManager.addNetworkLog("[СЕТЬ] Основная сеть: $lastUnderlyingFingerprint → $fingerprint")
         lastUnderlyingFingerprint = fingerprint
         handleNetworkChange()
     }

@@ -532,12 +532,12 @@ func main() {
 
 	var wg sync.WaitGroup
 	workerIDCounter := 1
+	// Конфиг туннеля может получить любая группа (см. configRelay).
+	cfgRelay := &configRelay{ch: configCh}
 
 	var prevWaitReady <-chan struct{}
 
 	for g := 0; g < numGroups; g++ {
-		isFirst := (g == 0)
-
 		var myWaitReady <-chan struct{}
 		var mySignalReady chan<- struct{}
 
@@ -567,17 +567,13 @@ func main() {
 		}
 
 		gID := g + 1
-		var cc chan<- string
-		if isFirst {
-			cc = configCh
-		}
 
 		wg.Add(1)
-		go func(groupID int, isFirstGroup bool, configChan chan<- string, workerIds []int, startHashIndex int, waitR <-chan struct{}, sigR chan<- struct{}) {
+		go func(groupID int, workerIds []int, startHashIndex int, waitR <-chan struct{}, sigR chan<- struct{}) {
 			defer wg.Done()
 			WorkerGroup(ctx, groupID, startHashIndex, tp, peer, disp, localPort,
-				isFirstGroup, configChan, workerIds, &pauseFlag, *deviceID, *connPassword, stats, waitR, sigR)
-		}(gID, isFirst, cc, ids, g, myWaitReady, mySignalReady)
+				cfgRelay, workerIds, &pauseFlag, *deviceID, *connPassword, stats, waitR, sigR)
+		}(gID, ids, g, myWaitReady, mySignalReady)
 	}
 
 	wg.Wait()

@@ -8,6 +8,16 @@ import (
 	"time"
 )
 
+// configRetryMarker — начало ошибки сессии, не получившей конфиг туннеля:
+// поток сразу повторяет запрос (см. fastRetry в group.go).
+const configRetryMarker = "конфиг не получен"
+
+// rawConfigReadTimeout — сколько ждать ответ на GETCONF_RAW. Запрос и ответ —
+// по одному UDP-пакету через TURN; потерянный ответ раньше ждали 45 с, дольше
+// таймаута шага в приложении (25 с), и повтор не успевал. Сервер отвечает за
+// доли секунды, 8 с — с запасом на медленный relay.
+const rawConfigReadTimeout = 8 * time.Second
+
 // RequestConfig запрашивает WireGuard конфиг через DTLS-соединение.
 func RequestConfig(conn net.Conn, localPort, deviceID, password string) (string, error) {
 	payload := fmt.Sprintf("GETCONF:%s|%s|%s", localPort, deviceID, password)
@@ -67,7 +77,7 @@ func RequestRawConfig(conn net.Conn, deviceID, password string) (ip, dnsCSV stri
 	}
 
 	b := make([]byte, 4096)
-	if err = conn.SetReadDeadline(time.Now().Add(45 * time.Second)); err != nil {
+	if err = conn.SetReadDeadline(time.Now().Add(rawConfigReadTimeout)); err != nil {
 		return "", "", 0, fmt.Errorf("установка дедлайна: %w", err)
 	}
 	n, readErr := conn.Read(b)

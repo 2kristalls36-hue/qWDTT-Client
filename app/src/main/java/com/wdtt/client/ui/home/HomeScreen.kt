@@ -110,6 +110,7 @@ fun HomeScreen(settingsStore: SettingsStore, onOpenProfiles: () -> Unit) {
     val downActive by TunnelManager.downActive.collectAsStateWithLifecycle()
     val upActive by TunnelManager.upActive.collectAsStateWithLifecycle()
     val trustedPause by TunnelManager.trustedPause.collectAsStateWithLifecycle()
+    val vkWait by TunnelManager.vkWait.collectAsStateWithLifecycle()
     val state = when {
         trustedPause != null -> TunnelUiState.Paused
         connecting || reconnecting -> TunnelUiState.Connecting
@@ -149,8 +150,9 @@ fun HomeScreen(settingsStore: SettingsStore, onOpenProfiles: () -> Unit) {
     // Real connection stages from the client, for the ring and the line under the button.
     val pipeline by TunnelManager.connectionPipeline.collectAsStateWithLifecycle()
     val stageView = com.wdtt.client.lite.ConnectionStages.view(pipeline)
-        // While paused on a trusted network the line names the pause, not the last attempt.
-        ?.takeIf { state != TunnelUiState.Paused && (state == TunnelUiState.Connecting || it.failed) }
+        // While paused on a trusted network the line names the pause, not the last attempt;
+        // while the engine waits out a VK limit, the line says that instead of a stage.
+        ?.takeIf { state != TunnelUiState.Paused && !(vkWait && state == TunnelUiState.Connecting) && (state == TunnelUiState.Connecting || it.failed) }
 
     // Vibration on results: connected, or an attempt that ended without connecting.
     val haptics = com.wdtt.client.ui.motion.LocalAppHaptics.current
@@ -227,7 +229,8 @@ fun HomeScreen(settingsStore: SettingsStore, onOpenProfiles: () -> Unit) {
             StatusLine(
                 state, level, stageView,
                 notice = notice.takeIf { state == TunnelUiState.Off }
-                    ?: trustedPause?.let { "Пауза: доверенная сеть «$it»." },
+                    ?: trustedPause?.let { "Пауза: доверенная сеть «$it»." }
+                    ?: VK_WAIT_NOTICE.takeIf { vkWait && state == TunnelUiState.Connecting },
             )
             StatsRow(
                 visible = state == TunnelUiState.On,
@@ -575,3 +578,6 @@ private fun tileValueStyle() = TextStyle(
 
 /** How much the power card is drawn up into the gap above it. */
 private val PowerCardLift = 16.dp
+
+/** Under the button while the engine waits out a VK limit and retries by itself. */
+internal const val VK_WAIT_NOTICE = "VK временно ограничил запросы.\nПриложение повторит подключение автоматически."

@@ -60,9 +60,6 @@ object TunnelManager {
     private var isConnectionPipelineEnabled = true
 
     // Error counters for circuit breaker
-    private var floodCount = 0
-    private var mismatchCount = 0
-    private var refusedCount = 0
     private var currentHashErrorCount = 0
     private var wrapAuthTimeoutCount = 0
     private var processStartedAtMs = 0L
@@ -93,6 +90,8 @@ object TunnelManager {
     private var currentCaptchaMode = "wv" // режим обхода капчи: "wv" или "rjs"
     private var currentCaptchaSolveMethod = "auto" // "manual" или "auto"
     private var restartAttempts = 0
+    /** Engine restarts in a row for running with no live streams (see EngineSignals). */
+    private var zombieRestarts = 0
     private val maxRestartBackoffSec = 30
 
     private var activeProfileId = ""
@@ -338,6 +337,8 @@ object TunnelManager {
             clearLogs()
             lastFatalError.value = null
             stopNotice.value = null
+            resetVkWait()
+            zombieRestarts = 0
             diagnostics.value = DiagnosticsState(requested = pendingManualDiag)
             // Флаг обновится в startJob через first()/collect; пока — кэш.
             currentParams = params
@@ -361,9 +362,6 @@ object TunnelManager {
                     }
                 }
             }
-            floodCount = 0
-            mismatchCount = 0
-            refusedCount = 0
             currentHashErrorCount = 0
             wrapAuthTimeoutCount = 0
             processStartedAtMs = 0L
@@ -782,6 +780,40 @@ object TunnelManager {
     val stopNotice = MutableStateFlow<String?>(null)
 
     /**
+     * The engine waits out a VK limit and will retry by itself (VK_WAIT from the engine):
+     * the step timeout of the connection scheme is held, and the home screen says so.
+     */
+    val vkWait = MutableStateFlow(false)
+    private var vkWaitJob: Job? = null
+
+    private fun onEngineVkWait(seconds: Int) {
+        vkWaitJob?.cancel()
+        if (seconds <= 0) {
+            vkWait.value = false
+            vkWaitJob = null
+            updateLog("vk_wait", "[ВК] Ограничение запросов снято, подключение продолжается", 2, false)
+            return
+        }
+        vkWait.value = true
+        // Пока движок выжидает, шаг схемы не считается зависшим; после паузы
+        // (с запасом) таймаут шага снова в силе.
+        cancelPipelineStepTimeout()
+        updateLog("vk_wait", "[ВК] VK ограничил запросы — повтор через $seconds с", 2, false)
+        vkWaitJob = scope.launch {
+            delay(seconds * 1000L + 15_000L)
+            vkWait.value = false
+            val current = connectionPipeline.value
+            if (current.visible && current.failed == null) armPipelineStepTimeout(current.current)
+        }
+    }
+
+    private fun resetVkWait() {
+        vkWaitJob?.cancel()
+        vkWaitJob = null
+        vkWait.value = false
+    }
+
+    /**
      * Name of the trusted Wi‑Fi network the connection is paused on (tunnel and VPN down,
      * the service waits for the device to leave it); null — not paused.
      */
@@ -851,9 +883,6 @@ object TunnelManager {
                     // Периодический сброс счетчиков ошибок (раз в 60 сек)
                     val now = System.currentTimeMillis()
                     if (now - lastResetTime > 60000) {
-                        refusedCount = 0
-                        floodCount = 0
-                        mismatchCount = 0
                         currentHashErrorCount = 0
                         lastResetTime = now
                     }
@@ -966,40 +995,20 @@ object TunnelManager {
                         return@forEachLine
                     }
 
+                    // 0d. VK_WAIT — движок выжидает ограничение VK и повторит сам.
+                    EngineSignals.vkWaitSeconds(lineTrim)?.let { seconds ->
+                        onEngineVkWait(seconds)
+                        return@forEachLine
+                    }
+
                     // 1. ПРЕДОХРАНИТЕЛЬ (Circuit Breaker)
+                    // Ограничения VK (flood control), ip mismatch после смены сети и
+                    // таймауты больше не останавливают подключение: движок сам выжидает
+                    // ограничение (VK_WAIT), берёт свежие креды и повторяет потоки.
+                    // Остановка — только там, где повтор не поможет: неверный пароль
+                    // (FATAL_AUTH выше) и недоступный звонок (ниже).
                     if (isError) {
                         when {
-                            lineTrim.contains("Flood control", true) -> {
-                                floodCount++
-                                if (floodCount >= 5) {
-                                    handleCriticalError(
-                                        "Flood Control (ВК ограничил ваш IP).",
-                                        "VK временно ограничил запросы. Подключение остановлено.",
-                                    )
-                                    return@forEachLine
-                                }
-                            }
-                            lineTrim.contains("ip mismatch", true) -> {
-                                mismatchCount++
-                                if (mismatchCount >= 5) {
-                                    handleCriticalError(
-                                        "IP Mismatch (IP утерян).",
-                                        "Сетевой адрес устройства изменился. Подключение остановлено.",
-                                    )
-                                    return@forEachLine
-                                }
-                            }
-                            lineTrim.contains("connection refused", true) || lineTrim.contains("timeout", true) -> {
-                                // Огромный лимит, потому что каждый воркер кидает эту ошибку при смене сети
-                                refusedCount++
-                                if (refusedCount >= 400) {
-                                    handleCriticalError(
-                                        "Критическое отсутствие сети (400+ таймаутов). Отключение.",
-                                        "Нет доступа к сети. Подключение остановлено.",
-                                    )
-                                    return@forEachLine
-                                }
-                            }
                             lineTrim.contains("9000") || lineTrim.contains("Call not found", true) -> {
                                 currentHashErrorCount++
                                 // Нужно больше попыток, так как 1 воркер может спамить
@@ -1543,7 +1552,8 @@ object TunnelManager {
                 // Детекция зомби: процесс жив, но 0 воркеров
                 val workers = activeWorkers.value
                 if (workers <= 0) {
-                    if (zeroWorkersSince == 0L) {
+                    // Пока движок выжидает ограничение VK, отсутствие потоков ожидаемо.
+                    if (zeroWorkersSince == 0L || vkWait.value) {
                         zeroWorkersSince = System.currentTimeMillis()
                     } else if (
                         wrapAuthTimeoutCount >= 3 &&
@@ -1566,14 +1576,20 @@ object TunnelManager {
                             if (known) sentence(diagVerdict!!.title) else "Неверный пароль подключения.",
                         )
                         return@launch
-                    } else if (System.currentTimeMillis() - zeroWorkersSince > 90_000 && !ManlCaptchaWebViewManager.isCaptchaPending) {
-                        updateLog("watchdog", "⚠ Зомби-процесс (0 воркеров 90с). Перезапуск...", 50, true)
+                    } else if (
+                        System.currentTimeMillis() - zeroWorkersSince > EngineSignals.zombieRestartDelayMs(zombieRestarts) &&
+                        !ManlCaptchaWebViewManager.isCaptchaPending
+                    ) {
+                        val waitedSec = EngineSignals.zombieRestartDelayMs(zombieRestarts) / 1000
+                        zombieRestarts = (zombieRestarts + 1).coerceAtMost(10)
+                        updateLog("watchdog", "⚠ Нет активных потоков ${waitedSec} с. Перезапуск (${zombieRestarts}-й подряд)...", 50, true)
                         forceRegenerateUA = true
                         reconnectAll("зомби-процесс")
                         return@launch
                     }
                 } else {
                     zeroWorkersSince = 0L
+                    zombieRestarts = 0
                     // Успешная активность — сбрасываем счётчик попыток рестарта
                     restartAttempts = 0
 
@@ -1873,6 +1889,7 @@ object TunnelManager {
         // stopJob, а не блокирует вызывающий (обычно главный) поток.
         watchdogJob?.cancel()
         readerJob?.cancel()
+        resetVkWait()
         markRunning(false)
         isConnecting.value = false
         activeWorkers.value = 0
@@ -2206,6 +2223,8 @@ object TunnelManager {
         if (step == null || step == ConnectionStep.DONE) return
         // Много потоков поднимаются постепенно; капча / вход по аккаунту VK ждут пользователя.
         if (step == ConnectionStep.WORKERS || step == ConnectionStep.CAPTCHA) return
+        // Движок выжидает ограничение VK и повторит сам (VK_WAIT).
+        if (vkWait.value) return
         if (step == ConnectionStep.VK && isAccountVkAuthActive()) return
 
         val timeoutMs = pipelineTimeoutFor(step)

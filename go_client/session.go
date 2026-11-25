@@ -424,7 +424,16 @@ func RunSession(
 			if strings.Contains(errStr, "FATAL_AUTH") {
 				return false, confErr
 			}
+			// Раньше поток с неудачным запросом конфига работал дальше как
+			// обычный и держал запрос «в процессе» до конца сессии (часы):
+			// никто другой конфиг не просил, туннель не поднимался. Теперь
+			// сессия завершается, запрос освобождается и сразу повторяется.
 			log.Printf("[ВОРКЕР #%d] Ошибка RAW-конфига: %v", sessionID, confErr)
+			// Если потерялся именно ответ, сервер этот поток уже зарегистрировал:
+			// прощаемся, чтобы он не раздавал в него трафик до своего таймаута.
+			_ = activeConn.SetWriteDeadline(time.Now().Add(500 * time.Millisecond))
+			_, _ = activeConn.Write([]byte("DISCONNECT_RAW:" + deviceID))
+			return false, fmt.Errorf("%s: %w", configRetryMarker, confErr)
 		} else if ip != "" {
 			conf := fmt.Sprintf("RAWCONF:%s|%s|%d", ip, dnsCSV, mtu)
 			select {
@@ -437,6 +446,7 @@ func RunSession(
 			}
 		} else {
 			log.Printf("[ВОРКЕР #%d] Сервер ещё не назначил raw IP, повторим позже", sessionID)
+			return false, fmt.Errorf("%s: сервер ещё не назначил адрес", configRetryMarker)
 		}
 	} else if getConfig && configCh != nil {
 		conf, confErr := RequestConfig(activeConn, localPort, deviceID, password)
@@ -446,6 +456,7 @@ func RunSession(
 				return false, confErr
 			}
 			log.Printf("[ВОРКЕР #%d] Ошибка конфига: %v", sessionID, confErr)
+			return false, fmt.Errorf("%s: %w", configRetryMarker, confErr)
 		} else if conf != "" {
 			select {
 			case configCh <- conf:
@@ -457,6 +468,7 @@ func RunSession(
 			}
 		} else {
 			log.Printf("[ВОРКЕР #%d] Сервер ещё не выдал WireGuard-конфиг, повторим позже", sessionID)
+			return false, fmt.Errorf("%s: сервер ещё не выдал конфиг", configRetryMarker)
 		}
 	} else {
 		if authErr := SendAuth(activeConn, deviceID, password); authErr != nil {

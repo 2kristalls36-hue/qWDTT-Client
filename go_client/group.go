@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"math/rand"
 	"net"
@@ -52,6 +53,106 @@ func workerRetryDelay(attempt int) time.Duration {
 	return d + time.Duration(rand.Intn(500))*time.Millisecond
 }
 
+// groupStartBarrier — сколько следующая группа ждёт, пока эта получит доступ
+// к звонку. Раньше ждала только успеха: группа, не получившая доступ, выходила
+// и не передавала эстафету — все следующие группы ждали вечно, а без первой и
+// конфиг туннеля не приходил. Теперь эстафета уходит по успеху или по этому
+// таймауту, что раньше; запросы к VK всё равно идут по одному (vkRequestMu).
+const groupStartBarrier = 20 * time.Second
+
+// configRelay — получение конфига туннеля (RAWCONF/WG) на все группы сразу:
+// его может получить любой поток любой группы, а не только первая группа.
+// sent — конфиг доставлен; inFlight — его прямо сейчас запрашивает один поток.
+type configRelay struct {
+	ch       chan<- string
+	sent     atomic.Bool
+	inFlight atomic.Bool
+}
+
+// isVKLimitError — VK ограничил запросы (flood control, rate limit, error 29)
+// или действует пауза после капчи: повторять сразу бессмысленно и вредно.
+func isVKLimitError(err error) bool {
+	if err == nil {
+		return false
+	}
+	t := strings.ToLower(err.Error())
+	return strings.Contains(t, "flood") ||
+		strings.Contains(t, "rate limit") ||
+		strings.Contains(t, "too many requests") ||
+		strings.Contains(t, "error_code:29") ||
+		strings.Contains(t, "error_code: 29") ||
+		strings.Contains(t, "error 29") ||
+		strings.Contains(t, "captcha_wait_required")
+}
+
+// vkLimitDelay — пауза после ограничения со стороны VK: 1 → 2 → 4 → 8 → 10 мин
+// плюс разброс. Частые повторы только продлевают ограничение и ведут к капче.
+func vkLimitDelay(streak int) time.Duration {
+	if streak < 1 {
+		streak = 1
+	}
+	d := time.Minute
+	for i := 1; i < streak && d < 10*time.Minute; i++ {
+		d *= 2
+	}
+	if d > 10*time.Minute {
+		d = 10 * time.Minute
+	}
+	return d + time.Duration(rand.Intn(10_000))*time.Millisecond
+}
+
+// credsRetryDelay — пауза перед повтором получения доступа к звонку группой:
+// после ограничения VK — vkLimitDelay (но не раньше конца паузы после капчи),
+// после прочих ошибок (сеть, DNS) — 2 → 4 → … → 60 с плюс разброс.
+func credsRetryDelay(err error, attempt, limitStreak int, lockoutUntil time.Time) time.Duration {
+	if isVKLimitError(err) {
+		d := vkLimitDelay(limitStreak)
+		if until := time.Until(lockoutUntil); until > d {
+			d = until + time.Duration(rand.Intn(3000))*time.Millisecond
+		}
+		return d
+	}
+	if attempt < 1 {
+		attempt = 1
+	}
+	d := 2 * time.Second
+	for i := 1; i < attempt && d < time.Minute; i++ {
+		d *= 2
+	}
+	if d > time.Minute {
+		d = time.Minute
+	}
+	return d + time.Duration(rand.Intn(1000))*time.Millisecond
+}
+
+// announceVKWait сообщает приложению, что движок выжидает ограничение VK
+// (VK_WAIT|секунды) или что ожидание закончилось (VK_WAIT|0): приложение
+// не считает это зависанием и пишет об ожидании под кнопкой.
+var vkWaitAnnounced atomic.Bool
+
+func announceVKWait(d time.Duration) {
+	if d <= 0 {
+		if vkWaitAnnounced.Swap(false) {
+			fmt.Println("VK_WAIT|0")
+		}
+		return
+	}
+	vkWaitAnnounced.Store(true)
+	fmt.Printf("VK_WAIT|%d\n", int(d.Seconds()))
+}
+
+// waitWhilePaused — ждёт, пока снята пауза (PAUSE из stdin). false — ctx отменён.
+func waitWhilePaused(ctx context.Context, pauseFlag *int32) bool {
+	for atomic.LoadInt32(pauseFlag) != 0 {
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(time.Second):
+		}
+	}
+	return ctx.Err() == nil
+}
+
 // WorkerGroup:
 // Запускает 9 потоков с одними кредами. Ротации нет — работает до смерти воркеров.
 func WorkerGroup(
@@ -62,8 +163,7 @@ func WorkerGroup(
 	peer *net.UDPAddr,
 	d *Dispatcher,
 	localPort string,
-	getConfig bool,
-	configCh chan<- string,
+	cfg *configRelay,
 	workerIDs []int,
 	pauseFlag *int32,
 	deviceID, password string,
@@ -81,17 +181,26 @@ func WorkerGroup(
 		}
 	}
 
-	var configSent int32
-	if !getConfig {
-		configSent = 1
-	}
-
-	// Doze-mode пауза
-	for atomic.LoadInt32(pauseFlag) != 0 {
-		if ctx.Err() != nil {
+	// Эстафета следующей группе — ровно один раз: по успеху (ниже), по
+	// таймауту groupStartBarrier или если эта группа остановлена насовсем.
+	var passOnce sync.Once
+	passOn := func(reason string) {
+		if signalReady == nil {
 			return
 		}
-		time.Sleep(1 * time.Second)
+		passOnce.Do(func() {
+			close(signalReady)
+			log.Printf("[ГРУППА #%d] Передача эстафеты следующей группе (%s)", groupID, reason)
+		})
+	}
+	if signalReady != nil {
+		go func() {
+			select {
+			case <-time.After(groupStartBarrier):
+				passOn("ожидание доступа дольше " + groupStartBarrier.String())
+			case <-ctx.Done():
+			}
+		}()
 	}
 
 	hash := tp.Hashes[hashIndex%len(tp.Hashes)]
@@ -99,23 +208,58 @@ func WorkerGroup(
 	if len(shortHash) > 8 {
 		shortHash = shortHash[:8]
 	}
-	log.Printf("[ГРУППА #%d] Запрос кредов (хеш: %s...)", groupID, shortHash)
-
 	credStreamID := groupID * 100
-	user, pass, turnURLs, err := GetCreds(ctx, hash, credStreamID)
+
+	// Доступ к звонку: при ошибке группа не выходит, а повторяет — с паузой
+	// по виду ошибки (ограничение VK — минуты, сеть — секунды). Насовсем
+	// останавливает только недоступный звонок: повтор с той же ссылкой не
+	// поможет, приложение переключит хеш или остановит подключение само.
 	var creds *Credentials
-	if err == nil {
-		creds = &Credentials{User: user, Pass: pass, TurnURLs: turnURLs, CacheStreamID: credStreamID}
-	} else {
+	limitStreak := 0
+	for attempt := 1; ; attempt++ {
+		// Doze-mode пауза
+		if !waitWhilePaused(ctx, pauseFlag) {
+			return
+		}
+		log.Printf("[ГРУППА #%d] Запрос кредов (хеш: %s...)", groupID, shortHash)
+		user, pass, turnURLs, err := GetCreds(ctx, hash, credStreamID)
+		if err == nil {
+			creds = &Credentials{User: user, Pass: pass, TurnURLs: turnURLs, CacheStreamID: credStreamID}
+			break
+		}
+		if ctx.Err() != nil {
+			return
+		}
 		log.Printf("[ГРУППА #%d] Ошибка кредов: %v", groupID, err)
 		markDiagCredsFailed()
-		return
+		if _, dead := asCallUnavailableError(err); dead {
+			log.Printf("[ГРУППА #%d] Звонок недоступен — группа остановлена", groupID)
+			passOn("звонок недоступен")
+			return
+		}
+		if isVKLimitError(err) {
+			limitStreak++
+		} else {
+			limitStreak = 0
+		}
+		wait := credsRetryDelay(err, attempt, limitStreak, time.Unix(globalCaptchaLockout.Load(), 0))
+		if isVKLimitError(err) {
+			announceVKWait(wait)
+			log.Printf("[ГРУППА #%d] VK ограничил запросы — повтор через %v", groupID, wait.Truncate(time.Second))
+		} else {
+			log.Printf("[ГРУППА #%d] Повтор запроса кредов через %v", groupID, wait.Truncate(time.Second))
+		}
+		select {
+		case <-time.After(wait):
+		case <-ctx.Done():
+			return
+		}
 	}
 
+	announceVKWait(0)
 	log.Printf("[ГРУППА #%d] Креды OK, TURN: %v, %d воркеров", groupID, creds.TurnURLs, len(workerIDs))
 	markDiagCredsReady()
 
-	var configRequestInFlight int32
 	var wg sync.WaitGroup
 	var credsMu sync.RWMutex
 	var refreshMu sync.Mutex
@@ -155,8 +299,7 @@ func WorkerGroup(
 		go func() {
 			delayMs := 500 + rand.Intn(250)
 			time.Sleep(time.Duration(delayMs) * time.Millisecond)
-			close(signalReady)
-			log.Printf("[ГРУППА #%d] Успешный старт! Передача эстафеты следующей группе...", groupID)
+			passOn("успешный старт")
 		}()
 	}
 
@@ -187,7 +330,6 @@ func WorkerGroup(
 				}
 			}
 
-			shouldGetConfig := getConfig
 			attempt := 0
 			quotaStreak := 0 // сколько раз подряд VK ответил «квота исчерпана»
 
@@ -197,12 +339,12 @@ func WorkerGroup(
 				}
 
 				getConf := false
-				if shouldGetConfig && atomic.LoadInt32(&configSent) == 0 {
-					getConf = atomic.CompareAndSwapInt32(&configRequestInFlight, 0, 1)
+				if cfg != nil && !cfg.sent.Load() {
+					getConf = cfg.inFlight.CompareAndSwap(false, true)
 				}
 				var cc chan<- string
 				if getConf {
-					cc = configCh
+					cc = cfg.ch
 				}
 
 				credsMu.RLock()
@@ -216,12 +358,12 @@ func WorkerGroup(
 
 				quotaRetry := false
 				fastRetry := false
+				vkLimited := false
 				if getConf {
 					if configDelivered {
-						atomic.StoreInt32(&configSent, 1)
-					} else {
-						atomic.StoreInt32(&configRequestInFlight, 0)
+						cfg.sent.Store(true)
 					}
+					cfg.inFlight.Store(false)
 				}
 
 				if sessErr != nil {
@@ -232,13 +374,19 @@ func WorkerGroup(
 					errStrLower := strings.ToLower(errStr)
 					fastRetry = strings.Contains(errStrLower, "broken pipe") ||
 						strings.Contains(errStrLower, "connection reset by peer") ||
-						strings.Contains(errStrLower, "unexpected eof")
+						strings.Contains(errStrLower, "unexpected eof") ||
+						// Конфиг не получен (потерян ответ, сервер ещё не назначил
+						// адрес): поток уже освободил запрос, повтор — сразу.
+						strings.Contains(errStr, configRetryMarker)
 
 					turnAllocAttrMissing := strings.Contains(errStrLower, "turn allocate") &&
 						strings.Contains(errStrLower, "attribute not found")
 					isTurnQuota := strings.Contains(errStrLower, "quota") || strings.Contains(errStr, "486")
 					quotaRetry = isTurnQuota
+					// ip mismatch: креды VK привязаны к адресу, а он сменился (смена
+					// сети) — лечится только свежими кредами.
 					turnCredRefreshNeeded := !isTurnQuota && (turnAllocAttrMissing ||
+						strings.Contains(errStrLower, "ip mismatch") ||
 						strings.Contains(errStrLower, "turn allocate auth") ||
 						strings.Contains(errStrLower, "invalid credential") ||
 						strings.Contains(errStrLower, "stale nonce") ||
@@ -280,13 +428,12 @@ func WorkerGroup(
 						log.Printf("[ВОРКЕР #%d] Ошибка (попытка %d): %s", wid, attempt, errStr)
 					}
 
-					// Если ошибка STUN (credentials invalid), воркер не сможет переподключиться. Завершаем.
-					isStunDeath := strings.Contains(errStrLower, "error 29") ||
-						strings.Contains(errStrLower, "cannot create socket")
-
-					if isStunDeath {
-						log.Printf("[ВОРКЕР #%d] Невосстановимая TURN/STUN ошибка, завершение: %s", wid, errStr)
-						return
+					// Раньше «error 29» и «cannot create socket» завершали поток насовсем,
+					// и за долгую сессию группа тихо теряла потоки. Это ограничение VK
+					// и временная нехватка сети: поток ждёт и повторяет.
+					if isVKLimitError(sessErr) {
+						vkLimited = true
+						log.Printf("[ВОРКЕР #%d] VK ограничил запросы — пауза перед повтором", wid)
 					}
 				}
 
@@ -304,6 +451,8 @@ func WorkerGroup(
 				retryDelay := workerRetryDelay(attempt)
 				if quotaRetry {
 					retryDelay = quotaRetryDelay(quotaStreak)
+				} else if vkLimited {
+					retryDelay = 30*time.Second + time.Duration(rand.Intn(30_000))*time.Millisecond
 				} else if fastRetry {
 					retryDelay = time.Duration(1+rand.Intn(3)) * time.Second
 				}

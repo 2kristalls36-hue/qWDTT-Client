@@ -449,11 +449,20 @@ class SnowGlobePhysics(
         for (c in 0 until columns) {
             val i0 = top[s][c]
             if (i0 < 0 || away < letGoAt(i0, s, c)) { slideCarry[s][c] = 0f; continue }
-            slideCarry[s][c] += (3f + 30f * (away - letGoAt(i0, s, c))) * h * (0.3f + 1.4f * rnd())
+            // The further past its grip, the faster it peels off; well past it, in lumps.
+            slideCarry[s][c] += (8f + 120f * (away - letGoAt(i0, s, c))) * h * (0.3f + 1.4f * rnd())
             any = true // a grain is about to let go here
             while (slideCarry[s][c] >= 1f && top[s][c] >= 0 && away >= letGoAt(top[s][c], s, c)) {
                 slideCarry[s][c] -= 1f
-                if (rise(s, c, (rnd() - 0.5f) * 0.05f, -sign(s) * 0.04f) >= 0) any = true
+                val lump = if (away > 0.75f && rnd() < 0.6f) 2 + (rnd() * 3f).toInt() else 1
+                val ux = (rnd() - 0.5f) * 0.05f
+                val uy = -sign(s) * (0.04f + 0.04f * rnd())
+                var k = 0
+                while (k < lump && top[s][c] >= 0 && away >= letGoAt(top[s][c], s, c)) {
+                    // A lump falls together: the same push for each grain in it.
+                    if (rise(s, c, ux, uy) >= 0) any = true
+                    k++
+                }
             }
         }
         return any

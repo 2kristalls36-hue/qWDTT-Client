@@ -151,4 +151,15 @@ class SnowGlobePhysicsTest {
         val back = (0 until sim.columns).sumOf { sim.bottomDepth(it).toDouble() }
         assertTrue("back on the bottom: $back", back > 0.95 * (onTop + onBottom))
     }
+
+    @Test fun turnedBackTheSnowDoesNotHangFromTheTop() {
+        val sim = SnowGlobePhysics(5.5f)
+        sim.settleAll()
+        repeat(60 * 40) { sim.step(dt, tiltX = 0f, tiltY = -1f) }
+        val hanging = (0 until sim.columns).sumOf { sim.topDepth(it).toDouble() }
+        // Upright again: within two seconds most of it has let go of the top wall.
+        repeat(120) { sim.step(dt) }
+        val left = (0 until sim.columns).sumOf { sim.topDepth(it).toDouble() }
+        assertTrue("still on the top: $left of $hanging", left < 0.3 * hanging)
+    }
 }

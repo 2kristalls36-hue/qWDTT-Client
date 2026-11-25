@@ -406,16 +406,21 @@ private fun BrandTitle(blend: Float, modifier: Modifier = Modifier) {
     } else null
     val period = with(androidx.compose.ui.platform.LocalDensity.current) { 220.dp.toPx() }
     val festive = com.wdtt.client.ui.festive.LocalFestive.current
+    // New Year: «qWDTT» in the warm yellow of the garland, like the chosen tab; a deeper
+    // yellow on a light ground.
+    val titleAccent = if (festive.active) {
+        if (MaterialTheme.colorScheme.background.luminance() < 0.5f) com.wdtt.client.ui.festive.GarlandColors[1] else Color(0xFFE0A100)
+    } else accent
     // Two-tone level colour, deeper at the start of the word; neon laid over it by k.
     val fill = Modifier
         .graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
         .drawWithContent {
             drawContent()
             drawRect(
-                Brush.linearGradient(listOf(lerp(accent, Color.Black, 0.12f), lerp(accent, Color.White, 0.18f)), end = Offset(size.width, size.height)),
+                Brush.linearGradient(listOf(lerp(titleAccent, Color.Black, 0.12f), lerp(titleAccent, Color.White, 0.18f)), end = Offset(size.width, size.height)),
                 blendMode = androidx.compose.ui.graphics.BlendMode.SrcIn,
             )
-            if (k > 0.01f) {
+            if (k > 0.01f && !festive.active) {
                 val shift = (drift?.value ?: 0.3f) * period
                 drawRect(
                     Brush.linearGradient(

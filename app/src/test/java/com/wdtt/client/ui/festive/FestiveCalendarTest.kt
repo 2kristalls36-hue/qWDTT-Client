@@ -29,15 +29,4 @@ class FestiveCalendarTest {
         assertEquals(LocalDateTime.of(2027, 1, 3, 0, 0), next(2027, 1, 2))
         assertEquals(LocalDateTime.of(2027, 12, 31, 0, 0), next(2027, 1, 3))
     }
-
-    @Test fun snowSettlesOnTheBottomAndAShakeLiftsIt() {
-        val sim = SnowGlobeSim(20, 5)
-        var steps = 0
-        while (sim.step(1f / 60f, 0.2f) && steps < 20_000) steps++
-        assertTrue("settles", steps < 20_000)
-        for (i in 0 until sim.count) assertEquals(sim.floor(i), sim.y[i], 1e-4f)
-        sim.shake(1f)
-        sim.step(1f / 60f, 0.2f)
-        assertTrue((0 until sim.count).any { sim.y[it] < sim.floor(it) - 0.001f })
-    }
 }

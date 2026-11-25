@@ -143,11 +143,8 @@ fun ArdttSearchBar(
             blur = backdrop.frost(),
             modifier = modifier.snowCap(com.wdtt.client.ui.components.layout.fitRadius(ArdttRadius.Control, inset = com.wdtt.client.ui.components.layout.ArdttBottomChrome.barSideGap()), seed = 4, depth = 4.dp).then(tap),
         ) {
-            // New Year: snow and frost inside the glass, not on top of it.
-            androidx.compose.foundation.layout.Box(Modifier.frost(seed = 4, strength = 0.6f)) {
-                com.wdtt.client.ui.festive.SnowGlobe({ 0f }, 1, Modifier.matchParentSize(), flakes = 30)
-                fieldRow()
-            }
+            // New Year: frost inside the glass (the snow globe is only in the tab bar).
+            androidx.compose.foundation.layout.Box(Modifier.frost(seed = 4, strength = 0.6f)) { fieldRow() }
         }
         return
     }

@@ -603,7 +603,7 @@ fun ArdttNavigationBar(
                         },
                 ) {
                     // New Year: snow inside the glass, stirred by the droplet and a shake.
-                    com.wdtt.client.ui.festive.SnowGlobe({ selPos.value }, count, Modifier.matchParentSize())
+                    com.wdtt.client.ui.festive.SnowGlobe({ selPos.value }, count, barRadius / ArdttSize.NavTrack, Modifier.matchParentSize())
                     tabs()
                 }
                 val trackH = ArdttSize.NavTrack
@@ -637,10 +637,11 @@ fun ArdttNavigationBar(
                         // Narrow, shallow rim: the label sits close to the lower edge and must
                         // stay in the flat middle, not curl along the rim.
                         bezel = NavDropletBezel,
-                        depth = 2.dp,
+                        // Held, the swollen droplet bends the light more at its rim.
+                        depth = 2.dp + 3.dp * lens,
                         // A little magnification, like a magnifying lens over the tab; the
                         // labels are kept narrow enough to stay in the flat middle (see NavBarTab).
-                        zoom = NavDropletZoom,
+                        zoom = NavDropletZoom + 0.04f * lens,
                         blur = 0.dp,
                         underlay = lerp(colors.surface, Color.White, if (dark) 0.06f else 0.5f),
                         fringe = 0.45f, dispersion = 0.2f,

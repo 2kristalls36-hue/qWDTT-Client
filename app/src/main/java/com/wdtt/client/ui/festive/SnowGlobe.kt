@@ -10,14 +10,20 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -25,171 +31,185 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlin.math.abs
-import kotlin.math.exp
-import kotlin.math.sqrt
+import kotlin.math.cos
+import kotlin.math.hypot
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.pow
+import kotlin.math.sin
 
-/**
- * Snow in a glass globe, in bar units (x and y from 0 to 1). The flakes sink slowly
- * through the liquid and settle on the bottom; a push or a shake lifts them again.
- */
-class SnowGlobeSim(val count: Int, seed: Int) {
-    val x = FloatArray(count) { hash01(seed, it) }
-    val y = FloatArray(count) { hash01(seed + 1, it) * 0.9f }
-    private val vx = FloatArray(count)
-    private val vy = FloatArray(count)
-    val size = FloatArray(count) { 0.6f + 0.4f * hash01(seed + 2, it) }
-    private var noise = seed
+/** The phone's tilt and its own acceleration, on the screen (filled by the sensor). */
+internal class DeviceMotion {
+    /** Direction of gravity on the screen, about unit length when upright. */
+    var tiltX = 0f
+    var tiltY = 1f
+    /** The phone's own acceleration on the screen, m/s². */
+    var shakeX = 0f
+    var shakeY = 0f
+}
 
-    private fun rnd(): Float {
-        noise++
-        return hash01(noise, 977)
-    }
-
-    /** Where a flake lies on the bottom: a low heap, bigger flakes a little lower. */
-    fun floor(i: Int): Float = 0.94f - 0.05f * hash01(7, i)
-
-    /** The droplet moved by [dx] (bar widths) around [cx]: the liquid drags the flakes near it. */
-    fun stir(cx: Float, dx: Float) {
-        for (i in 0 until count) {
-            val d = abs(x[i] - cx)
-            if (d > 0.3f) continue
-            val k = 1f - d / 0.3f
-            vx[i] += dx * 14f * k
-            vy[i] -= abs(dx) * 9f * k * (0.5f + rnd())
-        }
-    }
-
-    /** A shake of the phone: every flake is thrown up, more for a stronger shake. */
-    fun shake(power: Float) {
-        for (i in 0 until count) {
-            vy[i] -= power * (0.6f + 0.8f * rnd())
-            vx[i] += (rnd() - 0.5f) * power * 0.8f
-        }
-    }
-
-    /** One step of [dt] seconds; [aspect] is height / width. Returns whether anything moves. */
-    fun step(dt: Float, aspect: Float): Boolean {
-        val drag = exp(-2.4f * dt)
-        var moving = false
-        for (i in 0 until count) {
-            vy[i] += 0.55f * dt
-            vx[i] *= drag
-            vy[i] *= drag
-            x[i] += vx[i] * dt * aspect
-            y[i] += vy[i] * dt
-            if (x[i] < 0f) { x[i] = 0f; vx[i] = -vx[i] * 0.4f }
-            if (x[i] > 1f) { x[i] = 1f; vx[i] = -vx[i] * 0.4f }
-            if (y[i] < 0.02f) { y[i] = 0.02f; vy[i] = 0f }
-            val f = floor(i)
-            if (y[i] >= f) {
-                y[i] = f
-                vy[i] = 0f
-                vx[i] *= 0.6f
-            }
-            if (abs(vx[i]) > 0.004f || y[i] < f - 0.001f) moving = true
-        }
-        return moving
-    }
+private class GlobeHolder {
+    var sim: SnowGlobePhysics? = null
 }
 
 /**
- * The snow globe inside the glass tab bar: behind the tabs, under the droplet lens. The
- * droplet stirs it as it moves; shaking the phone lifts the snow.
+ * The snow globe inside the glass tab bar, behind the tabs and under the droplet lens
+ * (see [SnowGlobePhysics]). The droplet stirs the liquid as it moves, tilting the phone
+ * makes the lying snow creep to the lower side, shaking it whirls the snow up. It runs
+ * only while something moves.
  */
 @Composable
-fun SnowGlobe(dropletPos: () -> Float, tabs: Int, modifier: Modifier = Modifier, flakes: Int = 50) {
+fun SnowGlobe(dropletPos: () -> Float, tabs: Int, corner: Float, modifier: Modifier = Modifier) {
     val festive = LocalFestive.current
     if (!festive.active) return
-    val sim = remember(flakes) { SnowGlobeSim(flakes, 5 + flakes) }
+    val holder = remember { GlobeHolder() }
     var frame by remember { mutableIntStateOf(0) }
     val wake = remember { Channel<Unit>(Channel.CONFLATED) }
     val pos by rememberUpdatedState(dropletPos)
-    LaunchedEffect(sim, festive.moving) {
+    val motion = remember { DeviceMotion() }
+    if (festive.moving) MotionSensor(motion) { wake.trySend(Unit) }
+    LaunchedEffect(festive.moving) {
+        while (holder.sim == null) withFrameNanos { }
+        val sim = holder.sim!!
         if (!festive.moving) {
-            // No animation: the snow is shown lying on the bottom.
-            while (sim.step(1f / 30f, 0.2f)) Unit
+            sim.settleAll()
             frame++
             return@LaunchedEffect
         }
-        launch {
-            var last = Float.NaN
-            snapshotFlow { pos() }.collect { p ->
-                if (!last.isNaN() && abs(p - last) > 1e-4f) {
-                    sim.stir((p + 0.5f) / tabs, (p - last) / tabs)
-                    wake.trySend(Unit)
-                }
-                last = p
-            }
-        }
-        wake.trySend(Unit) // the snow settles when the bar first appears
+        launch { snapshotFlow { pos() }.collect { wake.trySend(Unit) } }
+        wake.trySend(Unit) // the snow of the just-shaken globe settles when the bar appears
+        val half = 0.51f / tabs * sim.aspect
+        var lastX = Float.NaN
         while (true) {
             wake.receive()
             var t0 = withFrameNanos { it }
-            while (true) {
+            var calm = 0
+            while (calm < 12) {
                 val now = withFrameNanos { it }
-                val dt = ((now - t0) / 1e9f).coerceIn(0f, 0.05f)
+                val dt = ((now - t0) / 1e9f).coerceIn(0f, 1f / 30f)
                 t0 = now
-                val moving = sim.step(dt, aspectHint)
+                val dx = (pos() + 0.5f) / tabs * sim.aspect
+                val dv = if (lastX.isNaN() || dt <= 0f) 0f else (dx - lastX) / dt
+                lastX = dx
+                val active = sim.step(dt, dx, half, dv, motion.tiltX, motion.tiltY, motion.shakeX, motion.shakeY)
                 frame++
-                if (!moving) break
+                calm = if (active || abs(dv) > 1e-3f) 0 else calm + 1
             }
+            lastX = Float.NaN
         }
     }
-    ShakeListener(enabled = festive.moving) { power ->
-        sim.shake(power)
-        wake.trySend(Unit)
-    }
-    Canvas(modifier) {
+    Canvas(
+        modifier.onSizeChanged {
+            if (holder.sim == null && it.height > 0) {
+                holder.sim = SnowGlobePhysics(it.width / it.height.toFloat(), corner.coerceIn(0.05f, 0.5f)).apply { scatter() }
+            }
+        },
+    ) {
+        val sim = holder.sim ?: return@Canvas
         if (frame < 0) return@Canvas // read: redraw on every step
-        aspectHint = (size.height / size.width).coerceIn(0.05f, 1f)
+        val k = size.height // pixels per bar height
         val dp = density
-        for (i in 0 until sim.count) {
-            drawCircle(
-                Color.White,
-                (1.1f + 1.1f * sim.size[i]) * dp,
-                Offset(sim.x[i] * size.width, sim.y[i] * size.height),
-                alpha = 0.92f,
+        val t = festive.time()
+
+        // ---- The snow lying on the bottom: one fluffy drift.
+        val n = 140
+        val top = Path()
+        val body = Path()
+        var any = false
+        for (i in 0..n) {
+            val px = sim.aspect * i / n
+            val d = sim.depthAt(px)
+            if (d > 0.002f) any = true
+            // Small lumps on the surface, more where the snow is deeper.
+            val lump = (hash01(41, i) - 0.5f) * min(d, 0.03f) * 0.7f
+            val sy = (sim.bottomAt(px) - d - lump) * k
+            if (i == 0) { top.moveTo(px * k, sy); body.moveTo(px * k, sim.bottomAt(px) * k + 1f); body.lineTo(px * k, sy) }
+            else { top.lineTo(px * k, sy); body.lineTo(px * k, sy) }
+        }
+        if (any) {
+            for (i in n downTo 0) {
+                val px = sim.aspect * i / n
+                body.lineTo(px * k, sim.bottomAt(px) * k + 1f)
+            }
+            body.close()
+            drawPath(
+                body,
+                Brush.verticalGradient(
+                    listOf(Color.White.copy(alpha = 0.97f), Color(0xFFE4ECF7).copy(alpha = 0.95f)),
+                    startY = k * 0.8f, endY = k,
+                ),
             )
+            // The fluffy rim: a soft glow along the top of the drift.
+            drawPath(top, Color.White, alpha = 0.28f, style = Stroke(width = 2.6f * dp, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            drawPath(top, Color.White, alpha = 0.55f, style = Stroke(width = 1.2f * dp, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            // A few glints on the surface, slowly coming and going.
+            for (g in 0 until 14) {
+                val px = (0.04f + 0.92f * hash01(53, g)) * sim.aspect
+                val d = sim.depthAt(px)
+                if (d < 0.012f) continue
+                val glint = max(0f, sin(t * (0.7f + 0.6f * hash01(59, g)) + hash01(61, g) * 6.28f)).pow(3)
+                if (glint < 0.05f) continue
+                drawCircle(Color.White, 0.9f * dp, Offset(px * k, (sim.bottomAt(px) - d) * k + 0.6f * dp), alpha = glint)
+            }
+        }
+
+        // ---- Flakes in the liquid: fine, soft, the bigger ones in small fluffy clumps.
+        for (i in 0 until sim.count) {
+            val s = sim.size[i]
+            val r = (0.38f + 0.72f * s) * dp
+            val c = Offset(sim.x[i] * k, sim.y[i] * k)
+            drawCircle(Color.White, r * 2.3f, c, alpha = 0.14f)
+            drawCircle(Color.White, r, c, alpha = 0.92f)
+            if (s > 0.55f) {
+                val a = i * 2.4f
+                drawCircle(Color.White, r * 0.62f, c + Offset(cos(a) * r * 0.75f, sin(a) * r * 0.75f), alpha = 0.75f)
+                drawCircle(Color.White, r * 0.5f, c - Offset(cos(a + 1f) * r * 0.7f, sin(a + 1f) * r * 0.7f), alpha = 0.6f)
+            }
         }
     }
 }
 
-@Volatile private var aspectHint = 0.2f
-
-/** Calls [onShake] with a strength of about 0.5..1.5 when the phone is shaken, while resumed. */
+/**
+ * Feeds [motion] from the accelerometer while the app is in front: gravity (slowly
+ * filtered) and the phone's own acceleration. [onMove] is called for a shake or a
+ * noticeable change of tilt, to wake the globe.
+ */
 @Composable
-private fun ShakeListener(enabled: Boolean, onShake: (Float) -> Unit) {
-    if (!enabled) return
+private fun MotionSensor(motion: DeviceMotion, onMove: () -> Unit) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    val callback by rememberUpdatedState(onShake)
+    val wake by rememberUpdatedState(onMove)
     DisposableEffect(context, lifecycle) {
         val sensors = context.getSystemService(SensorManager::class.java)
-        val sensor = sensors?.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
-            ?: sensors?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
-        val linear = sensor?.type == Sensor.TYPE_LINEAR_ACCELERATION
-        val gravity = FloatArray(3)
-        var lastShake = 0L
+        val sensor = sensors?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        val g = floatArrayOf(0f, 9.81f, 0f)
+        var restX = 0f
+        var restY = 1f
         val listener = object : SensorEventListener {
             override fun onSensorChanged(e: SensorEvent) {
-                val a = FloatArray(3)
-                for (k in 0..2) {
-                    if (linear) a[k] = e.values[k] else {
-                        gravity[k] = 0.9f * gravity[k] + 0.1f * e.values[k]
-                        a[k] = e.values[k] - gravity[k]
-                    }
-                }
-                val m = sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2])
-                val now = System.currentTimeMillis()
-                if (m > 7f && now - lastShake > 150L) {
-                    lastShake = now
-                    callback((m / 14f).coerceIn(0.5f, 1.5f))
+                for (a in 0..2) g[a] = 0.9f * g[a] + 0.1f * e.values[a]
+                val lx = e.values[0] - g[0]
+                val ly = e.values[1] - g[1]
+                // Device axes to the screen: x the same, y up on the device is down on the screen.
+                motion.tiltX = -g[0] / 9.81f
+                motion.tiltY = g[1] / 9.81f
+                motion.shakeX = lx
+                motion.shakeY = -ly
+                val tilted = hypot(motion.tiltX - restX, motion.tiltY - restY) > 0.06f
+                if (hypot(lx, ly) > 1.5f || tilted) {
+                    restX = motion.tiltX
+                    restY = motion.tiltY
+                    wake()
                 }
             }
             override fun onAccuracyChanged(s: Sensor?, accuracy: Int) = Unit
         }
         fun on() { if (sensor != null) sensors.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_GAME) }
-        fun off() { sensors?.unregisterListener(listener) }
+        fun off() {
+            sensors?.unregisterListener(listener)
+            motion.shakeX = 0f
+            motion.shakeY = 0f
+        }
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_RESUME -> on()

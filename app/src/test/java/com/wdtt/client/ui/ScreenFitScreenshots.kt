@@ -59,6 +59,11 @@ class ScreenFitScreenshots {
         ActivityScenario.launch(MainActivity::class.java)
         settle(10)
         captureScreenRoboImage("build/outputs/roborazzi/screenfit/$dir/home.png")
+        if (newYear) {
+            // Let the snow in the glass settle, for a look at the layer on the bottom.
+            settle(40)
+            captureScreenRoboImage("build/outputs/roborazzi/screenfit/$dir/home_settled.png")
+        }
         compose.onNodeWithText("Обход").performClick()
         settle(10)
         captureScreenRoboImage("build/outputs/roborazzi/screenfit/$dir/apps.png")

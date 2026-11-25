@@ -1,5 +1,8 @@
 package com.wdtt.client.ui.components.control
 
+import com.wdtt.client.ui.festive.snowCap
+import com.wdtt.client.ui.festive.frost
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -138,12 +141,18 @@ fun ArdttSearchBar(
             tint = colors.surface.copy(alpha = veil),
             dark = dark,
             blur = backdrop.frost(),
-            modifier = modifier.then(tap),
-        ) { fieldRow() }
+            modifier = modifier.snowCap(com.wdtt.client.ui.components.layout.fitRadius(ArdttRadius.Control, inset = com.wdtt.client.ui.components.layout.ArdttBottomChrome.barSideGap()), seed = 4, depth = 4.dp).then(tap),
+        ) {
+            // New Year: snow and frost inside the glass, not on top of it.
+            androidx.compose.foundation.layout.Box(Modifier.frost(seed = 4, strength = 0.6f)) {
+                com.wdtt.client.ui.festive.SnowGlobe({ 0f }, 1, Modifier.matchParentSize(), flakes = 30)
+                fieldRow()
+            }
+        }
         return
     }
     Surface(
-        modifier = modifier.then(tap),
+        modifier = modifier.snowCap(com.wdtt.client.ui.components.layout.fitRadius(ArdttRadius.Control, inset = com.wdtt.client.ui.components.layout.ArdttBottomChrome.barSideGap()), seed = 4, depth = 4.dp).then(tap),
         shape = com.wdtt.client.ui.components.layout.fitShape(ArdttRadius.Control, inset = com.wdtt.client.ui.components.layout.ArdttBottomChrome.barSideGap()),
         color = if (keyboardVisible) colors.surface else ArdttFloatingShell.shellColor(),
         border = ArdttFloatingShell.shellBorder(),

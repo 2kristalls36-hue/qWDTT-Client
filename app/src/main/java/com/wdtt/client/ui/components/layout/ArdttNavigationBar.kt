@@ -42,6 +42,8 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.clipRect
+import com.wdtt.client.ui.festive.frost
+import com.wdtt.client.ui.festive.snowCap
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.material.icons.outlined.FolderOpen
@@ -558,6 +560,7 @@ fun ArdttNavigationBar(
             dark = dark,
             blur = backdrop.frost(),
             modifier = outer
+                .snowCap(barRadius, seed = 1)
                 .shadow(18.dp, barShape, ambientColor = Color.Black.copy(alpha = 0.25f), spotColor = Color.Black.copy(alpha = 0.25f))
                 .height(ArdttSize.NavTrack)
                 .then(grabWatch)
@@ -579,6 +582,7 @@ fun ArdttNavigationBar(
                 Box(
                     Modifier
                         .matchParentSize()
+                        .frost(seed = 2, strength = 0.8f)
                         .onGloballyPositioned { panelGlass.origin = it.positionInRoot() }
                         .drawWithContent {
                             val offset = panelGlass.origin - backdrop.origin
@@ -598,6 +602,8 @@ fun ArdttNavigationBar(
                             drawContent()
                         },
                 ) {
+                    // New Year: snow inside the glass, stirred by the droplet and a shake.
+                    com.wdtt.client.ui.festive.SnowGlobe({ selPos.value }, count, Modifier.matchParentSize())
                     tabs()
                 }
                 val trackH = ArdttSize.NavTrack
@@ -654,12 +660,13 @@ fun ArdttNavigationBar(
         tonalElevation = ArdttElevation.None,
         // A shadow graphics layer paints this translucent shell opaque for a frame.
         shadowElevation = ArdttElevation.None,
-        modifier = outer,
+        modifier = outer.snowCap(barRadius, seed = 1),
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(ArdttSize.NavTrack)
+                .frost(seed = 2, strength = 0.8f)
                 .then(grabWatch)
                 .then(dragToSelect),
         ) {

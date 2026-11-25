@@ -1,9 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/widget_background"
+    android:background="@drawable/widget_background">
+
+<LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
     android:gravity="center_vertical"
     android:orientation="horizontal"
     android:paddingStart="12dp"
@@ -90,3 +94,17 @@
             android:textStyle="bold" />
     </LinearLayout>
 </LinearLayout>
+
+    <!-- New Year: snow and lights along the top edge, shown 31 December to 2 January. -->
+    <ImageView
+        android:id="@+id/widget_festive"
+        android:layout_width="match_parent"
+        android:layout_height="16dp"
+        android:layout_gravity="top"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="12dp"
+        android:importantForAccessibility="no"
+        android:scaleType="fitXY"
+        android:src="@drawable/widget_festive_top"
+        android:visibility="gone" />
+</FrameLayout>

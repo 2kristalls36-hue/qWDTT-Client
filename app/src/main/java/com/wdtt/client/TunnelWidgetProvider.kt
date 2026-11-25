@@ -28,6 +28,10 @@ class TunnelWidgetProvider : AppWidgetProvider() {
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
+        if (intent.action == ACTION_FESTIVE) {
+            refresh(context)
+            return
+        }
         if (intent.action != ACTION_TOGGLE) return
         if (TunnelManager.sessionActive()) {
             TunnelControl.stop(context)
@@ -50,6 +54,8 @@ class TunnelWidgetProvider : AppWidgetProvider() {
 
     companion object {
         const val ACTION_TOGGLE = "net.qwdttclient.app.ACTION_TOGGLE"
+        /** Midnight when the New Year days begin or end: the widget redraws itself. */
+        const val ACTION_FESTIVE = "net.qwdttclient.app.ACTION_FESTIVE"
 
         /** Kept for the tunnel service, which calls it on every state or stats change. */
         @Suppress("UNUSED_PARAMETER")
@@ -66,7 +72,25 @@ class TunnelWidgetProvider : AppWidgetProvider() {
                 val profileName = SettingsStore(app).currentProfileName.first()
                 val views = render(app, level, profileName)
                 ids.forEach { manager.updateAppWidget(it, views) }
+                scheduleFestiveRefresh(app)
             }
+        }
+
+        /**
+         * One inexact alarm at the next midnight when the New Year days begin or end, so
+         * the widget changes even if the app is not opened. It does not wake the phone.
+         */
+        private fun scheduleFestiveRefresh(context: Context) {
+            val now = java.time.LocalDateTime.now()
+            val at = com.wdtt.client.ui.festive.FestiveCalendar.nextChange(now)
+            val ms = at.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+            val pi = PendingIntent.getBroadcast(
+                context, 2,
+                Intent(context, TunnelWidgetProvider::class.java).setAction(ACTION_FESTIVE),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            val alarms = context.getSystemService(android.app.AlarmManager::class.java) ?: return
+            runCatching { alarms.set(android.app.AlarmManager.RTC, ms + 60_000L, pi) }
         }
 
         private fun render(context: Context, level: PowerLevel, profileName: String): RemoteViews {
@@ -115,6 +139,9 @@ class TunnelWidgetProvider : AppWidgetProvider() {
                 views.setViewVisibility(R.id.widget_ping_dot, View.GONE)
             }
             views.setTextViewText(R.id.widget_level, level.title)
+            val festive = com.wdtt.client.BuildConfig.FESTIVE_PREVIEW ||
+                com.wdtt.client.ui.festive.FestiveCalendar.isActive(java.time.LocalDate.now())
+            views.setViewVisibility(R.id.widget_festive, if (festive) View.VISIBLE else View.GONE)
             views.setTextColor(R.id.widget_level, context.getColor(levelColor))
 
             val toggle = PendingIntent.getBroadcast(

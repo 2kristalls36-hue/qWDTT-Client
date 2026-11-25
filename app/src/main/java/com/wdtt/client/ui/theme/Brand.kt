@@ -8,6 +8,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.vector.PathParser
+import androidx.compose.ui.text.drawText
 
 /**
  * The brand, as described in docs/brand/BRANDBOOK.md: colours and the logo outlines.
@@ -40,7 +41,7 @@ object Brand {
  * [Brand.LOGO_WIDTH] : [Brand.LOGO_HEIGHT].
  */
 @Composable
-fun BrandWordmark(modifier: Modifier = Modifier) {
+fun BrandWordmark(modifier: Modifier = Modifier, withClient: Boolean = true) {
     val qwdtt = remember { PathParser().parsePathString(QWDTT_OUTLINE).toPath() }
     val client = remember { PathParser().parsePathString(CLIENT_LETTERS).toPath() }
     Canvas(modifier) {
@@ -50,8 +51,59 @@ fun BrandWordmark(modifier: Modifier = Modifier) {
             translate(-Brand.LOGO_X, -Brand.LOGO_Y)
         }) {
             // As on the app icon: each line tilted up by 6° about its own point.
-            withTransform({ rotate(-6f, pivot = Offset(54f, 50f)) }) { drawPath(client, Color.Black) }
+            if (withClient) withTransform({ rotate(-6f, pivot = Offset(54f, 50f)) }) { drawPath(client, Color.Black) }
             withTransform({ rotate(-6f, pivot = Offset(54f, 62f)) }) { drawPath(qwdtt, Color.Black) }
+        }
+    }
+}
+
+/**
+ * New Year form of the logo, laid over [BrandWordmark] drawn without «Client» (same box):
+ * «Client» as a candy cane bent into the word — white, with red stripes that run along
+ * the stroke and wind round it — and the year under «qWDTT», in red, tilted like the lines.
+ */
+@Composable
+fun BrandCandyClient(year: Int, modifier: Modifier = Modifier) {
+    val client = remember { PathParser().parsePathString(CLIENT_LETTERS).toPath() }
+    val measurer = androidx.compose.ui.text.rememberTextMeasurer()
+    val family = androidx.compose.material3.MaterialTheme.typography.labelSmall.fontFamily
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val lightGround = androidx.compose.material3.MaterialTheme.colorScheme.background.let { 0.299f * it.red + 0.587f * it.green + 0.114f * it.blue } > 0.5f
+    Canvas(modifier) {
+        val k = size.width / Brand.LOGO_WIDTH
+        val red = Color(0xFFD7263D)
+        // Candy stripes across the strokes, at a slant, as on a cane: red and white bands
+        // of equal width (in logo units, so they keep their size with the logo).
+        val stripes = androidx.compose.ui.graphics.Brush.linearGradient(
+            0f to red, 0.5f to red, 0.5f to Color.White, 1f to Color.White,
+            start = Offset.Zero,
+            end = Offset(1.25f, -1.25f),
+            tileMode = androidx.compose.ui.graphics.TileMode.Repeated,
+        )
+        // The year: about half the height of the capitals of «qWDTT».
+        val yearText = measurer.measure(
+            year.toString(),
+            androidx.compose.ui.text.TextStyle(
+                fontFamily = family,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                fontSize = with(density) { 4.6f.toSp() },
+                letterSpacing = with(density) { 0.5f.toSp() },
+                color = red,
+            ),
+        )
+        withTransform({
+            scale(k, k, pivot = Offset.Zero)
+            translate(-Brand.LOGO_X, -Brand.LOGO_Y)
+        }) {
+            withTransform({ rotate(-6f, pivot = Offset(54f, 50f)) }) {
+                drawPath(client, stripes)
+                // On a light ground a hairline edge keeps the white bands from melting into it.
+                if (lightGround) drawPath(client, Color(0xFF8E1426), style = androidx.compose.ui.graphics.drawscope.Stroke(width = 0.16f))
+            }
+            withTransform({ rotate(-6f, pivot = Offset(54f, 62f)) }) {
+                // Centred under «qWDTT» (36.1 to 74.6), just below its baseline.
+                drawText(yearText, topLeft = Offset(55.3f - yearText.size.width / 2f, 65.6f))
+            }
         }
     }
 }

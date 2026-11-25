@@ -1,5 +1,7 @@
 package com.wdtt.client.ui.home
 
+import com.wdtt.client.ui.festive.frost
+import com.wdtt.client.ui.festive.snowCap
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -120,6 +122,7 @@ fun PowerCard(
     val textMuted = lerp(scheme.onSurfaceVariant, Neon.NightMuted, tk)
     val textFaint = lerp(scheme.outline, Neon.NightFaint, tk)
     val shape = com.wdtt.client.ui.components.layout.fitShape(24.dp)
+    val festive = com.wdtt.client.ui.festive.LocalFestive.current.active
     // Where the thumb is, in card coordinates: the neon light of the maximum level comes from it.
     var cardRoot by remember { mutableStateOf(Offset.Zero) }
     val puck = remember { PuckAnchor() }
@@ -128,11 +131,13 @@ fun PowerCard(
         modifier
             .fillMaxWidth()
             .onGloballyPositioned { cardRoot = it.positionInRoot() }
+            .snowCap(com.wdtt.client.ui.components.layout.fitRadius(24.dp), seed = 3)
             .clip(shape)
             .background(cardColor)
-            .then(if (k > 0.01f) Modifier.border(1.dp, colors.neon[1].copy(alpha = 0.45f * k), shape) else Modifier),
+            .frost(seed = 3)
+            .then(if (k > 0.01f && !festive) Modifier.border(1.dp, colors.neon[1].copy(alpha = 0.45f * k), shape) else Modifier),
     ) {
-        if (k > 0.01f) NeonAura(colors.neon, k) { puck.center(pos.value) - cardRoot }
+        if (k > 0.01f && !festive) NeonAura(colors.neon, k) { puck.center(pos.value) - cardRoot }
         Column(
             Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),

@@ -597,13 +597,40 @@ class TunnelService : Service() {
         return fingerprint
     }
 
+    /**
+     * The network the transport goes out through: the system default for this app (the
+     * app is excluded from its own VPN, so this is the real network, not the tunnel),
+     * when it is validated; otherwise the validated one Android would usually pick —
+     * Wi‑Fi or Ethernet before cellular.
+     */
+    private fun primaryUnderlyingNetwork(): Network? {
+        val cm = connectivityManager ?: return null
+        fun validated(n: Network) =
+            cm.getNetworkCapabilities(n)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true
+        val default = runCatching { cm.activeNetwork }.getOrNull()
+        if (default != null && default in activeNetworks && validated(default)) return default
+        return activeNetworks.filter { validated(it) }.minByOrNull { n ->
+            val caps = cm.getNetworkCapabilities(n)
+            when {
+                caps == null -> 3
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                    caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> 0
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> 1
+                else -> 2
+            }
+        }
+    }
+
+    /**
+     * Fingerprint of the primary network only. It used to cover every validated network,
+     * so with mobile data kept on next to Wi‑Fi (the default on many phones) a flicker of
+     * the cellular network restarted the whole connection while traffic went over Wi‑Fi.
+     */
     private fun activeUnderlyingFingerprint(): String {
         val cm = connectivityManager ?: return ""
-        return activeNetworks.mapNotNull { network ->
-            val caps = cm.getNetworkCapabilities(network) ?: return@mapNotNull null
-            if (!caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) return@mapNotNull null
-            "$network:${networkCapabilityFingerprint(caps)}"
-        }.sorted().joinToString("|")
+        val network = primaryUnderlyingNetwork() ?: return ""
+        val caps = cm.getNetworkCapabilities(network) ?: return ""
+        return "$network:${networkCapabilityFingerprint(caps)}"
     }
 
     private fun noteUnderlyingNetworkChange() {
@@ -676,8 +703,11 @@ class TunnelService : Service() {
         if (!TunnelManager.running.value || isTunnelPaused || !hasValidatedUnderlyingNetwork()) return
         lastNetworkRecoveryAttemptMs = System.currentTimeMillis()
         updateNotification("Переподключение...")
-        TunnelManager.addNetworkLog("[СЕТЬ] Пересоздаём VPN и транспорт для новой сети.")
-        TunnelManager.reconnectAll(reason, force = true)
+        // VPN-интерфейс не пересоздаётся: он не привязан к сети (следует за
+        // системной), а адрес устройства на сервере тот же. Приложения не видят
+        // пропажи VPN, трафик не уходит мимо туннеля, пока поднимается транспорт.
+        TunnelManager.addNetworkLog("[СЕТЬ] Перезапускаем транспорт для новой сети, VPN сохраняется.")
+        TunnelManager.restartTransport(reason, force = true)
     }
 
     private fun hasValidatedUnderlyingNetwork(): Boolean {

@@ -187,3 +187,37 @@ func TestLivenessGraceNeverShortensWindow(t *testing.T) {
 		t.Fatalf("grace moved a fresh lastRx backwards: %d", got)
 	}
 }
+
+// After a wake the first keepalive is often lost while the radio comes up: the flow
+// must survive when a later keepalive within the wake window is answered.
+func TestLivenessWakeSurvivesLostFirstKeepalive(t *testing.T) {
+	for _, sleeping := range []bool{false, true} {
+		s := newSim(t)
+		s.run(10*time.Second, sleeping, true)
+		s.freeze(10 * time.Minute)
+		thaw := s.now.Sub(s.t0)
+		answered := 0
+		for i := 0; i < 30; i++ {
+			s.now = s.now.Add(livenessTick)
+			st := s.p.step(s.now, sleeping)
+			if st.dead {
+				t.Fatalf("sleeping=%v: healthy flow killed at +%v after the thaw", sleeping, s.now.Sub(s.t0)-thaw)
+			}
+			if st.sendKeepalive {
+				s.sent = append(s.sent, s.now.Sub(s.t0))
+				// The first keepalive after the thaw is lost, the next ones are answered.
+				if len(s.sent) > 0 && s.sent[len(s.sent)-1] > thaw+livenessTick {
+					s.l.notePong(s.now)
+					answered++
+				}
+			}
+		}
+		if answered == 0 {
+			t.Fatalf("sleeping=%v: no keepalive after the lost one", sleeping)
+		}
+		// Once answered, the burst stops: no keepalive every second for the rest.
+		if got := s.keepalivesBetween(thaw+5*time.Second, thaw+25*time.Second); got > 5 {
+			t.Fatalf("sleeping=%v: %d keepalives in 20 s after the answer, want the usual rate", sleeping, got)
+		}
+	}
+}

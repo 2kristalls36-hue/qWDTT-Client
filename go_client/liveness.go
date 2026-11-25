@@ -112,6 +112,13 @@ type livenessPlanner struct {
 	lastTick      time.Time
 	nextKeepalive time.Time
 	wasSleeping   bool
+	// После пробуждения keepalive уходит каждый тик, пока не придёт любой
+	// ответ или не истечёт окно (wakeBurstUntil). Раньше уходил один: первые
+	// сотни миллисекунд после пробуждения телефон теряет исходящие пакеты, и
+	// потерянный keepalive снимал здоровый поток — в режиме сна следующий
+	// ушёл бы только через 20 с, уже после окна.
+	wakeAt         time.Time
+	wakeBurstUntil time.Time
 }
 
 func newLivenessPlanner(l *sessionLiveness, now time.Time) *livenessPlanner {
@@ -145,6 +152,8 @@ func (p *livenessPlanner) step(now time.Time, sleeping bool) livenessStep {
 		// это не смерть потока. Проверяем сразу и коротко.
 		p.l.grace(now, timeout)
 		p.nextKeepalive = now
+		p.wakeAt = now
+		p.wakeBurstUntil = now.Add(livenessWakeWindow - livenessTick)
 		st.woke = true
 	}
 
@@ -152,9 +161,16 @@ func (p *livenessPlanner) step(now time.Time, sleeping bool) livenessStep {
 	if st.dead {
 		return st
 	}
+	// Любой пакет от сервера после пробуждения — поток жив, частые keepalive не нужны.
+	if !p.wakeBurstUntil.IsZero() && p.l.lastRx.Load() >= p.wakeAt.UnixMilli() {
+		p.wakeBurstUntil = time.Time{}
+	}
+	burst := !p.wakeBurstUntil.IsZero() && !now.After(p.wakeBurstUntil)
 	if !now.Before(p.nextKeepalive) {
 		st.sendKeepalive = true
 		p.nextKeepalive = now.Add(interval)
+	} else if burst {
+		st.sendKeepalive = true
 	}
 	return st
 }

@@ -90,6 +90,14 @@ object TunnelManager {
     private var currentCaptchaMode = "wv" // режим обхода капчи: "wv" или "rjs"
     private var currentCaptchaSolveMethod = "auto" // "manual" или "auto"
     private var restartAttempts = 0
+    /** Counters of the current session for the connection log (see SessionMetrics). */
+    private val metrics = SessionMetrics()
+    private var lastSummaryAtMs = 0L
+
+    private fun logMetrics(line: String) {
+        runCatching { com.wdtt.client.lite.RawLog.add(line) }
+        updateLog("session_metrics", line, 2, false)
+    }
     /** Engine restarts in a row for running with no live streams (see EngineSignals). */
     private var zombieRestarts = 0
     private val maxRestartBackoffSec = 30
@@ -339,6 +347,8 @@ object TunnelManager {
             stopNotice.value = null
             resetVkWait()
             zombieRestarts = 0
+            metrics.start()
+            lastSummaryAtMs = System.currentTimeMillis()
             diagnostics.value = DiagnosticsState(requested = pendingManualDiag)
             // Флаг обновится в startJob через first()/collect; пока — кэш.
             currentParams = params
@@ -794,6 +804,7 @@ object TunnelManager {
             updateLog("vk_wait", "[ВК] Ограничение запросов снято, подключение продолжается", 2, false)
             return
         }
+        if (!vkWait.value) metrics.vkLimit()
         vkWait.value = true
         // Пока движок выжидает, шаг схемы не считается зависшим; после паузы
         // (с запасом) таймаут шага снова в силе.
@@ -1150,10 +1161,12 @@ object TunnelManager {
                         lineTrim.contains("Креды получены") ->
                             updateLog("creds_lifetime", lineTrim, 2, false)
                         lineTrim.contains("Креды OK") || lineTrim.contains("Первые креды") -> {
+                            metrics.join()
                             updateLog("creds_ok", "[ВК] Учетные данные проверены ✓", 2, false)
                             advanceConnectionPipeline(ConnectionStep.VK, ConnectionStep.WRAP)
                         }
                         lineTrim.contains("Решаю VK Smart Captcha") -> {
+                            metrics.captcha()
                             updateLog("captcha_start", "[КАПЧА] Решение капчи...", 5, false)
                             markConnectionPipelineCaptchaRequired()
                         }
@@ -1178,6 +1191,8 @@ object TunnelManager {
                         }
                         lineTrim.contains("[TURN]") -> {
                             val text = lineTrim.substringAfter("[TURN]").trim()
+                            // Свежие креды — новый вход в звонок.
+                            if (text.startsWith("Креды обновлены")) metrics.join()
                             val turnError = text.contains("Ошибка", true) ||
                                 text.contains("не удалось", true) ||
                                 text.contains("неполный ответ", true)
@@ -1612,6 +1627,12 @@ object TunnelManager {
                     }
                 }
 
+                // Раз в час — итог сессии в журнал: долгую сессию видно и без отключения.
+                val nowMs = System.currentTimeMillis()
+                if (metrics.active && nowMs - lastSummaryAtMs > 3_600_000L) {
+                    lastSummaryAtMs = nowMs
+                    logMetrics(metrics.summary())
+                }
                 delay(5_000)
             }
         }
@@ -1658,6 +1679,7 @@ object TunnelManager {
                     return@launch
                 }
                 lastReconnectAtMs = now
+                metrics.reconnect(reason)
 
                 isReconnecting.value = true
                 transportRestartInProgress = true
@@ -1890,6 +1912,7 @@ object TunnelManager {
         watchdogJob?.cancel()
         readerJob?.cancel()
         resetVkWait()
+        metrics.stop()?.let { logMetrics(it) }
         markRunning(false)
         isConnecting.value = false
         activeWorkers.value = 0
@@ -2330,6 +2353,9 @@ object TunnelManager {
     }
 
     private fun finishConnectionPipeline() {
+        metrics.ready()?.let { ms ->
+            logMetrics("[МЕТРИКИ] Подключение за ${"%.1f".format(java.util.Locale.ROOT, ms / 1000.0).replace('.', ',')} с")
+        }
         var shouldScheduleHide = false
         connectionPipeline.update { state ->
             if (!state.visible) {

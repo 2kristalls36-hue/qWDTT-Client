@@ -53,6 +53,16 @@ func workerRetryDelay(attempt int) time.Duration {
 	return d + time.Duration(rand.Intn(500))*time.Millisecond
 }
 
+// seatCooldown — минимальная пауза перед новой TURN-аллокацией потока после
+// конца его сессии. VK держит место освобождённой аллокации на квоте ещё около
+// секунды (замеры anton48/vk-turn-proxy-ios, pkg/proxy/seatcool.go): повтор
+// раньше получает 486 «квота исчерпана» на собственного «призрака».
+const seatCooldown = 1200 * time.Millisecond
+
+// credsProvenAfter — сессия на этих кредах продержалась столько: аллокация
+// на них точно была, креды рабочие (см. credsProven в WorkerGroup).
+const credsProvenAfter = 10 * time.Second
+
 // groupStartBarrier — сколько следующая группа ждёт, пока эта получит доступ
 // к звонку. Раньше ждала только успеха: группа, не получившая доступ, выходила
 // и не передавала эстафету — все следующие группы ждали вечно, а без первой и
@@ -264,6 +274,11 @@ func WorkerGroup(
 	var credsMu sync.RWMutex
 	var refreshMu sync.Mutex
 	var lastCredRefresh atomic.Int64
+	// credsProven — на текущих кредах уже работал хотя бы один поток. Отказ
+	// 486 на свежих кредах, на которых ничего не получилось, — отказ самого
+	// relay, а не квота личности: новые креды (новый вход в звонок) его не
+	// лечат и только приближают капчу (anton48, pkg/proxy/quotabreaker.go).
+	var credsProven atomic.Bool
 
 	refreshCreds := func(reason string) bool {
 		refreshMu.Lock()
@@ -289,6 +304,7 @@ func WorkerGroup(
 		credsMu.Lock()
 		creds = &Credentials{User: u, Pass: p, TurnURLs: urls, CacheStreamID: credStreamID}
 		credsMu.Unlock()
+		credsProven.Store(false)
 		lastCredRefresh.Store(time.Now().Unix())
 		log.Printf("[TURN] Креды обновлены после %s, TURN urls=%d", reason, len(urls))
 		return true
@@ -416,7 +432,11 @@ func WorkerGroup(
 						// свежие (у них своя квота). В режиме аккаунта VK креды
 						// выдаёт приложение через авторизацию — его не дёргаем.
 						if quotaStreak >= 2 && getVkAuthMode() != "account" {
-							refreshCreds("TURN quota")
+							if credsProven.Load() {
+								refreshCreds("TURN quota")
+							} else {
+								log.Printf("[ВОРКЕР #%d] [TURN] Квота на свежих кредах, на которых ещё ничего не работало: relay отказывает сам, новые креды не запрашиваем", wid)
+							}
 						}
 					} else if turnAllocAttrMissing {
 						log.Printf("[ВОРКЕР #%d] [TURN] Allocate вернул неполный ответ, обновляем TURN-креды и повторяем (попытка %d): %s", wid, attempt, errStr)
@@ -441,6 +461,9 @@ func WorkerGroup(
 					return
 				}
 
+				if time.Since(sessStarted) > credsProvenAfter {
+					credsProven.Store(true)
+				}
 				// Поток поработал и упал — это новый сбой, а не серия неудач.
 				if time.Since(sessStarted) > 60*time.Second {
 					attempt = 1
@@ -455,6 +478,9 @@ func WorkerGroup(
 					retryDelay = 30*time.Second + time.Duration(rand.Intn(30_000))*time.Millisecond
 				} else if fastRetry {
 					retryDelay = time.Duration(1+rand.Intn(3)) * time.Second
+				}
+				if retryDelay < seatCooldown {
+					retryDelay = seatCooldown + time.Duration(rand.Intn(300))*time.Millisecond
 				}
 				select {
 				case <-time.After(retryDelay):

@@ -1,6 +1,6 @@
 # Поколения сессий на сервере
 
-Статус: изменение предложено в основной репозиторий qWDTT (SpaceNeuroX/proxy-turn-vk-android), ветка `raw-session-generations`. В версии 1.2.0 выполняется только клиентская часть плана стабильности подключения.
+Статус: изменение предложено в основной репозиторий qWDTT: [SpaceNeuroX/proxy-turn-vk-android#52](https://github.com/SpaceNeuroX/proxy-turn-vk-android/pull/52) (ветка `raw-session-generations` в форке 2kristalls36-hue/proxy-turn-vk-android). В версии 1.2.0 выполняется только клиентская часть плана стабильности подключения.
 
 ## Проблема
 

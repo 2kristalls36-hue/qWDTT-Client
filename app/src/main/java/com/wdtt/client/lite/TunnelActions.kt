@@ -111,6 +111,12 @@ object TunnelActions {
         RawLog.add("[VK] access token: opening the VK window")
         val token = try {
             com.wdtt.client.vkauth.VkLoginActivity.awaitAccessToken(context)
+        } catch (c: kotlinx.coroutines.CancellationException) {
+            // The caller went away: that is a cancellation, not a refused access. The wait
+            // running out (also a cancellation exception) is a refusal like any other.
+            if (c !is kotlinx.coroutines.TimeoutCancellationException) throw c
+            RawLog.add("[VK] access token not received: timeout")
+            return Result.failure(IllegalStateException("Доступ не получен."))
         } catch (t: Throwable) {
             RawLog.add("[VK] access token not received: ${t.message}")
             return Result.failure(IllegalStateException("Доступ не получен."))

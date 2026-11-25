@@ -5,11 +5,6 @@ import android.graphics.RuntimeShader
 import android.graphics.Shader
 import android.os.Build
 import androidx.annotation.RequiresApi
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.runtime.Composable
@@ -124,8 +119,8 @@ fun LiquidGlassPanel(
     var position by remember { mutableStateOf(Offset.Zero) }
     val density = LocalDensity.current
     val radiusPx = with(density) { cornerRadius.toPx() }
-    val t = rememberInfiniteTransition(label = "glass")
-    val time by t.animateFloat(0f, 1f, infiniteRepeatable(tween(14_000, easing = LinearEasing)), label = "glassTime")
+    // Read only while drawing the layer: a step redraws the glass without recomposing it.
+    val time by rememberGlassTime()
     val shader = remember { if (LiquidGlass.supported) GlassShader.create() else null }
 
     Box(modifier.onGloballyPositioned { position = it.positionInRoot() }) {
@@ -158,6 +153,30 @@ fun LiquidGlassPanel(
         content()
     }
 }
+
+/** One turn of the light around the glass rims. */
+private const val GLASS_LIGHT_PERIOD_MS = 14_000L
+/**
+ * The light moves in steps this long, not every frame: at 3° a step the motion looks the
+ * same, while the glass is redrawn about 8 times a second instead of at the screen rate.
+ */
+private const val GLASS_TICK_MS = 125L
+
+/**
+ * Phase of the light, 0..1. Every panel reads the same clock and wakes on the same step
+ * boundary, so all of them are redrawn in one frame.
+ */
+@Composable
+private fun rememberGlassTime(): androidx.compose.runtime.State<Float> =
+    androidx.compose.runtime.produceState(glassPhase()) {
+        while (true) {
+            kotlinx.coroutines.delay(GLASS_TICK_MS - android.os.SystemClock.uptimeMillis() % GLASS_TICK_MS)
+            value = glassPhase()
+        }
+    }
+
+private fun glassPhase(): Float =
+    (android.os.SystemClock.uptimeMillis() % GLASS_LIGHT_PERIOD_MS) / GLASS_LIGHT_PERIOD_MS.toFloat()
 
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 private object GlassShader {

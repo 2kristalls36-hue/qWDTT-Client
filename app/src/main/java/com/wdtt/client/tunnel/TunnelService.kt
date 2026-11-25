@@ -374,9 +374,14 @@ class TunnelService : Service() {
                 }
 
                 override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
-                    // Signal strength changes often: do not push back an evaluation already pending.
-                    if (TunnelManager.trustedPause.value != null || trustedEvalJob?.isActive == true) return
-                    scheduleTrustedEval(com.wdtt.client.lite.TrustedWifi.ENTER_DELAY_MS)
+                    // Signal strength changes often: do not push back an evaluation already
+                    // pending. While paused this still matters: the name of a network the
+                    // device moved to may only become known here.
+                    if (trustedEvalJob?.isActive == true) return
+                    scheduleTrustedEval(
+                        if (TunnelManager.trustedPause.value != null) com.wdtt.client.lite.TrustedWifi.EXIT_DELAY_MS
+                        else com.wdtt.client.lite.TrustedWifi.ENTER_DELAY_MS,
+                    )
                 }
             }
             val request = NetworkRequest.Builder()
@@ -427,10 +432,8 @@ class TunnelService : Service() {
                 kotlinx.coroutines.withContext(Dispatchers.Main) { resumeFromTrustedPause() }
             com.wdtt.client.lite.TrustedWifi.Transition.None -> {
                 // Shortly after a Wi‑Fi event its name may still be unknown: look again.
-                val fresh = System.currentTimeMillis() - lastWifiEventMs < com.wdtt.client.lite.TrustedWifi.SSID_WAIT_MS
-                if (enabled && ssids.isNotEmpty() && !paused && active && wifi.connected &&
-                    wifi.problem == null && !wifi.ssidKnown && fresh
-                ) {
+                val since = System.currentTimeMillis() - lastWifiEventMs
+                if (com.wdtt.client.lite.TrustedWifi.shouldLookAgain(enabled, active, paused, wifi, ssids, since)) {
                     scheduleTrustedEval(com.wdtt.client.lite.TrustedWifi.SSID_RETRY_MS)
                 }
             }

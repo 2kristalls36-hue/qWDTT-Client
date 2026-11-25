@@ -71,4 +71,25 @@ class TrustedWifiTest {
         )
         assertNull(accessNote(on("Home"), background = true))
     }
+
+    @Test
+    fun pausedLooksAgainWhileTheNewNetworkHasNoNameYet() {
+        // Moved from the trusted network to another one: its name comes a little later,
+        // and the pause must be re-checked until it does (not left as it is).
+        val noName = WifiState(connected = true)
+        assertEquals(Transition.None, TrustedWifi.decide(true, false, true, noName, home))
+        assertTrue(TrustedWifi.shouldLookAgain(true, false, true, noName, home, sinceWifiEventMs = 1_000))
+        // Once the name is known, the pause ends.
+        assertEquals(Transition.Resume, TrustedWifi.decide(true, false, true, on("Work"), home))
+        // Not forever: only shortly after a Wi‑Fi event, and not without access.
+        assertTrue(!TrustedWifi.shouldLookAgain(true, false, true, noName, home, sinceWifiEventMs = TrustedWifi.SSID_WAIT_MS))
+        assertTrue(
+            !TrustedWifi.shouldLookAgain(
+                true, false, true,
+                WifiState(true, problem = TrustedWifi.AccessProblem.Permission), home, sinceWifiEventMs = 1_000,
+            ),
+        )
+        // Neither paused nor connected: nothing to look for.
+        assertTrue(!TrustedWifi.shouldLookAgain(true, false, false, noName, home, sinceWifiEventMs = 1_000))
+    }
 }

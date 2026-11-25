@@ -54,6 +54,10 @@ class VkLoginActivity : ComponentActivity() {
     enum class Mode { LOGIN, TOKEN }
 
     private var mode: Mode = Mode.LOGIN
+    // The request this window answers. Closed in any way (the cross, the system back
+    // gesture) it is answered with a refusal, so the caller does not wait for the timeout.
+    private var loginWaiter: CompletableDeferred<Result<Unit>>? = null
+    private var tokenWaiter: CompletableDeferred<Result<String>>? = null
     private var loginHandled = false
     private var loginFlowAttempt = 0
 
@@ -63,6 +67,10 @@ class VkLoginActivity : ComponentActivity() {
         mode = when (intent.getStringExtra(EXTRA_MODE)) {
             Mode.TOKEN.name -> Mode.TOKEN
             else -> Mode.LOGIN
+        }
+        when (mode) {
+            Mode.LOGIN -> loginWaiter = pendingLogin.get()
+            Mode.TOKEN -> tokenWaiter = pendingToken.get()
         }
         CookieManager.getInstance().setAcceptCookie(true)
 
@@ -186,6 +194,11 @@ class VkLoginActivity : ComponentActivity() {
 
     override fun onDestroy() {
         if (active === this) active = null
+        // A request already answered ignores this (complete() on a finished one is a no-op).
+        if (isFinishing) {
+            loginWaiter?.complete(Result.failure(IllegalStateException("Вход отменён.")))
+            tokenWaiter?.complete(Result.failure(IllegalStateException("Доступ не получен.")))
+        }
         super.onDestroy()
     }
 

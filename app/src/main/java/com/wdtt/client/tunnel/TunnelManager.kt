@@ -37,6 +37,14 @@ data class LogEntry(
 )
 
 object TunnelManager {
+    // Patterns for the engine output: compiled once, used on every line.
+    private val LOG_TIME_PREFIX = Regex("^\\d{4}/\\d{2}/\\d{2}\\s\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?\\s")
+    private val ACTIVE_WORKERS = Regex("Активных:\\s*(\\d+)")
+    private val STATS_TRAFFIC = Regex("Трафик:\\s*([\\d.,]+)")
+    private val STATS_DOWN = Regex("↓\\s*([\\d.,]+)")
+    private val STATS_UP = Regex("↑\\s*([\\d.,]+)")
+    private val STATS_PING = Regex("Пинг:\\s*(\\d+)")
+
     // 100% защита от утечек: единый управляемый глобальный Scope
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -851,7 +859,7 @@ object TunnelManager {
                     }
 
                     // Чистим лог от даты из Go (например, "2023/10/24 12:34:56.123456 [ВОРКЕР...")
-                    val msgPrefixReplaced = line.replace(Regex("^\\d{4}/\\d{2}/\\d{2}\\s\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?\\s"), "")
+                    val msgPrefixReplaced = line.replace(LOG_TIME_PREFIX, "")
                     val lineTrim = msgPrefixReplaced.trim()
 
                     // SOCKS IPv6: туннель только IPv4 — клиент сам уйдёт на A-запись.
@@ -883,7 +891,7 @@ object TunnelManager {
                             lineTrim.contains("неверный пароль") -> "Неверный пароль подключения"
                             else -> "Ошибка авторизации"
                         }
-                        handleCriticalError("\uD83D\uDD12 $reason. Воркеры остановлены.")
+                        handleCriticalError("\uD83D\uDD12 $reason. Воркеры остановлены.", "$reason.")
                         return@forEachLine
                     }
 
@@ -964,14 +972,20 @@ object TunnelManager {
                             lineTrim.contains("Flood control", true) -> {
                                 floodCount++
                                 if (floodCount >= 5) {
-                                    handleCriticalError("Flood Control (ВК ограничил ваш IP). Попробуйте позже.")
+                                    handleCriticalError(
+                                        "Flood Control (ВК ограничил ваш IP).",
+                                        "VK временно ограничил запросы. Подключение остановлено.",
+                                    )
                                     return@forEachLine
                                 }
                             }
                             lineTrim.contains("ip mismatch", true) -> {
                                 mismatchCount++
                                 if (mismatchCount >= 5) {
-                                    handleCriticalError("IP Mismatch (IP утерян). Попробуйте переподключиться.")
+                                    handleCriticalError(
+                                        "IP Mismatch (IP утерян).",
+                                        "Сетевой адрес устройства изменился. Подключение остановлено.",
+                                    )
                                     return@forEachLine
                                 }
                             }
@@ -979,7 +993,10 @@ object TunnelManager {
                                 // Огромный лимит, потому что каждый воркер кидает эту ошибку при смене сети
                                 refusedCount++
                                 if (refusedCount >= 400) {
-                                    handleCriticalError("Критическое отсутствие сети (400+ таймаутов). Отключение.")
+                                    handleCriticalError(
+                                        "Критическое отсутствие сети (400+ таймаутов). Отключение.",
+                                        "Нет доступа к сети. Подключение остановлено.",
+                                    )
                                     return@forEachLine
                                 }
                             }
@@ -1000,7 +1017,7 @@ object TunnelManager {
                         stats.value = msg
                         lastStatsReceivedAtMs = now
 
-                        val match = Regex("Активных:\\s*(\\d+)").find(msg)
+                        val match = ACTIVE_WORKERS.find(msg)
                         if (match != null) {
                             val active = match.groupValues[1].toIntOrNull() ?: 0
                             activeWorkers.value = active
@@ -1014,7 +1031,7 @@ object TunnelManager {
                         }
 
                         // Парсинг и инкрементальное сохранение трафика для активного профиля
-                        val matchTraffic = Regex("Трафик:\\s*([\\d.,]+)").find(msg)
+                        val matchTraffic = STATS_TRAFFIC.find(msg)
                         val currentTraffic = matchTraffic?.groupValues?.getOrNull(1)?.replace(",", ".")?.toDoubleOrNull()
                         if (currentTraffic != null) {
                             lastSessionTrafficMb = currentTraffic
@@ -1034,11 +1051,11 @@ object TunnelManager {
                             }
                         }
 
-                        val downlinkMb = Regex("↓\\s*([\\d.,]+)").find(msg)
+                        val downlinkMb = STATS_DOWN.find(msg)
                             ?.groupValues?.getOrNull(1)?.replace(",", ".")?.toDoubleOrNull()
-                        pingMs.value = Regex("Пинг:\\s*(\\d+)").find(msg)
+                        pingMs.value = STATS_PING.find(msg)
                             ?.groupValues?.getOrNull(1)?.toLongOrNull() ?: 0L
-                        val uplinkMb = Regex("↑\\s*([\\d.,]+)").find(msg)
+                        val uplinkMb = STATS_UP.find(msg)
                             ?.groupValues?.getOrNull(1)?.replace(",", ".")?.toDoubleOrNull()
                         if (downlinkMb != null) {
                             val prev = trafficDownMb.value
@@ -1271,7 +1288,7 @@ object TunnelManager {
                                         failConnectionPipeline(ConnectionStep.RAW)
                                         val msg = "Ошибка запуска raw-VPN: ${e.readableMessage()}"
                                         updateLog("rawtun_start_error", msg, 99, true)
-                                        lastFatalError.value = msg
+                                        lastFatalError.value = "Не удалось запустить VPN."
                                     }
                                 }
                             }
@@ -1336,7 +1353,7 @@ object TunnelManager {
                                         failConnectionPipeline(ConnectionStep.VPN)
                                         val msg = "Ошибка запуска VPN: ${e.readableMessage()}"
                                         updateLog("vpn_start_error", msg, 99, true)
-                                        lastFatalError.value = msg
+                                        lastFatalError.value = "Не удалось запустить VPN."
                                     }
                                 }
                             }
@@ -1403,7 +1420,7 @@ object TunnelManager {
         // Сервер прямо ответил, что пароль не подходит, — воркеры будут
         // биться впустую. Останавливаемся с понятной причиной.
         if (next.isFatalPasswordVerdict && activeWorkers.value <= 0) {
-            handleCriticalError("\uD83D\uDD12 ${next.verdict.title}. Воркеры остановлены.")
+            handleCriticalError("\uD83D\uDD12 ${next.verdict.title}. Воркеры остановлены.", sentence(next.verdict.title))
         }
     }
 
@@ -1462,11 +1479,23 @@ object TunnelManager {
         diagnostics.value = DiagnosticsState()
     }
 
-    private fun handleCriticalError(message: String) {
+    /**
+     * Stops the tunnel: [message] (with technical details) goes to the log, [shown] is what
+     * the user sees, written by the interface text rules (a fact, no technical terms).
+     */
+    private fun handleCriticalError(message: String, shown: String) {
         com.wdtt.client.lite.RawLog.marker("приложение остановило туннель: $message")
-        lastFatalError.value = message.removePrefix("\uD83D\uDD12 ").removeSuffix(" Воркеры остановлены.")
+        lastFatalError.value = shown
         updateLog("circuit_breaker", "[СТОП] $message", -1, true)
         stop()
+    }
+
+    /** A title as a sentence for the user: capital first letter, a full stop at the end. */
+    private fun sentence(text: String): String {
+        val t = text.trim().removePrefix("\uD83D\uDD12").trim()
+        if (t.isEmpty()) return "Подключение остановлено."
+        val cap = t.replaceFirstChar { it.uppercase() }
+        return if (cap.last() in ".!?") cap else "$cap."
     }
 
     private fun handleHashError() {
@@ -1483,7 +1512,7 @@ object TunnelManager {
             start(context, params, isSwitching = true)
         } else {
             val msg = if (activeHashIndex == 1) "Запасной хеш тоже мертв. Отключение." else "Хеш умер, запасного нет. Отключение."
-            handleCriticalError(msg)
+            handleCriticalError(msg, "Ссылка на звонок VK не работает. Подключение остановлено.")
         }
     }
 
@@ -1526,12 +1555,16 @@ object TunnelManager {
                         // Если проверка соединения уже назвала причину — говорим её,
                         // а не гадаем про пароль.
                         val diagVerdict = diagnostics.value.verdict
-                        val reason = if (diagVerdict != null && diagVerdict.severity != DiagSeverity.OK) {
-                            "${diagVerdict.title}. Воркеры остановлены."
+                        val known = diagVerdict != null && diagVerdict.severity != DiagSeverity.OK
+                        val reason = if (known) {
+                            "${diagVerdict!!.title}. Воркеры остановлены."
                         } else {
                             "\uD83D\uDD12 Неверный пароль подключения или несовместимый WRAP. Воркеры остановлены."
                         }
-                        handleCriticalError(reason)
+                        handleCriticalError(
+                            reason,
+                            if (known) sentence(diagVerdict!!.title) else "Неверный пароль подключения.",
+                        )
                         return@launch
                     } else if (System.currentTimeMillis() - zeroWorkersSince > 90_000 && !ManlCaptchaWebViewManager.isCaptchaPending) {
                         updateLog("watchdog", "⚠ Зомби-процесс (0 воркеров 90с). Перезапуск...", 50, true)

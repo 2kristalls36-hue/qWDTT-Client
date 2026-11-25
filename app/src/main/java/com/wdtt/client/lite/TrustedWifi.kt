@@ -62,6 +62,23 @@ object TrustedWifi {
         return if (isTrusted(wifi.ssid, trusted)) Transition.Pause else Transition.None
     }
 
+    /**
+     * Wi‑Fi is up but its name is not known yet, shortly after a Wi‑Fi event: look again.
+     * Also while paused: after a move from the trusted network to another one the name
+     * of the new network comes a little later, and the pause must end when it does.
+     */
+    fun shouldLookAgain(
+        enabled: Boolean,
+        tunnelActive: Boolean,
+        paused: Boolean,
+        wifi: WifiState,
+        trusted: Set<String>,
+        sinceWifiEventMs: Long,
+    ): Boolean =
+        enabled && trusted.isNotEmpty() && (paused || tunnelActive) &&
+            wifi.connected && wifi.problem == null && !wifi.ssidKnown &&
+            sinceWifiEventMs < SSID_WAIT_MS
+
     /** Case-insensitive: some firmware changes the case of the name between APIs. */
     fun isTrusted(ssid: String, trusted: Set<String>): Boolean =
         ssid.isNotBlank() && trusted.any { it.equals(ssid, ignoreCase = true) }

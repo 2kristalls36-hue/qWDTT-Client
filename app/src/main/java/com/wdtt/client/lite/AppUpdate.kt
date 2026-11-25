@@ -164,9 +164,13 @@ object AppUpdate {
                     if (parts.size == 2 && parts[1].trimStart('*', '.', '/') == release.apkName) parts[0].lowercase() else null
                 }
             }
-            if (expected != null && expected != actual) {
+            // A release with a sums file must list this APK: a missing line is treated
+            // like a wrong sum. A release without the file is accepted (Android still
+            // checks the signature), with a note in the log.
+            if (release.sumsUrl == null) RawLog.add("[UPDATE] no SHA256SUMS.txt in the release")
+            if (release.sumsUrl != null && expected != actual) {
                 file.delete()
-                RawLog.add("[UPDATE] checksum mismatch: $actual != $expected")
+                RawLog.add("[UPDATE] checksum mismatch: $actual != ${expected ?: "no line for ${release.apkName}"}")
                 emit(Download.Error("Файл обновления повреждён."))
                 return@flow
             }

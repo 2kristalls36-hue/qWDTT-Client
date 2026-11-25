@@ -77,7 +77,10 @@ object BypassTransfer {
         val hasQwdttApps = root.has("excludedApps") || root.has("isWhitelist")
         if (!hasSites && !hasOwn && !hasQwdttApps) throw IllegalArgumentException("Файл не содержит списков обхода.")
 
-        val parsedSites = if (hasSites) BypassRoutes.parseRules(root.optString("bypassRoutes", "")) else null
+        // The same check as for a plain list: entries that are not a site or an address are dropped.
+        val parsedSites = if (hasSites) {
+            BypassRoutes.parseRules(root.optString("bypassRoutes", "")).filter { BypassRoutes.isValidRule(it) }
+        } else null
         val sites = parsedSites?.let { BypassRoutes.limitRules(it) }
         fun apps(key: String) = root.optString(key, "").split(',').map { it.trim() }.filter { it.isNotEmpty() }.distinct()
         val mode = if (root.has("isWhitelist")) root.optBoolean("isWhitelist", false) else null

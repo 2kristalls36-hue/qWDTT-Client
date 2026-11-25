@@ -201,6 +201,8 @@ func main() {
 	diagPortsFlag := flag.String("diag-ports", "", "порты сервера для проверки: dtls=56000,direct=56002,raw=56003")
 	diagAuto := flag.Bool("diag-auto", true, "проверять соединение автоматически, если туннель не поднимается")
 	diagTrigger := flag.String("diag-trigger", "", "файл-триггер: появился — запустить проверку (для приложения)")
+	credsCache := flag.String("creds-cache", "", "файл для TURN-кредов между запусками (анонимный путь, см. creds_store.go)")
+	netKey := flag.String("net-key", "", "ключ текущей сети: креды прошлого запуска берутся только для той же сети")
 
 	flag.Parse()
 	activeConnMode := strings.ToLower(strings.TrimSpace(*connMode))
@@ -362,6 +364,10 @@ func main() {
 		// Если все хеши провалились
 		fmt.Printf("PING_ERROR|All hashes failed. Last error: %v\n", lastErr)
 		os.Exit(1)
+	}
+
+	if activeVkAuthMode == "anonymous" {
+		setupCredsStore(*credsCache, *netKey, time.Now())
 	}
 
 	// Слушаем локально (SO_REUSEADDR — быстрый перезапуск без «address already in use»)

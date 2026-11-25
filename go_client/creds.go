@@ -166,6 +166,9 @@ func (c *StreamCredentialsCache) invalidate(streamID int) {
 	c.lastErrorTime.Store(0)
 
 	log.Printf("[STREAM %d] [VK Auth] Credentials cache invalidated", streamID)
+	// Сброшенные креды не должны вернуться при следующем запуске. Синхронно:
+	// invalidate не вызывается под локом кэша (см. вызовы).
+	persistCreds()
 }
 
 func cloneStringSlice(in []string) []string {
@@ -264,6 +267,8 @@ func getVkCredsCached(ctx context.Context, link string, streamID int) (string, s
 		ExpiresAt:   time.Now().Add(credentialLifetime - cacheSafetyMargin),
 		Link:        link,
 	}
+	// Вне лока этого кэша: persistCreds читает все кэши.
+	go persistCreds()
 	return user, pass, cloneStringSlice(addrs), nil
 }
 

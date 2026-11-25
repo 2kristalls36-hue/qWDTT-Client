@@ -90,6 +90,20 @@ object TunnelManager {
     private var currentCaptchaMode = "wv" // режим обхода капчи: "wv" или "rjs"
     private var currentCaptchaSolveMethod = "auto" // "manual" или "auto"
     private var restartAttempts = 0
+    /** TURN credentials of the anonymous path between engine runs (go_client/creds_store.go). */
+    private const val VK_TURN_CACHE_FILE = "vk_turn_cache.json"
+
+    /**
+     * Key of the network the transport goes out through: the handle of the app's default
+     * network (the app is excluded from its own VPN, so it is the real one). A new
+     * connection to the same Wi‑Fi gets a new handle as well — credentials of the previous
+     * run are then not reused, which is the safe side. Empty — unknown.
+     */
+    private fun currentNetworkKey(context: Context): String = runCatching {
+        val cm = context.getSystemService(android.net.ConnectivityManager::class.java)
+        cm?.activeNetwork?.networkHandle?.toString().orEmpty()
+    }.getOrDefault("")
+
     /** Counters of the current session for the connection log (see SessionMetrics). */
     private val metrics = SessionMetrics()
     private var lastSummaryAtMs = 0L
@@ -510,6 +524,11 @@ object TunnelManager {
                     cmd.add("-vk-anon-path")
                     cmd.add(params.vkAnonPath)
                     updateLog("vk_anon_path", "[КЛИЕНТ] Режим VK: ${params.vkAnonPath}", 1, false)
+                    // TURN-креды между запусками — только для той же сети (go_client/creds_store.go).
+                    cmd.add("-creds-cache")
+                    cmd.add(File(context.filesDir, VK_TURN_CACHE_FILE).absolutePath)
+                    cmd.add("-net-key")
+                    cmd.add(currentNetworkKey(context))
                 }
 
                 cmd.add("-go-dns")
@@ -1011,6 +1030,8 @@ object TunnelManager {
                         onEngineVkWait(seconds)
                         return@forEachLine
                     }
+                    // Настоящий вход в звонок (креды из кэша или прошлого запуска так не пишутся).
+                    if (lineTrim.contains("[VK Auth] Success")) metrics.join()
 
                     // 1. ПРЕДОХРАНИТЕЛЬ (Circuit Breaker)
                     // Ограничения VK (flood control), ip mismatch после смены сети и
@@ -1161,7 +1182,6 @@ object TunnelManager {
                         lineTrim.contains("Креды получены") ->
                             updateLog("creds_lifetime", lineTrim, 2, false)
                         lineTrim.contains("Креды OK") || lineTrim.contains("Первые креды") -> {
-                            metrics.join()
                             updateLog("creds_ok", "[ВК] Учетные данные проверены ✓", 2, false)
                             advanceConnectionPipeline(ConnectionStep.VK, ConnectionStep.WRAP)
                         }
@@ -1191,8 +1211,6 @@ object TunnelManager {
                         }
                         lineTrim.contains("[TURN]") -> {
                             val text = lineTrim.substringAfter("[TURN]").trim()
-                            // Свежие креды — новый вход в звонок.
-                            if (text.startsWith("Креды обновлены")) metrics.join()
                             val turnError = text.contains("Ошибка", true) ||
                                 text.contains("не удалось", true) ||
                                 text.contains("неполный ответ", true)

@@ -279,6 +279,12 @@ func WorkerGroup(
 	// relay, а не квота личности: новые креды (новый вход в звонок) его не
 	// лечат и только приближают капчу (anton48, pkg/proxy/quotabreaker.go).
 	var credsProven atomic.Bool
+	// Креды прошлого запуска уже работали; 486 на них — места держат аллокации
+	// прошлого процесса, и лекарство как раз свежие креды.
+	if credsPreloaded(getCacheID(credStreamID)) {
+		credsProven.Store(true)
+		log.Printf("[ГРУППА #%d] Креды из прошлого запуска, повторного входа в звонок нет", groupID)
+	}
 
 	refreshCreds := func(reason string) bool {
 		refreshMu.Lock()

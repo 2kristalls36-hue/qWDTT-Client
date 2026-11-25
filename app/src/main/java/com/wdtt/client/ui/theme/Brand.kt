@@ -15,13 +15,12 @@ import androidx.compose.ui.graphics.vector.PathParser
  * tile and the SVG files in docs/brand; change them together.
  */
 object Brand {
-    /** Ground of the app icon. */
+    /** The logo on a light ground. */
     val Night = Color(0xFF0D0D0F)
-    /** The wave of the app icon (at 95 percent opacity over [Night]). */
-    val Red = Color(0xFFE0142A)
-    /** The deep wave under it. */
-    val DeepRed = Color(0xFF8E000C)
+    /** The logo on a dark ground and on the app icon. */
     val White = Color(0xFFFFFFFF)
+    /** Ground of the app icon: a diagonal gradient from the top left corner. */
+    val IconNeon = listOf(Color(0xFFB026FF), Color(0xFF3D5AFE), Color(0xFFFF2BD6))
 
     /**
      * The logo: «Client» above «qWDTT», both tilted up by 6° as on the app icon, in the

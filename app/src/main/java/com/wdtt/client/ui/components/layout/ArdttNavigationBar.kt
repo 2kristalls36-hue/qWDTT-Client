@@ -1016,8 +1016,10 @@ private fun NavBarTab(
     }
     val iconPose = tabIconPose(iconMotion, iconProgress.value)
     // New Year: the tabs are Santa's train (see SleighTrain), joined across the gaps, in
-    // their own colours under the droplet instead of the accent colour.
+    // their own colours under the droplet instead of the accent colour; by night in the
+    // dark theme.
     val train = sleigh != null
+    val isDarkNow = isDarkSurface()
     // Over clear glass the page shows right behind the tab: a halo follows the outline of
     // the icon and the label, and the faded grey of the other tabs turns full-strength, so
     // they stand apart from the text of the page.
@@ -1059,7 +1061,7 @@ private fun NavBarTab(
                     val (l, r) = dropletRangeInTab(droplet(), index, count, size.width, NavBarDefaults.TrackPadding.toPx())
                     drawSleighTab(
                         index, size.width, size.height, SleighTrain.height.toPx(), paint.color, l, r, sleigh.pose,
-                        com.wdtt.client.ui.festive.SleighLayers.BACKDROP,
+                        com.wdtt.client.ui.festive.SleighLayers.BACKDROP, night = isDarkNow,
                     )
                 } else Modifier,
             )
@@ -1086,7 +1088,7 @@ private fun NavBarTab(
                     val (l, r) = dropletRangeInTab(droplet(), index, count, size.width, NavBarDefaults.TrackPadding.toPx())
                     drawSleighTab(
                         index, size.width, size.height, SleighTrain.height.toPx(), paint.color, l, r, sleigh.pose,
-                        com.wdtt.client.ui.festive.SleighLayers.FIGURE,
+                        com.wdtt.client.ui.festive.SleighLayers.FIGURE, night = isDarkNow,
                     )
                 }
             },

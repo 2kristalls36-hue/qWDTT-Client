@@ -25,7 +25,8 @@ import java.io.FileOutputStream
 /**
  * A film of Santa's train for review (build/outputs/sleighfilm, 20 frames a second): standing
  * and stirring, the connection starting, the run at full speed, the stop, the bird coming
- * back. Top: in colour throughout; below: as in the bar, the droplet on the first tab.
+ * back. By night (the dark theme) in colour, by day in colour, by night as in the bar with
+ * the droplet on Santa, then on the lead reindeer.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -38,7 +39,7 @@ class SleighFilm {
         val tabH = 64f * density.density
         val pad = 8f * density.density
         val w = (slot * 4 + pad * 2).toInt()
-        val h = (tabH * 2 + pad * 3).toInt()
+        val h = (tabH * 3 + pad * 4).toInt()
         val motion = SleighMotion(seed = 11)
         val tallest = 46f * density.density
         val plain = Color(0xFFC9D1DC)
@@ -53,7 +54,8 @@ class SleighFilm {
             val canvas = Canvas(image)
             CanvasDrawScope().draw(density, LayoutDirection.Ltr, canvas, Size(w.toFloat(), h.toFloat())) {
                 drawRect(Color(0xFF141A24))
-                for (row in 0..1) {
+                // By night in colour, by day in colour, by night as in the bar.
+                for (row in 0..2) {
                     val y = pad + row * (tabH + pad)
                     drawRoundRect(Color(0xFF1E2633), androidx.compose.ui.geometry.Offset(pad / 2f, y), Size(w - pad, tabH), androidx.compose.ui.geometry.CornerRadius(tabH / 2f))
                     for (i in 0 until 4) {
@@ -61,9 +63,9 @@ class SleighFilm {
                             // Each tab on a layer of its own, as in the bar.
                             canvas.saveLayer(Rect(-slot, -tabH, slot * 2f, tabH * 2f), Paint())
                             val lens = if (t < 5f) 1f else 3f
-                            val from = if (row == 0) -1e5f else slot * (lens - 0.01f - i)
-                            val to = if (row == 0) 1e5f else slot * (lens + 1.01f - i)
-                            drawSleighTab(i, slot, tabH, tallest, plain, from, to, motion.pose)
+                            val from = if (row < 2) -1e5f else slot * (lens - 0.01f - i)
+                            val to = if (row < 2) 1e5f else slot * (lens + 1.01f - i)
+                            drawSleighTab(i, slot, tabH, tallest, plain, from, to, motion.pose, night = row != 1)
                             canvas.restore()
                         }
                     }

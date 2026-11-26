@@ -57,6 +57,8 @@ object SleighTrain {
         listOf(trailer(), sleigh(), reindeer(leads = false), reindeer(leads = true))
     }
     internal val bird: FigureData by lazy { bullfinch() }
+    /** At night an owl sits there instead of the bullfinch. */
+    internal val owl: FigureData by lazy { owl() }
 
     const val count = 4
 
@@ -243,7 +245,12 @@ internal class Part(
     val dash: Float,
     val joint: Int,
     val outline: Float = 0f,
-)
+    /** A light (the lantern, the bulbs, the red nose, an owl's eyes): bright at night too. */
+    val lit: Boolean = false,
+) {
+    /** Its colour by moonlight. */
+    val nightColor: Color? by lazy { color?.let { if (lit) it else moon(it) } }
+}
 
 /** A figure: its parts in drawing order and its joints (pivot, parent). */
 internal class FigureData(
@@ -292,6 +299,11 @@ private val BirdGrey = Color(0xFF8C95A3)
 private val BirdRed = Color(0xFFE8553D)
 private val BirdBlack = Color(0xFF24272D)
 private val Bulbs = listOf(CandyRed, Color(0xFFFFD54F), Color(0xFF43C46A), Color(0xFF4FA3FF))
+private val OwlBrown = Color(0xFF8A6A4C)
+private val OwlLight = Color(0xFFE2CFAE)
+private val OwlDark = Color(0xFF4A3628)
+private val OwlIris = Color(0xFFFFB02E)
+private val OwlBeak = Color(0xFF3A2A20)
 
 private fun Color.shade(f: Float) = lerp(this, Color.Black, f)
 private fun Color.tint(f: Float) = lerp(this, Color.White, f)
@@ -320,8 +332,8 @@ private class Figure {
         at = was
     }
 
-    fun fill(color: Color?, mono: Mono = Mono.Fill, gap: Float = 0f, outline: Float = 0f, body: Path.() -> Unit) {
-        parts += Part(Path().apply(body), color, mono, 0f, gap, 0f, at, outline)
+    fun fill(color: Color?, mono: Mono = Mono.Fill, gap: Float = 0f, outline: Float = 0f, lit: Boolean = false, body: Path.() -> Unit) {
+        parts += Part(Path().apply(body), color, mono, 0f, gap, 0f, at, outline, lit)
     }
 
     fun line(color: Color?, width: Float, mono: Mono = Mono.Fill, gap: Float = 0f, dash: Float = 0f, body: Path.() -> Unit) {
@@ -451,8 +463,8 @@ private fun trailer() = figure {
             rect(32f, 11.6f, 1.6f, 2.3f)
             rect(31.85f, 13.8f, 1.9f, 0.45f)
         }
-        fill(Lamp, Mono.Cut) { rect(32.3f, 11.95f, 1f, 1.6f) }
-        fill(Flame, Mono.Skip) {
+        fill(Lamp, Mono.Cut, lit = true) { rect(32.3f, 11.95f, 1f, 1.6f) }
+        fill(Flame, Mono.Skip, lit = true) {
             moveTo(32.8f, 12.2f)
             cubicTo(33.2f, 12.7f, 33.15f, 13.3f, 32.8f, 13.4f)
             cubicTo(32.45f, 13.3f, 32.4f, 12.7f, 32.8f, 12.2f)
@@ -511,7 +523,7 @@ private fun trailer() = figure {
     }
     for (k in 0 until 8) {
         val x = 3.65f + k * 3.675f
-        fill(Bulbs[k % Bulbs.size], Mono.Cut) { oval(x, 17.65f, 0.33f, 0.42f) }
+        fill(Bulbs[k % Bulbs.size], Mono.Cut, lit = true) { oval(x, 17.65f, 0.33f, 0.42f) }
     }
     // The presents: a big red one with a tag, a green one with dots, a blue one with spots,
     // a small gold one with stripes.
@@ -1091,9 +1103,9 @@ private fun reindeer(leads: Boolean) = figure {
         }
         if (leads) {
             // The red nose, glowing, in its colour even in the silhouette.
-            fill(CandyRed.copy(alpha = 0.3f), Mono.Own) { circle(32.5f, 5.9f, 2.1f) }
-            fill(CandyRed, Mono.Own) { circle(32.5f, 5.9f, 0.95f) }
-            fill(Color.White.copy(alpha = 0.75f), Mono.Own) { circle(32.2f, 5.6f, 0.3f) }
+            fill(CandyRed.copy(alpha = 0.3f), Mono.Own, lit = true) { circle(32.5f, 5.9f, 2.1f) }
+            fill(CandyRed, Mono.Own, lit = true) { circle(32.5f, 5.9f, 0.95f) }
+            fill(Color.White.copy(alpha = 0.75f), Mono.Own, lit = true) { circle(32.2f, 5.6f, 0.3f) }
         } else {
             fill(Hoof) { circle(32.4f, 5.95f, 0.65f) }
             fill(Color.White.copy(alpha = 0.5f), Mono.Skip) { circle(32.2f, 5.75f, 0.18f) }
@@ -1165,7 +1177,116 @@ private fun bullfinch() = figure {
     }
 }
 
+/**
+ * An owl, facing right, its feet at (0, 0): a round brown body with a pale speckled breast,
+ * a big round head with ear tufts and a pale face, two big amber eyes, a hooked beak.
+ */
+private fun owl() = figure {
+    root(0f, -2f)
+    joint(J.BIRD_TAIL, -0.8f, -0.8f) {
+        fill(OwlDark, gap = 0.12f) { poly(-0.7f, -1.2f, -1.9f, -0.3f, -1.5f, 0.05f, -0.5f, -0.6f) }
+    }
+    joint(J.BIRD_LEGS, 0f, -0.4f) {
+        fill(OwlLight) {
+            oval(-0.35f, -0.28f, 0.32f, 0.3f)
+            oval(0.35f, -0.28f, 0.32f, 0.3f)
+        }
+        line(OwlDark, 0.12f) {
+            seg(-0.62f, 0f, -0.48f, -0.16f)
+            seg(-0.3f, 0.02f, -0.28f, -0.16f)
+            seg(0.1f, 0f, 0.22f, -0.16f)
+            seg(0.48f, 0.02f, 0.46f, -0.16f)
+        }
+    }
+    fill(OwlBrown, gap = 0.15f) { oval(0f, -2.2f, 1.45f, 1.95f) }
+    fill(OwlLight, Mono.Skip) { oval(0.42f, -1.95f, 0.95f, 1.45f) }
+    line(OwlDark, 0.11f, Mono.Skip) {
+        for (r in 0 until 4) for (k in 0 until 2) {
+            val x = 0.15f + 0.5f * k + 0.25f * (r % 2)
+            val y = -2.95f + 0.55f * r
+            moveTo(x - 0.15f, y - 0.1f)
+            lineTo(x, y)
+            lineTo(x + 0.15f, y - 0.1f)
+        }
+    }
+    joint(J.BIRD_WING, -0.3f, -3f) {
+        fill(OwlBrown.shade(0.18f), gap = 0.12f) {
+            moveTo(-0.1f, -3.5f)
+            cubicTo(-1.2f, -3.3f, -1.7f, -2f, -1.5f, -0.9f)
+            cubicTo(-1.1f, -0.7f, -0.7f, -0.9f, -0.5f, -1.2f)
+            cubicTo(-0.2f, -2f, 0.1f, -2.8f, -0.1f, -3.5f)
+            close()
+        }
+        line(OwlDark, 0.1f, Mono.Skip) {
+            seg(-0.9f, -2.4f, -1.3f, -1.5f)
+            seg(-0.6f, -2.2f, -0.9f, -1.2f)
+        }
+        fill(OwlLight, Mono.Skip) {
+            circle(-0.8f, -2.9f, 0.1f)
+            circle(-1.1f, -2.4f, 0.09f)
+            circle(-0.6f, -1.9f, 0.09f)
+        }
+    }
+    joint(J.BIRD_HEAD, 0.2f, -3.4f) {
+        // Ear tufts.
+        fill(OwlBrown.shade(0.1f), gap = 0.1f) {
+            poly(-0.75f, -5f, -0.95f, -6.1f, -0.25f, -5.35f)
+            poly(0.95f, -5.15f, 1.2f, -6.15f, 1.45f, -5f)
+        }
+        fill(OwlBrown, gap = 0.12f) { circle(0.3f, -4.3f, 1.35f) }
+        // The face: a pale disc, a brow over the eyes.
+        fill(OwlLight, Mono.Skip) { oval(0.55f, -4.25f, 1f, 0.9f) }
+        line(OwlDark, 0.12f, Mono.Skip) {
+            moveTo(-0.25f, -4.9f)
+            lineTo(0.5f, -4.55f)
+            lineTo(1.3f, -4.95f)
+        }
+        joint(J.BIRD_EYE, 0.55f, -4.35f) {
+            fill(OwlIris, Mono.Cut, lit = true) {
+                circle(0.95f, -4.35f, 0.42f)
+                circle(0.05f, -4.35f, 0.36f)
+            }
+            fill(BirdBlack, Mono.Skip) {
+                circle(1f, -4.35f, 0.22f)
+                circle(0.1f, -4.35f, 0.19f)
+            }
+            fill(Color.White, Mono.Skip, lit = true) {
+                circle(1.08f, -4.45f, 0.08f)
+                circle(0.16f, -4.44f, 0.07f)
+            }
+        }
+        fill(OwlBeak) { poly(0.42f, -4f, 0.72f, -4f, 0.57f, -3.5f) }
+    }
+}
+
 // ------------------------------------------------------------------------------ drawing
+
+/** Drawing by night (the dark theme): colours by moonlight, the lights bright. */
+private var nightNow = false
+
+/**
+ * A colour by moonlight: less saturated, darker, a little blue. The lights are not changed
+ * (see [Part.lit]).
+ */
+private fun moon(c: Color): Color {
+    val l = 0.299f * c.red + 0.587f * c.green + 0.114f * c.blue
+    fun ch(v: Float, k: Float, add: Float) = ((v + (l - v) * 0.42f) * k + add).coerceIn(0f, 1f)
+    return Color(ch(c.red, 0.66f, 0.02f), ch(c.green, 0.7f, 0.03f), ch(c.blue, 0.78f, 0.07f), c.alpha)
+}
+
+/** [c] as it is seen now: by moonlight at night. */
+private fun seen(c: Color): Color = if (nightNow) moon(c) else c
+
+/** A soft glow of [color] round ([cx], [cy]), [radius] out. */
+private fun DrawScope.glow(cx: Float, cy: Float, radius: Float, color: Color, alpha: Float) {
+    drawCircle(
+        androidx.compose.ui.graphics.Brush.radialGradient(
+            listOf(color.copy(alpha = alpha), color.copy(alpha = alpha * 0.35f), Color.Transparent),
+            center = Offset(cx, cy), radius = radius,
+        ),
+        radius, Offset(cx, cy),
+    )
+}
 
 private val strokeRound = Stroke(width = 1f, cap = StrokeCap.Round, join = StrokeJoin.Round)
 
@@ -1226,7 +1347,8 @@ private val neighbour = JointPlaces()
 private fun DrawScope.part(p: Part, coloured: Boolean, plain: Color, alpha: Float = 1f) {
     val own = coloured || p.mono == Mono.Own
     if (!own && p.mono == Mono.Skip) return
-    val color = (if (own) p.color ?: return else plain).let { if (alpha < 1f) it.copy(alpha = it.alpha * alpha) else it }
+    val color = (if (own) (if (nightNow) p.nightColor else p.color) ?: return else plain)
+        .let { if (alpha < 1f) it.copy(alpha = it.alpha * alpha) else it }
     val effect = if (p.dash > 0f) PathEffect.dashPathEffect(floatArrayOf(p.dash, p.dash)) else null
     val style = if (p.stroke > 0f) Stroke(p.stroke, cap = strokeRound.cap, join = strokeRound.join, pathEffect = effect) else Fill
     if (!own && p.mono == Mono.Cut) {
@@ -1272,7 +1394,13 @@ fun DrawScope.drawSleighTab(
     pose: TrainPose = TrainPose.Rest,
     /** Which of it: the figures, what is behind them (ropes, trees, wind), or both. */
     layers: Int = SleighLayers.ALL,
+    /**
+     * By night (the dark theme): the colours by moonlight, the lantern, the bulbs and the
+     * red nose glowing, an owl instead of the bullfinch.
+     */
+    night: Boolean = false,
 ) {
+    nightNow = night
     val count = SleighTrain.count
     val fig = SleighTrain.figures[index]
     val tall = SleighTrain.figureHeight(width, tallest)
@@ -1298,7 +1426,7 @@ fun DrawScope.drawSleighTab(
             anchor(joint, SleighTrain.WIDE, y, from)
             anchor(joint + 1, 0f, y, to)
             if (joint == 0) {
-                drawLine(if (coloured) Iron else plain, Offset(from[0], from[1]), Offset(to[0], to[1]), strokeWidth = 0.9f * unit)
+                drawLine(if (coloured) seen(Iron) else plain, Offset(from[0], from[1]), Offset(to[0], to[1]), strokeWidth = 0.9f * unit)
                 continue
             }
             // A rope sagging between the two figures, less as the train pulls it taut.
@@ -1311,7 +1439,7 @@ fun DrawScope.drawSleighTab(
                 val yy = from[1] + (to[1] - from[1]) * t + 4f * sag * t * (1f - t)
                 if (k == 0) path.moveTo(x, yy) else path.lineTo(x, yy)
             }
-            drawPath(path, if (coloured) Leather else plain, style = Stroke(width = 0.45f * unit, cap = StrokeCap.Round))
+            drawPath(path, if (coloured) seen(Leather) else plain, style = Stroke(width = 0.45f * unit, cap = StrokeCap.Round))
         }
     }
 
@@ -1331,9 +1459,9 @@ fun DrawScope.drawSleighTab(
             if (pose.reinFlick != 0f) y += pose.reinFlick * sin(t * 9f - pose.reinPhase) * (1f - t)
             if (k == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
-        val color = if (coloured) Leather else plain
+        val color = if (coloured) seen(Leather) else plain
         if (!coloured) drawPath(path, Color.Black, style = Stroke(0.95f, cap = StrokeCap.Round), blendMode = BlendMode.Clear)
-        else drawPath(path, Leather.shade(0.45f), style = Stroke(0.95f, cap = StrokeCap.Round))
+        else drawPath(path, seen(Leather).shade(0.45f), style = Stroke(0.95f, cap = StrokeCap.Round))
         drawPath(path, color, style = Stroke(0.45f, cap = StrokeCap.Round))
     }
 
@@ -1344,7 +1472,7 @@ fun DrawScope.drawSleighTab(
             val age = pose.dustAge[k]
             val a = (1f - age) * (1f - age) * 0.75f
             val r = pose.dustSize[k] * (1f + 1.2f * age)
-            drawCircle(if (coloured) SnowWhite.copy(alpha = a) else plain.copy(alpha = a * 0.6f), r, Offset(pose.dustX[k], pose.dustY[k]))
+            drawCircle(if (coloured) seen(SnowWhite).copy(alpha = a) else plain.copy(alpha = a * 0.6f), r, Offset(pose.dustX[k], pose.dustY[k]))
         }
     }
 
@@ -1355,10 +1483,17 @@ fun DrawScope.drawSleighTab(
         val by = top + pose.birdY * unit
         val s = pose.birdScale * BIRD_SIZE * unit
         if (bx < -6f * s || bx > width + 6f * s) return
-        neighbour.place(SleighTrain.bird, pose.joints[TrainPose.BIRD])
+        val who = if (nightNow) SleighTrain.owl else SleighTrain.bird
+        neighbour.place(who, pose.joints[TrainPose.BIRD])
         translate(bx, by) {
             scale(s * pose.birdFacing, s, pivot = Offset.Zero) {
-                parts(SleighTrain.bird, neighbour, coloured, plain, pose.birdAlpha)
+                parts(who, neighbour, coloured, plain, pose.birdAlpha)
+                if (nightNow && coloured) {
+                    // The owl's eyes shine a little in the dark.
+                    for (ex in floatArrayOf(0.95f, 0.05f)) {
+                        glow(neighbour.x(J.BIRD_EYE, ex, -4.35f), neighbour.y(J.BIRD_EYE, ex, -4.35f), 0.75f, OwlIris, 0.35f * pose.birdAlpha)
+                    }
+                }
             }
         }
     }
@@ -1430,6 +1565,19 @@ fun DrawScope.drawSleighTab(
             translate(left, top) {
                 scale(unit, unit, pivot = Offset.Zero) {
                     parts(fig, placed, coloured, plain)
+                    if (nightNow && coloured) {
+                        // By night the lights glow round them.
+                        if (index == 0) {
+                            glow(placed.x(J.LANTERN, 32.8f, 12.75f), placed.y(J.LANTERN, 32.8f, 12.75f), 4.6f, Lamp, 0.5f)
+                            for (k in 0 until 8) {
+                                val bx = 3.65f + k * 3.675f
+                                glow(placed.x(J.ROOT, bx, 17.65f), placed.y(J.ROOT, bx, 17.65f), 1.2f, Bulbs[k % Bulbs.size], 0.55f)
+                            }
+                        }
+                        if (index == 3) {
+                            glow(placed.x(J.DEER_HEAD, 32.5f, 5.9f), placed.y(J.DEER_HEAD, 32.5f, 5.9f), 3.4f, CandyRed, 0.45f)
+                        }
+                    }
                     if (index == 1) reins(coloured)
                     if (index == 3 && pose.noseGlow > 0f) {
                         // The lead's nose glowing brighter (it is looking at it).
@@ -1509,8 +1657,8 @@ private fun DrawScope.bush(x: Float, base: Float, size: Float, coloured: Boolean
         oval(x - size * 0.4f, base - size * 0.62f, size * 0.24f, size * 0.1f)
         oval(x + size * 0.36f, base - size * 0.58f, size * 0.22f, size * 0.1f)
     }
-    drawPath(body, Fir.shade(0.15f).copy(alpha = alpha))
-    drawPath(snow, SnowWhite.copy(alpha = alpha))
+    drawPath(body, seen(Fir.shade(0.15f)).copy(alpha = alpha))
+    drawPath(snow, seen(SnowWhite).copy(alpha = alpha))
 }
 
 /** A bare winter tree: a trunk forking into branches, snow along them in colour. */
@@ -1544,8 +1692,8 @@ private fun DrawScope.bareTree(x: Float, base: Float, size: Float, coloured: Boo
         moveTo(x + size * 0.24f, base - size * 0.6f)
         lineTo(x + size * 0.08f, base - size * 0.48f)
     }
-    drawPath(limbs, FirTrunk.copy(alpha = alpha), style = stroke)
-    drawPath(snow, SnowWhite.copy(alpha = alpha), style = Stroke(width = w * 1.4f, cap = StrokeCap.Round))
+    drawPath(limbs, seen(FirTrunk).copy(alpha = alpha), style = stroke)
+    drawPath(snow, seen(SnowWhite).copy(alpha = alpha), style = Stroke(width = w * 1.4f, cap = StrokeCap.Round))
 }
 
 /** The parts of a tab of the train, to draw apart (the figures under a legibility border). */
@@ -1591,7 +1739,7 @@ private fun DrawScope.tree(x: Float, base: Float, size: Float, coloured: Boolean
             close()
         }
     }
-    drawRect(FirTrunk.copy(alpha = alpha), Offset(x - size * 0.05f, base - size * 0.14f), androidx.compose.ui.geometry.Size(size * 0.1f, size * 0.14f))
-    drawPath(body, (if (far) Fir.tint(0.25f) else Fir).copy(alpha = alpha))
-    drawPath(snow, SnowWhite.copy(alpha = alpha))
+    drawRect(seen(FirTrunk).copy(alpha = alpha), Offset(x - size * 0.05f, base - size * 0.14f), androidx.compose.ui.geometry.Size(size * 0.1f, size * 0.14f))
+    drawPath(body, seen(if (far) Fir.tint(0.25f) else Fir).copy(alpha = alpha))
+    drawPath(snow, seen(SnowWhite).copy(alpha = alpha))
 }

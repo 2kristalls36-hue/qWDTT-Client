@@ -42,11 +42,12 @@ class SleighIconsShot {
                     ArdttTheme(themeMode = theme) {
                         Column(Modifier.background(MaterialTheme.colorScheme.background).padding(8.dp)) {
                             val plain = MaterialTheme.colorScheme.onSurfaceVariant
-                            if (theme == "dark") Train(plain, 2f, colour = 0f to 1e5f)
-                            Train(plain, 1f, colour = -1f to -1f)
-                            Train(plain, 1f, colour = 0f to 1e5f)
+                            val night = theme == "dark"
+                            if (night) Train(plain, 2f, colour = 0f to 1e5f, night = true)
+                            Train(plain, 1f, colour = -1f to -1f, night = night)
+                            Train(plain, 1f, colour = 0f to 1e5f, night = night)
                             // The droplet over the sleigh's front half and the first reindeer's back.
-                            Train(plain, 1f, colour = 1.55f to 2.55f)
+                            Train(plain, 1f, colour = 1.55f to 2.55f, night = night)
                         }
                     }
                 }
@@ -57,7 +58,7 @@ class SleighIconsShot {
 
     /** Four tabs 80 dp wide and 64 high, times [zoom]; colour from tab [colour] to tab. */
     @androidx.compose.runtime.Composable
-    private fun Train(plain: Color, zoom: Float, colour: Pair<Float, Float>) {
+    private fun Train(plain: Color, zoom: Float, colour: Pair<Float, Float>, night: Boolean = false) {
         val slot = 80.dp * zoom
         Canvas(
             Modifier
@@ -69,7 +70,7 @@ class SleighIconsShot {
                 translate(left = w * i) {
                     drawSleighTab(
                         i, w, size.height, SleighTrain.height.toPx() * zoom, plain,
-                        (colour.first - i) * w, (colour.second - i) * w,
+                        (colour.first - i) * w, (colour.second - i) * w, night = night,
                     )
                 }
             }

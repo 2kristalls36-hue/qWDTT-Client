@@ -6,7 +6,6 @@ import java.awt.BasicStroke
 import java.awt.Color
 import java.awt.RenderingHints
 import java.awt.geom.Ellipse2D
-import java.awt.geom.Path2D
 import java.awt.geom.RoundRectangle2D
 import java.awt.image.BufferedImage
 import java.io.File
@@ -23,8 +22,8 @@ import kotlin.math.sqrt
  * A round snow globe to train the snow on, held as a person holds a phone: tilted back,
  * trembling and wandering by a degree or two, now and then turned, shaken or put down.
  * The accelerometer readings pass through [MotionFilter] as in the app. Measures what
- * the eye notices — the drift's surface twitching, grains moving while the globe is held
- * still — and renders films (build/outputs/roundglobe, build/outputs/barglobe).
+ * the eye notices — lying grains twitching, grains moving while the globe is held still,
+ * also held on its side — and renders films (build/outputs/roundglobe, build/outputs/barglobe).
  */
 class RoundGlobeTraining {
     /** A hand holding the phone: the angle it means to hold, plus tremor and wander. */
@@ -66,8 +65,9 @@ class RoundGlobeTraining {
         val filter = MotionFilter()
         private var sensorClock = 0.0
         val dt = 1f / 60f
-        /** The surface as shown, last frame, for measuring its twitching. */
+        /** The lying grains as drawn, last frame, for measuring their twitching. */
         private var last: FloatArray? = null
+        private var lastLying: BooleanArray? = null
         var twitch = 0f
         var twitchSum = 0.0
         var frames = 0
@@ -86,20 +86,32 @@ class RoundGlobeTraining {
         }
 
         private fun measure() {
-            val n = 80
-            val now = FloatArray(n) { sim.shownDepthAt(SnowGlobePhysics.BOTTOM, sim.aspect * (it + 0.5f) / n) }
-            last?.let { prev ->
+            // What the eye sees of the heap: where each lying grain is drawn.
+            val now = FloatArray(sim.flakes * 2) { if (it % 2 == 0) sim.x[it / 2] else sim.y[it / 2] }
+            val lay = BooleanArray(sim.flakes) { sim.lying[it] }
+            val prev = last
+            val was = lastLying
+            if (prev != null && was != null) {
                 var most = 0f
-                for (k in 0 until n) most = max(most, abs(now[k] - prev[k]))
+                val h = heap
+                for (i in 0 until sim.flakes) {
+                    if (!lay[i] || !was[i] || (h != null && !h[i])) continue
+                    most = max(most, abs(now[2 * i] - prev[2 * i]) + abs(now[2 * i + 1] - prev[2 * i + 1]))
+                }
                 twitch = max(twitch, most)
                 twitchSum += most
                 frames++
             }
             last = now
+            lastLying = lay
         }
 
-        fun resetMeasures() {
+        /** Grains lying when the measuring began: the heap as it was (late landings aside). */
+        private var heap: BooleanArray? = null
+
+        fun resetMeasures(heapOnly: Boolean = true) {
             twitch = 0f; twitchSum = 0.0; frames = 0
+            heap = if (heapOnly) BooleanArray(sim.flakes) { sim.lying[it] } else null
         }
     }
 
@@ -121,11 +133,38 @@ class RoundGlobeTraining {
     @Test fun settlingSnowGrowsTheDriftSmoothly() {
         val run = Run(SnowGlobePhysics(5.5f), 12)
         run.sim.scatter()
-        run.resetMeasures()
+        run.resetMeasures(heapOnly = false)
         repeat(60 * 20) { run.step() }
         // While the snow falls the drift grows, but each frame only a hair.
         println("settling: worst twitch ${run.twitch}, mean ${run.twitchSum / run.frames}")
-        assertTrue("the drift grows smoothly: ${run.twitch}", run.twitch < 0.004f)
+        // Each grain glides into place; none jumps.
+        assertTrue("the drift grows smoothly: ${run.twitch}", run.twitch < 0.05f)
+    }
+
+    /** The phone turned on its side and held there, as in the video: the heap settles. */
+    @Test fun heldSidewaysTheSnowSettlesAndStaysStill() {
+        for (degrees in listOf(-80.0, -95.0, -110.0, 75.0)) {
+            val run = Run(SnowGlobePhysics(5.5f), 13)
+            run.sim.settleAll()
+            run.hand.aim = degrees
+            // The heap slides over and comes to rest within about ten seconds.
+            repeat(60 * 16) { run.step() }
+            val sinking = run.sim.floating
+            val startX = run.sim.x.copyOf()
+            val startY = run.sim.y.copyOf()
+            run.resetMeasures()
+            repeat(60 * 6) { run.step() }
+            val landed = sinking - run.sim.floating
+            // Heap grains that went anywhere (a grain's breadth or more).
+            val went = (0 until run.sim.flakes).count {
+                run.sim.lying[it] && Math.hypot((run.sim.x[it] - startX[it]).toDouble(), (run.sim.y[it] - startY[it]).toDouble()) > 2 * run.sim.grain
+            } - landed.coerceAtLeast(0)
+            println("held at $degrees°: heap grains that went somewhere $went (landed $landed), worst twitch ${run.twitch}, ${run.sim.describe()}")
+            // The heap is still; at most the odd flake still sinking lands and knocks a grain
+            // on (turned past a quarter, more snow is still on its way down).
+            assertTrue("held at $degrees°, heap grains moved: $went", went <= 2 + landed / 2)
+            assertTrue("held at $degrees°, a grain jumps: ${run.twitch}", run.twitch < 0.02f)
+        }
     }
 
     @Test fun film() {
@@ -143,7 +182,7 @@ class RoundGlobeTraining {
         sim.settleAll()
         var frame = 0
         var lastX = 0.5f / 4 * sim.aspect
-        for (s in 0 until 60 * 34) {
+        for (s in 0 until 60 * 41) {
             val t = s * run.dt
             run.hand.aim = when {
                 t < 2f -> 0.0
@@ -151,6 +190,8 @@ class RoundGlobeTraining {
                 t < 8f -> 35.0
                 t < 18f -> 0.0
                 t < 26f -> 180.0
+                t < 29f -> 0.0
+                t < 37f -> -95.0
                 else -> 0.0
             }
             val shaking = t in 13f..13.6f
@@ -183,38 +224,40 @@ class RoundGlobeTraining {
                 g.color = Color(0x2A, 0x34, 0x44)
                 g.fill(RoundRectangle2D.Float(dx * k - dw, k * 0.08f, dw * 2, k * 0.84f, k * 0.8f, k * 0.8f))
             }
-            g.color = Color(0xF2, 0xF6, 0xFC)
-            for (side in 0..1) {
-                val body = Path2D.Float()
-                val n = 160
-                val down = side == SnowGlobePhysics.BOTTOM
-                fun wall(px: Float) = if (down) sim.bottomAt(px) else 1f - sim.bottomAt(px)
-                for (i in 0..n) {
-                    val px = sim.aspect * i / n
-                    val d = maxOf(0f, sim.shownDepthAt(side, px) - 0.022f)
-                    val yy = (wall(px) + if (down) -d else d) * k
-                    if (i == 0) { body.moveTo(px * k, wall(px) * k); body.lineTo(px * k, yy) } else body.lineTo(px * k, yy)
-                }
-                for (i in n downTo 0) {
-                    val px = sim.aspect * i / n
-                    body.lineTo(px * k, wall(px) * k)
-                }
-                body.closePath()
-                g.fill(body)
+            g.color = Color(0xE1, 0xE9, 0xF5)
+            for (i in 0 until sim.flakes) if (sim.lying[i]) {
+                val r = sim.radius[i] * 1.55f * k
+                g.fill(Ellipse2D.Float(sim.x[i] * k - r, sim.y[i] * k - r, r * 2, r * 2))
+            }
+            g.color = Color(0xFB, 0xFD, 0xFF)
+            for (i in 0 until sim.flakes) if (sim.exposed(i)) {
+                val r = sim.radius[i] * (0.95f + 0.3f * sim.size[i]) * k
+                g.fill(Ellipse2D.Float(sim.x[i] * k - r, sim.y[i] * k - r, r * 2, r * 2))
             }
             for (i in 0 until sim.flakes) {
+                if (sim.lying[i]) continue
                 val r = (0.4f + 0.7f * sim.size[i]) * k / 64f
                 val cx = sim.x[i] * k
-                val cy = sim.shownY(i) * k
-                if (sim.lying[i]) {
-                    g.color = Color(255, 255, 255, 240)
-                    g.fill(Ellipse2D.Float(cx - r * 1.35f, cy - r * 1.35f, r * 2.7f, r * 2.7f))
-                } else {
-                    g.color = Color(255, 255, 255, 40)
-                    g.fill(Ellipse2D.Float(cx - r * 2.3f, cy - r * 2.3f, r * 4.6f, r * 4.6f))
-                    g.color = Color(255, 255, 255, 235)
-                    g.fill(Ellipse2D.Float(cx - r, cy - r, r * 2, r * 2))
+                val cy = sim.y[i] * k
+                if (sim.crystal[i]) {
+                    val rad = (1.3f + 1.9f * sim.size[i]) * k / 64f
+                    val squash = 0.25f + 0.75f * abs(cos(sim.tip[i].toDouble())).toFloat()
+                    val cs = cos(sim.spin[i].toDouble()).toFloat()
+                    val sn = sin(sim.spin[i].toDouble()).toFloat()
+                    g.color = Color(255, 255, 255, 230)
+                    g.stroke = BasicStroke(maxOf(1f, k / 100f))
+                    for (a in 0 until 3) {
+                        val ang = a * 1.0472
+                        val ex = (cos(ang) * rad).toFloat()
+                        val ey = (sin(ang) * rad).toFloat() * squash
+                        g.draw(java.awt.geom.Line2D.Float(cx - ex * cs + ey * sn, cy - ex * sn - ey * cs, cx + ex * cs - ey * sn, cy + ex * sn + ey * cs))
+                    }
+                    continue
                 }
+                g.color = Color(255, 255, 255, 40)
+                g.fill(Ellipse2D.Float(cx - r * 2.3f, cy - r * 2.3f, r * 4.6f, r * 4.6f))
+                g.color = Color(255, 255, 255, 235)
+                g.fill(Ellipse2D.Float(cx - r, cy - r, r * 2, r * 2))
             }
             g.clip = null
             g.color = Color(0x8F, 0xD9, 0xB0, 120)
@@ -229,6 +272,8 @@ class RoundGlobeTraining {
                 t < 13f -> if (bar) "droplet sweep" else "held upright"
                 t < 18f -> if (t < 13.6f) "shake" else "blizzard settles"
                 t < 26f -> "upside down"
+                t < 29f -> "upright"
+                t < 37f -> "held on its side"
                 else -> "upright"
             }
             g.drawString("t=%.1fs  %s".format(t, label), 0, -10)

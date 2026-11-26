@@ -16,13 +16,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
@@ -32,9 +31,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.cos
-import kotlin.math.hypot
 import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.sin
 
@@ -45,8 +42,8 @@ private class GlobeHolder {
 /**
  * The snow globe inside the glass tab bar, behind the tabs and under the droplet lens
  * (see [SnowGlobePhysics]). The droplet stirs the liquid as it moves, tilting the phone
- * makes the lying snow creep to the lower side, shaking it whirls the snow up. It runs
- * only while something moves.
+ * past the snow's grip makes it slide to the lower side, shaking it whirls the snow up.
+ * It runs only while something moves.
  */
 @Composable
 fun SnowGlobe(dropletPos: () -> Float, tabs: Int, corner: Float, modifier: Modifier = Modifier) {
@@ -100,81 +97,87 @@ fun SnowGlobe(dropletPos: () -> Float, tabs: Int, corner: Float, modifier: Modif
         val k = size.height // pixels per bar height
         val dp = density
         val t = festive.time()
-
-        // ---- The bodies of the two drifts (on the bottom, and on the top wall when the
-        // phone is upside down), a little under the flakes lying on top of them, so their
-        // edges are made of flakes and look fluffy.
-        val n = 140
-        var any = false
-        for (side in 0..1) {
-            val down = side == SnowGlobePhysics.BOTTOM
-            val wall = { px: Float -> if (down) sim.bottomAt(px) else 1f - sim.bottomAt(px) }
-            val body = Path()
-            var here = false
-            for (i in 0..n) {
-                val px = sim.aspect * i / n
-                val d = max(0f, sim.shownDepthAt(side, px) - 0.022f)
-                if (d > 0.002f) here = true
-                val sy = (wall(px) + (if (down) -d else d)) * k
-                val edge = wall(px) * k + if (down) 1f else -1f
-                if (i == 0) { body.moveTo(px * k, edge); body.lineTo(px * k, sy) } else body.lineTo(px * k, sy)
-            }
-            if (!here) continue
-            any = true
-            for (i in n downTo 0) {
-                val px = sim.aspect * i / n
-                body.lineTo(px * k, wall(px) * k + if (down) 1f else -1f)
-            }
-            body.close()
-            drawPath(
-                body,
-                Brush.verticalGradient(
-                    if (down) listOf(Color.White.copy(alpha = 0.95f), Color(0xFFE2EAF6).copy(alpha = 0.95f))
-                    else listOf(Color(0xFFE2EAF6).copy(alpha = 0.95f), Color.White.copy(alpha = 0.95f)),
-                    startY = if (down) k * 0.7f else 0f, endY = if (down) k else k * 0.3f,
-                ),
-            )
+        val glass = Path().apply {
+            addRoundRect(RoundRect(0f, 0f, size.width, size.height, CornerRadius(sim.corner * k)))
         }
+        clipPath(glass) {
+            // ---- The heap: every lying grain, a little larger than it is, so together they
+            // make one body of snow with a fluffy edge. The ones inside a touch bluish, the
+            // ones on the surface white on top.
+            for (i in 0 until sim.flakes) {
+                if (!sim.lying[i]) continue
+                drawCircle(SnowShade, sim.radius[i] * 1.55f * k, Offset(sim.x[i] * k, sim.y[i] * k))
+            }
+            for (i in 0 until sim.flakes) {
+                if (!sim.exposed(i)) continue
+                drawCircle(SnowWhite, sim.radius[i] * (0.95f + 0.3f * sim.size[i]) * k, Offset(sim.x[i] * k, sim.y[i] * k))
+            }
 
-        // ---- Every flake, lying or floating: the same flake all the time.
-        for (i in 0 until sim.flakes) {
-            val s = sim.size[i]
-            val r = (0.4f + 0.7f * s) * dp
-            // Lying flakes ride the smooth shown surface of the drift.
-            val fy = sim.shownY(i)
-            val c = Offset(sim.x[i] * k, fy * k)
-            if (sim.lying[i]) {
-                // Only the top layer of the drift shows; the flakes under it are hidden by
-                // its body anyway, so they are not drawn.
-                val inside = if (sim.side[i] == SnowGlobePhysics.BOTTOM) {
-                    fy > sim.bottomAt(sim.x[i]) - sim.shownDepthAt(SnowGlobePhysics.BOTTOM, sim.x[i]) + 0.05f
-                } else {
-                    fy < 1f - sim.bottomAt(sim.x[i]) + sim.shownDepthAt(SnowGlobePhysics.TOP, sim.x[i]) - 0.05f
+            // ---- Flakes in the liquid: crumbs, and crystals tumbling as they fall.
+            for (i in 0 until sim.flakes) {
+                if (sim.lying[i]) continue
+                val s = sim.size[i]
+                val r = (0.4f + 0.7f * s) * dp
+                val c = Offset(sim.x[i] * k, sim.y[i] * k)
+                if (sim.crystal[i]) {
+                    drawCrystal(c, (1.3f + 1.9f * s) * dp, sim.spin[i], sim.tip[i], dp)
+                    continue
                 }
-                if (inside) continue
-                drawCircle(Color.White, r * 1.35f, c, alpha = 0.95f)
-                continue
+                drawCircle(Color.White, r * 2.3f, c, alpha = 0.14f)
+                drawCircle(Color.White, r, c, alpha = 0.92f)
+                if (s > 0.55f) {
+                    val a = i * 2.4f
+                    drawCircle(Color.White, r * 0.62f, c + Offset(cos(a) * r * 0.75f, sin(a) * r * 0.75f), alpha = 0.75f)
+                    drawCircle(Color.White, r * 0.5f, c - Offset(cos(a + 1f) * r * 0.7f, sin(a + 1f) * r * 0.7f), alpha = 0.6f)
+                }
             }
-            drawCircle(Color.White, r * 2.3f, c, alpha = 0.14f)
-            drawCircle(Color.White, r, c, alpha = 0.92f)
-            if (s > 0.55f) {
-                val a = i * 2.4f
-                drawCircle(Color.White, r * 0.62f, c + Offset(cos(a) * r * 0.75f, sin(a) * r * 0.75f), alpha = 0.75f)
-                drawCircle(Color.White, r * 0.5f, c - Offset(cos(a + 1f) * r * 0.7f, sin(a + 1f) * r * 0.7f), alpha = 0.6f)
-            }
-        }
 
-        // ---- A few glints on the drift, slowly coming and going.
-        if (any) for (g in 0 until 14) {
-            val px = (0.04f + 0.92f * hash01(53, g)) * sim.aspect
-            val d = sim.shownDepthAt(SnowGlobePhysics.BOTTOM, px)
-            if (d < 0.03f) continue
-            val glint = max(0f, sin(t * (0.7f + 0.6f * hash01(59, g)) + hash01(61, g) * 6.28f)).pow(3)
-            if (glint < 0.05f) continue
-            drawCircle(Color.White, 0.9f * dp, Offset(px * k, (sim.bottomAt(px) - d) * k), alpha = glint)
+            // ---- A few glints on the surface of the heap, slowly coming and going.
+            for (i in 0 until sim.flakes step 23) {
+                if (!sim.exposed(i)) continue
+                val glint = max(0f, sin(t * (0.7f + 0.6f * hash01(59, i)) + hash01(61, i) * 6.28f)).pow(3)
+                if (glint < 0.05f) continue
+                drawCircle(Color.White, 0.9f * dp, Offset(sim.x[i] * k, sim.y[i] * k), alpha = glint)
+            }
         }
     }
 }
+
+/**
+ * A six-armed crystal of [radius] turned by [spin]; tipped by [tip] it is seen at a slant,
+ * flattened across one way (edge on, a thin sliver).
+ */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawCrystal(c: Offset, radius: Float, spin: Float, tip: Float, dp: Float) {
+    val squash = 0.25f + 0.75f * abs(cos(tip))
+    val cs = cos(spin)
+    val sn = sin(spin)
+    fun at(ax: Float, ay: Float): Offset {
+        val qy = ay * squash
+        return Offset(c.x + ax * cs - qy * sn, c.y + ax * sn + qy * cs)
+    }
+    drawCircle(Color.White, radius * 0.9f, c, alpha = 0.12f)
+    val stroke = 0.75f * dp
+    for (a in 0 until 3) {
+        val ang = a * 1.0472f
+        val ex = cos(ang) * radius
+        val ey = sin(ang) * radius
+        drawLine(Color.White, at(-ex, -ey), at(ex, ey), strokeWidth = stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round, alpha = 0.92f)
+        // A pair of twigs near the end of each arm.
+        for (end in 0..1) {
+            val side = if (end == 0) 1f else -1f
+            val bx = cos(ang) * radius * 0.6f * side
+            val by = sin(ang) * radius * 0.6f * side
+            for (twig in 0..1) {
+                val ta = ang + (if (twig == 0) 0.55f else -0.55f) + (if (end == 1) 3.1416f else 0f)
+                drawLine(Color.White, at(bx, by), at(bx + cos(ta) * radius * 0.32f, by + sin(ta) * radius * 0.32f), strokeWidth = stroke * 0.8f, alpha = 0.85f)
+            }
+        }
+    }
+    drawCircle(Color.White, stroke * 0.9f, c, alpha = 0.95f)
+}
+
+/** The body of the heap: snow in its own shade. */
+private val SnowShade = Color(0xFFE1E9F5)
 
 /**
  * Feeds [motion] from the accelerometer while the app is in front (see [MotionFilter]:

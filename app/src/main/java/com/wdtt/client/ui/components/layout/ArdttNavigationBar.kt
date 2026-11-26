@@ -645,6 +645,9 @@ fun ArdttNavigationBar(
                         blur = 0.dp,
                         underlay = lerp(colors.surface, Color.White, if (dark) 0.06f else 0.5f),
                         fringe = 0.45f, dispersion = 0.2f,
+                        // Gentler bend across the top and bottom edges: the snow lying under
+                        // the droplet is not drawn out into streaks.
+                        verticalBend = 0.5f,
                         modifier = Modifier.fillMaxSize(),
                     ) {}
                 }

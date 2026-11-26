@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.abs
 
 class SnowGlobePhysicsTest {
     private val dt = 1f / 60f
@@ -56,29 +57,34 @@ class SnowGlobePhysicsTest {
         val sim = SnowGlobePhysics(5.5f)
         sim.scatter()
         settle(sim)
-        val middle = (sim.columns / 5) until (sim.columns * 4 / 5)
-        val hi = middle.maxOf { sim.bottomDepth(it) }
-        val lo = middle.minOf { sim.bottomDepth(it) }
-        assertTrue("bumps within the drift: $lo..$hi", hi - lo < 0.12f)
+        // As it is seen: the shown surface over the middle of the bar.
+        val xs = (20..80).map { sim.aspect * it / 100f }
+        val hi = xs.maxOf { sim.shownDepthAt(SnowGlobePhysics.BOTTOM, it) }
+        val lo = xs.minOf { sim.shownDepthAt(SnowGlobePhysics.BOTTOM, it) }
+        assertTrue("bumps within the drift: $lo..$hi", hi - lo < 0.08f)
         assertTrue("there is a drift: $lo", lo > 0.05f)
     }
 
-    private fun shiftAfterTilt(degrees: Double): Float {
+    /** Shift of the snow and the grains that moved, after four seconds at [degrees]. */
+    private fun afterTilt(degrees: Double): Pair<Float, Long> {
         val sim = SnowGlobePhysics(5.5f)
         sim.settleAll()
         val before = centreOfSnow(sim)
+        val moved = sim.moves
         val a = Math.toRadians(degrees)
         repeat(60 * 4) { sim.step(dt, tiltX = Math.sin(a).toFloat(), tiltY = Math.cos(a).toFloat()) }
-        return centreOfSnow(sim) - before
+        return (centreOfSnow(sim) - before) to (sim.moves - moved)
     }
 
     @Test fun theSnowLetsGoByDegreesAsThePhoneTilts() {
-        val at5 = shiftAfterTilt(5.0)
-        val at15 = shiftAfterTilt(15.0)
-        val at30 = shiftAfterTilt(30.0)
-        assertEquals("5° holds", 0f, at5, 0.01f)
-        assertTrue("15° moves some: $at15", at15 > 0.02f)
-        assertTrue("30° moves much more: $at30 vs $at15", at30 > 0.15f && at30 > at15 * 1.5f)
+        val (shift5, moved5) = afterTilt(5.0)
+        val (_, moved15) = afterTilt(15.0)
+        val (shift20, _) = afterTilt(20.0)
+        val (shift30, _) = afterTilt(30.0)
+        assertTrue("5° holds: $shift5, $moved5 grains", abs(shift5) < 0.005f && moved5 < 30)
+        assertTrue("15° sets some grains rolling: $moved15", moved15 in 100..3000)
+        assertTrue("20° slides: $shift20", shift20 > 0.05f)
+        assertTrue("30° slides much more: $shift30 vs $shift20", shift30 > shift20 * 2f)
     }
 
     @Test fun turnedPartlyOverOnlyTheLooseSnowFalls() {

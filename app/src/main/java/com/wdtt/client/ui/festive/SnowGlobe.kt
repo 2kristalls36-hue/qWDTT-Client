@@ -38,16 +38,6 @@ import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.sin
 
-/** The phone's tilt and its own acceleration, on the screen (filled by the sensor). */
-internal class DeviceMotion {
-    /** Direction of gravity on the screen, about unit length when upright. */
-    var tiltX = 0f
-    var tiltY = 1f
-    /** The phone's own acceleration on the screen, m/s². */
-    var shakeX = 0f
-    var shakeY = 0f
-}
-
 private class GlobeHolder {
     var sim: SnowGlobePhysics? = null
 }
@@ -66,7 +56,7 @@ fun SnowGlobe(dropletPos: () -> Float, tabs: Int, corner: Float, modifier: Modif
     var frame by remember { mutableIntStateOf(0) }
     val wake = remember { Channel<Unit>(Channel.CONFLATED) }
     val pos by rememberUpdatedState(dropletPos)
-    val motion = remember { DeviceMotion() }
+    val motion = remember { MotionFilter() }
     if (festive.moving) MotionSensor(motion) { wake.trySend(Unit) }
     LaunchedEffect(festive.moving) {
         while (holder.sim == null) withFrameNanos { }
@@ -123,7 +113,7 @@ fun SnowGlobe(dropletPos: () -> Float, tabs: Int, corner: Float, modifier: Modif
             var here = false
             for (i in 0..n) {
                 val px = sim.aspect * i / n
-                val d = max(0f, sim.depthAt(side, px) - 0.022f)
+                val d = max(0f, sim.shownDepthAt(side, px) - 0.022f)
                 if (d > 0.002f) here = true
                 val sy = (wall(px) + (if (down) -d else d)) * k
                 val edge = wall(px) * k + if (down) 1f else -1f
@@ -150,14 +140,16 @@ fun SnowGlobe(dropletPos: () -> Float, tabs: Int, corner: Float, modifier: Modif
         for (i in 0 until sim.flakes) {
             val s = sim.size[i]
             val r = (0.4f + 0.7f * s) * dp
-            val c = Offset(sim.x[i] * k, sim.y[i] * k)
+            // Lying flakes ride the smooth shown surface of the drift.
+            val fy = sim.shownY(i)
+            val c = Offset(sim.x[i] * k, fy * k)
             if (sim.lying[i]) {
                 // Only the top layer of the drift shows; the flakes under it are hidden by
                 // its body anyway, so they are not drawn.
                 val inside = if (sim.side[i] == SnowGlobePhysics.BOTTOM) {
-                    sim.y[i] > sim.bottomAt(sim.x[i]) - sim.depthAt(SnowGlobePhysics.BOTTOM, sim.x[i]) + 0.05f
+                    fy > sim.bottomAt(sim.x[i]) - sim.shownDepthAt(SnowGlobePhysics.BOTTOM, sim.x[i]) + 0.05f
                 } else {
-                    sim.y[i] < 1f - sim.bottomAt(sim.x[i]) + sim.depthAt(SnowGlobePhysics.TOP, sim.x[i]) - 0.05f
+                    fy < 1f - sim.bottomAt(sim.x[i]) + sim.shownDepthAt(SnowGlobePhysics.TOP, sim.x[i]) - 0.05f
                 }
                 if (inside) continue
                 drawCircle(Color.White, r * 1.35f, c, alpha = 0.95f)
@@ -175,7 +167,7 @@ fun SnowGlobe(dropletPos: () -> Float, tabs: Int, corner: Float, modifier: Modif
         // ---- A few glints on the drift, slowly coming and going.
         if (any) for (g in 0 until 14) {
             val px = (0.04f + 0.92f * hash01(53, g)) * sim.aspect
-            val d = sim.depthAt(px)
+            val d = sim.shownDepthAt(SnowGlobePhysics.BOTTOM, px)
             if (d < 0.03f) continue
             val glint = max(0f, sin(t * (0.7f + 0.6f * hash01(59, g)) + hash01(61, g) * 6.28f)).pow(3)
             if (glint < 0.05f) continue
@@ -185,45 +177,32 @@ fun SnowGlobe(dropletPos: () -> Float, tabs: Int, corner: Float, modifier: Modif
 }
 
 /**
- * Feeds [motion] from the accelerometer while the app is in front: gravity (slowly
- * filtered) and the phone's own acceleration. [onMove] is called for a shake or a
- * noticeable change of tilt, to wake the globe.
+ * Feeds [motion] from the accelerometer while the app is in front (see [MotionFilter]:
+ * the hand's tremor and a turn of the phone are not taken for a shake). [onMove] is called
+ * for a shake or a change of tilt, to wake the globe.
  */
 @Composable
-private fun MotionSensor(motion: DeviceMotion, onMove: () -> Unit) {
+private fun MotionSensor(motion: MotionFilter, onMove: () -> Unit) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val wake by rememberUpdatedState(onMove)
     DisposableEffect(context, lifecycle) {
         val sensors = context.getSystemService(SensorManager::class.java)
         val sensor = sensors?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
-        val g = floatArrayOf(0f, 9.81f, 0f)
-        var restX = 0f
-        var restY = 1f
+        var last = 0L
         val listener = object : SensorEventListener {
             override fun onSensorChanged(e: SensorEvent) {
-                for (a in 0..2) g[a] = 0.9f * g[a] + 0.1f * e.values[a]
-                val lx = e.values[0] - g[0]
-                val ly = e.values[1] - g[1]
-                // Device axes to the screen: x the same, y up on the device is down on the screen.
-                motion.tiltX = -g[0] / 9.81f
-                motion.tiltY = g[1] / 9.81f
-                motion.shakeX = lx
-                motion.shakeY = -ly
-                val tilted = hypot(motion.tiltX - restX, motion.tiltY - restY) > 0.06f
-                if (hypot(lx, ly) > 1.5f || tilted) {
-                    restX = motion.tiltX
-                    restY = motion.tiltY
-                    wake()
-                }
+                val dt = if (last == 0L) 0.02f else ((e.timestamp - last) / 1e9f).coerceIn(0.001f, 0.2f)
+                last = e.timestamp
+                if (motion.feed(e.values[0], e.values[1], e.values[2], dt)) wake()
             }
             override fun onAccuracyChanged(s: Sensor?, accuracy: Int) = Unit
         }
         fun on() { if (sensor != null) sensors.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_GAME) }
         fun off() {
             sensors?.unregisterListener(listener)
-            motion.shakeX = 0f
-            motion.shakeY = 0f
+            motion.pause()
+            last = 0L
         }
         val observer = LifecycleEventObserver { _, event ->
             when (event) {

@@ -90,6 +90,18 @@ class SnowGlobePhysics(
     private val liftCarry = arrayOf(FloatArray(columns), FloatArray(columns))
     private val slideCarry = arrayOf(FloatArray(columns), FloatArray(columns))
     private val avalanche = arrayOf(BooleanArray(columns), BooleanArray(columns))
+    /** How long a slope has stood steeper than its grip (a slide needs a moment to start). */
+    private val strain = arrayOf(FloatArray(columns), FloatArray(columns))
+    /**
+     * The drift as it is shown: smoothed over neighbouring columns and following the real
+     * one softly. A grain landing or leaving changes its column by a whole grain at once;
+     * drawn as it is, the surface jumped up and down like the bars of an equalizer.
+     */
+    private val shown = arrayOf(FloatArray(columns), FloatArray(columns))
+
+    /** Grains that got up from a drift so far (for tests: a still globe moves none). */
+    var moves = 0L
+        private set
 
     /** Flakes not lying now (in the liquid or tumbling). */
     var floating = 0
@@ -211,19 +223,65 @@ class SnowGlobePhysics(
     /** Everything lying on the bottom, as when the globe has stood still for a while. */
     fun settleAll() {
         clear()
-        // Over the flat part of the bottom, each flake into the lowest column there, so the
-        // drift lies level from the start.
-        val first = column(corner) + 1
-        val last = column(aspect - corner) - 1
+        // Each flake into the column whose surface is lowest, so the drift lies level from
+        // the start, also over the rounded ends (in a round globe, a level bowl of snow).
         for (i in 0 until flakes) {
-            var c = first
-            for (k in first..last) if (depth[BOTTOM][k] < depth[BOTTOM][c]) c = k
+            var c = 0
+            for (k in 0 until columns) if (surface(BOTTOM, k) > surface(BOTTOM, c)) c = k
             x[i] = columnX(c) + (rnd() - 0.5f) * columnWidth * 0.9f
             lie(i, BOTTOM, c)
         }
         // Let the edges of the drift slip into the rounded ends now, out of sight, so
         // nothing moves when the globe is first shown.
-        repeat(1200) { if (!step(1f / 60f)) return }
+        for (k in 0 until 1200) if (!step(1f / 60f)) break
+        for (side in 0..1) for (c in 0 until columns) shown[side][c] = smoothed(side, c)
+    }
+
+    /** Depth of drift [s] at [c] averaged with its neighbours (weights 1 2 3 2 1). */
+    private fun smoothed(s: Int, c: Int): Float {
+        var sum = 0f
+        var w = 0f
+        for (o in -2..2) {
+            val k = c + o
+            if (k < 0 || k >= columns) continue
+            val wt = (3 - abs(o)).toFloat()
+            sum += depth[s][k] * wt
+            w += wt
+        }
+        return sum / w
+    }
+
+    /** Brings the shown drift a step closer to the real one. Returns the largest change. */
+    private fun relaxShown(h: Float): Float {
+        val k = 1f - exp(-h / SHOWN_FOLLOW)
+        var most = 0f
+        for (side in 0..1) for (c in 0 until columns) {
+            val d = (smoothed(side, c) - shown[side][c]) * k
+            shown[side][c] += d
+            most = max(most, abs(d))
+        }
+        return most
+    }
+
+    /** Depth of drift [s] at [px] as it is shown (smooth in space and time). */
+    fun shownDepthAt(s: Int, px: Float): Float {
+        val f = (px / columnWidth - 0.5f).coerceIn(0f, columns - 1f)
+        val i = f.toInt().coerceAtMost(columns - 2)
+        val t = f - i
+        return shown[s][i] * (1 - t) + shown[s][i + 1] * t
+    }
+
+    /**
+     * Where lying flake [i] is drawn: in its place in the drift, carried along with the
+     * shown surface (so the flakes on top ride the smooth surface, not the columns).
+     */
+    fun shownY(i: Int): Float {
+        if (!lying[i]) return y[i]
+        val s = side[i]
+        val c = column(x[i])
+        val real = surface(s, c)
+        val drawn = wallAt(s, x[i]) - sign(s) * shownDepthAt(s, x[i])
+        return y[i] + (drawn - real)
     }
 
     /** [i] lies down on drift [s] over column [c], where it is (only its height is fitted). */
@@ -259,6 +317,7 @@ class SnowGlobePhysics(
         depth[s][c] = max(0f, depth[s][c] - thickness[i])
         lying[i] = false
         floating++
+        moves++
         vx[i] = ux
         vy[i] = uy
         return i
@@ -325,6 +384,7 @@ class SnowGlobePhysics(
         val landed = floating
         move(h, shakeX, shakeY)
         if (floating != landed) changed = true
+        if (relaxShown(h) > 1e-4f) changed = true
         return floating > 0 || fastest > 0.004f || changed || shake > 1.5f
     }
 
@@ -353,15 +413,17 @@ class SnowGlobePhysics(
         if (shake > 2f) {
             // A shake whips the liquid into whirls: a blizzard in the glass, wilder for a
             // harder shake; it calms down over a couple of seconds after the shake.
-            val whirls = min(12, (shake / 2f).toInt() + 2)
+            val whirls = min(16, (shake / 1.5f).toInt() + 3)
             repeat(whirls) {
                 val ci = (rnd() * nx).toInt().coerceIn(0, nx - 1)
                 val cj = (rnd() * ny).toInt().coerceIn(0, ny - 1)
-                val spin = (if (rnd() < 0.5f) -1f else 1f) * min(shake, 30f) * 2.4f * h
-                for (j in max(0, cj - 2)..min(ny - 1, cj + 2)) for (i in max(0, ci - 3)..min(nx - 1, ci + 3)) {
+                val spin = (if (rnd() < 0.5f) -1f else 1f) * min(shake, 30f) * 3f * h
+                // Whirls of different sizes, as in a shaken liquid.
+                val r2 = 0.03f + 0.1f * rnd()
+                for (j in max(0, cj - 3)..min(ny - 1, cj + 3)) for (i in max(0, ci - 4)..min(nx - 1, ci + 4)) {
                     val rx = (i - ci) * cw
                     val ry = (j - cj) * ch
-                    val f = exp(-(rx * rx + ry * ry) / 0.06f)
+                    val f = exp(-(rx * rx + ry * ry) / r2)
                     val n = idx(i, j)
                     u[n] += -ry * spin * f * 6f
                     v[n] += rx * spin * f * 6f
@@ -501,8 +563,13 @@ class SnowGlobePhysics(
             val t = thickness[top[s][from]] * g
             val raw = abs(diff) / (columnWidth * g)
             val slope = (abs(diff) - t).coerceAtLeast(0f) / (columnWidth * g)
-            // The top grain breaks off only past its own angle; a firm one holds the slope.
-            if (!avalanche[s][c] && raw > holdAt(top[s][from])) avalanche[s][c] = true
+            // The top grain breaks off only past its own angle, and only if the slope stays
+            // that steep for a moment: a passing wobble of the phone starts nothing.
+            if (!avalanche[s][c]) {
+                strain[s][c] = if (raw > holdAt(top[s][from])) strain[s][c] + h else 0f
+                if (strain[s][c] >= SLIDE_DELAY) { avalanche[s][c] = true; strain[s][c] = 0f }
+                if (strain[s][c] > 0f) any = true // a slide may be about to start
+            }
             if (avalanche[s][c] && slope < REST_SLOPE) avalanche[s][c] = false
             if (!avalanche[s][c]) continue
             any = true // a slide is under way here
@@ -545,9 +612,18 @@ class SnowGlobePhysics(
             liftCarry[s][c] += rate * h
             while (liftCarry[s][c] >= 1f && top[s][c] >= 0) {
                 liftCarry[s][c] -= 1f
-                val up = 0.25f + 0.45f * rnd() + shake * 0.07f * (0.5f + rnd())
-                val sideways = (rnd() - 0.5f) * (0.2f + shake * 0.08f)
-                if (rise(s, c, fu * 0.8f + sideways, fv - sign(s) * up) >= 0) any = true
+                // Off into the flow; a shake flings them every which way: a fan up to 70° either
+                // side of straight up, lighter grains further.
+                val light = 1.3f - 0.6f * weight[top[s][c]]
+                val speed = (0.15f + 0.35f * rnd() + shake * 0.06f * (0.3f + rnd())) * light
+                val turn = (rnd() - 0.5f) * 2.44f
+                val ux = kotlin.math.sin(turn) * speed
+                val uy = -sign(s) * kotlin.math.cos(turn) * speed
+                val i = rise(s, c, fu * 0.8f + ux, fv + uy)
+                if (i >= 0) {
+                    x[i] += (rnd() - 0.5f) * columnWidth
+                    any = true
+                }
             }
         }
         return any
@@ -688,17 +764,21 @@ class SnowGlobePhysics(
         const val BOTTOM = 0
         const val TOP = 1
         /** Depth of all the snow when it lies evenly over the flat bottom, bar heights. */
-        const val FULL_DEPTH = 0.22f
-        /** A slope holds up to this (about 24°) for the loosest grain, ... */
-        private const val HOLD_SLOPE = 0.45f
+        const val FULL_DEPTH = 0.19f
+        /** A slope holds up to this (about 21°) for the loosest grain, ... */
+        private const val HOLD_SLOPE = 0.38f
         /** ...up to this much steeper (to about 40°) for the firmest. */
-        private const val HOLD_SPAN = 0.4f
+        private const val HOLD_SPAN = 0.45f
         /** Snow on a wall turned away lets go past this pull away from it (about 12°)... */
         private const val LET_GO_MIN = 0.2f
         /** ...and the firmest only past this much more (about 64°; all of it upside down). */
         private const val LET_GO_SPAN = 0.7f
         /** ...and a slide stops once it is down to this (about 19°). */
         private const val REST_SLOPE = 0.34f
+        /** How long a slope must stand too steep before it slides, seconds. */
+        private const val SLIDE_DELAY = 0.25f
+        /** Time constant of the shown drift following the real one, seconds. */
+        private const val SHOWN_FOLLOW = 0.16f
         /** Gravity on a tumbling grain of weight 1 in the liquid, bar heights a second². */
         private const val TUMBLE_GRAVITY = 1.0f
         /** The weight classes, light to heavy. */

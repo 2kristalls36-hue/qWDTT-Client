@@ -99,23 +99,24 @@ internal object J {
     const val SANTA_EYE = 6
     // A reindeer.
     const val NECK = 1
-    const val EAR = 2
-    const val EYE = 3
-    const val PUPIL = 4
-    const val TAIL = 5
-    const val HIND_FAR = 6
-    const val HOCK_FAR = 7
-    const val HIND_NEAR = 8
-    const val HOCK_NEAR = 9
-    const val FORE_FAR = 10
-    const val KNEE_FAR = 11
-    const val FORE_NEAR = 12
-    const val KNEE_NEAR = 13
-    const val SCARF = 14
-    const val FETLOCK_HIND_FAR = 15
-    const val FETLOCK_FORE_FAR = 16
-    const val FETLOCK_HIND_NEAR = 17
-    const val FETLOCK_FORE_NEAR = 18
+    const val DEER_HEAD = 2
+    const val EAR = 3
+    const val EYE = 4
+    const val PUPIL = 5
+    const val TAIL = 6
+    const val HIND_FAR = 7
+    const val HOCK_FAR = 8
+    const val HIND_NEAR = 9
+    const val HOCK_NEAR = 10
+    const val FORE_FAR = 11
+    const val KNEE_FAR = 12
+    const val FORE_NEAR = 13
+    const val KNEE_NEAR = 14
+    const val SCARF = 15
+    const val FETLOCK_HIND_FAR = 16
+    const val FETLOCK_FORE_FAR = 17
+    const val FETLOCK_HIND_NEAR = 18
+    const val FETLOCK_FORE_NEAR = 19
     // The bullfinch.
     const val BIRD_HEAD = 1
     const val BIRD_WING = 2
@@ -602,66 +603,147 @@ private fun sleigh() = figure {
         fill(Belt, Mono.Cut) { rect(10.1f, 12.5f, 7.2f, 0.8f) }
         fill(Gold) { rect(13.05f, 12.3f, 1.2f, 1.2f) }
         fill(Belt, Mono.Cut) { rect(13.4f, 12.65f, 0.5f, 0.5f) }
-        // The head: face, rosy cheek, nose, spectacles, a bushy brow, beard and moustache.
+        // A fur collar showing beside the beard.
+        fill(Fur, gap = 0.15f) {
+            moveTo(11.4f, 10.6f)
+            cubicTo(11.6f, 9.7f, 12.4f, 9.3f, 13.2f, 9.4f)
+            lineTo(13f, 10.6f)
+            cubicTo(12.4f, 10.5f, 11.9f, 10.7f, 11.4f, 10.6f)
+            close()
+        }
+        // The head, turned a little towards us: a round face with rosy cheeks, two bright
+        // eyes behind round spectacles, bushy brows, a round red nose, a curly moustache
+        // and a big curly beard, the cap.
         joint(J.HEAD, 13.9f, 9.3f) {
-            fill(Skin) { circle(13.9f, 7.2f, 1.8f) }
-            joint(J.SANTA_EYE, 14.7f, 6.8f) {
-                fill(Eye, Mono.Cut) { circle(14.7f, 6.8f, 0.27f) }
-                fill(Color.White, Mono.Skip) { circle(14.78f, 6.72f, 0.09f) }
-            }
-            fill(Rosy, Mono.Skip) { circle(14.9f, 7.85f, 0.45f) }
-            line(Gold.shade(0.1f), 0.14f, Mono.Skip) {
-                circle(14.75f, 6.85f, 0.55f)
-                seg(15.3f, 6.85f, 15.75f, 6.95f)
-                seg(14.2f, 6.8f, 12.6f, 6.4f)
-            }
-            fill(Fur, Mono.Skip) {
-                moveTo(14.1f, 6.05f)
-                cubicTo(14.5f, 5.7f, 15.2f, 5.75f, 15.5f, 6.1f)
-                cubicTo(15.1f, 6.05f, 14.6f, 6.1f, 14.1f, 6.05f)
+            // White hair behind the ear.
+            fill(Fur, gap = 0.2f) {
+                moveTo(12.5f, 5.9f)
+                cubicTo(11.6f, 6.3f, 11.4f, 7.8f, 11.9f, 8.7f)
+                cubicTo(12.2f, 9.2f, 12.8f, 9f, 12.95f, 8.4f)
+                lineTo(13.1f, 6.1f)
                 close()
             }
+            fill(Skin) { oval(14.45f, 7.15f, 1.95f, 1.85f) }
+            fill(Skin.shade(0.06f), gap = 0.12f) { oval(12.9f, 7.35f, 0.42f, 0.6f) }
+            fill(Rosy, Mono.Skip) { oval(12.93f, 7.38f, 0.2f, 0.34f) }
+            fill(Rosy.copy(alpha = 0.85f), Mono.Skip) {
+                oval(15.2f, 7.9f, 0.55f, 0.36f)
+                oval(16.45f, 7.85f, 0.25f, 0.2f)
+            }
+            joint(J.SANTA_EYE, 15.2f, 6.75f) {
+                fill(Eye, Mono.Cut) {
+                    oval(15.2f, 6.75f, 0.2f, 0.28f)
+                    oval(16.12f, 6.7f, 0.16f, 0.24f)
+                }
+                fill(Color.White, Mono.Skip) {
+                    circle(15.26f, 6.65f, 0.075f)
+                    circle(16.16f, 6.61f, 0.06f)
+                }
+            }
+            line(Gold.shade(0.1f), 0.13f, Mono.Skip) {
+                circle(15.2f, 6.8f, 0.48f)
+                circle(16.12f, 6.75f, 0.36f)
+                seg(15.68f, 6.78f, 15.76f, 6.76f)
+                seg(14.72f, 6.72f, 13.3f, 6.45f)
+            }
+            fill(Fur, Mono.Skip) {
+                moveTo(14.5f, 6.25f)
+                cubicTo(14.75f, 5.7f, 15.5f, 5.65f, 15.8f, 6.05f)
+                cubicTo(15.4f, 5.93f, 14.9f, 6.02f, 14.5f, 6.25f)
+                close()
+                moveTo(15.85f, 6.1f)
+                cubicTo(16f, 5.78f, 16.42f, 5.78f, 16.55f, 6f)
+                cubicTo(16.32f, 5.96f, 16.06f, 6f, 15.85f, 6.1f)
+                close()
+            }
+            // The beard: curls all round its edge.
             fill(Fur, gap = 0.3f) {
-                moveTo(12f, 7.8f)
-                cubicTo(11.6f, 10.6f, 12.8f, 12f, 14f, 12f)
-                cubicTo(15.2f, 12f, 16.2f, 10.8f, 16f, 7.8f)
-                cubicTo(15f, 8.8f, 13f, 8.8f, 12f, 7.8f)
+                moveTo(12.6f, 7.4f)
+                cubicTo(12.2f, 9f, 12.35f, 10.4f, 12.95f, 11.2f)
+                cubicTo(13.25f, 11.95f, 13.9f, 12.05f, 14.1f, 11.7f)
+                cubicTo(14.3f, 12.55f, 15.15f, 12.55f, 15.3f, 11.8f)
+                cubicTo(15.75f, 12.1f, 16.35f, 11.6f, 16.2f, 11f)
+                cubicTo(16.85f, 10.6f, 16.95f, 9.6f, 16.5f, 9.1f)
+                cubicTo(16.9f, 8.5f, 16.6f, 7.8f, 16.1f, 7.95f)
+                cubicTo(15.4f, 8.55f, 14f, 8.5f, 13.35f, 7.7f)
                 close()
             }
-            line(Fur.shade(0.12f), 0.15f, Mono.Skip) {
-                moveTo(13.2f, 9.6f)
-                cubicTo(13.3f, 10.4f, 13.6f, 11f, 13.9f, 11.4f)
-                moveTo(14.9f, 9.5f)
-                cubicTo(14.9f, 10.3f, 14.7f, 10.9f, 14.4f, 11.3f)
+            line(Fur.shade(0.14f), 0.14f, Mono.Skip) {
+                moveTo(13.1f, 9.4f)
+                cubicTo(13.3f, 9.9f, 13.8f, 9.95f, 13.95f, 9.55f)
+                moveTo(14.5f, 10.3f)
+                cubicTo(14.7f, 10.8f, 15.2f, 10.8f, 15.35f, 10.4f)
+                moveTo(13.2f, 10.8f)
+                cubicTo(13.4f, 11.2f, 13.8f, 11.2f, 13.95f, 10.9f)
+                moveTo(15.7f, 9.5f)
+                cubicTo(15.9f, 9.9f, 16.3f, 9.85f, 16.35f, 9.5f)
             }
-            fill(Fur, Mono.Skip) {
-                moveTo(13.4f, 8.6f)
-                cubicTo(14.2f, 7.9f, 15.4f, 7.9f, 16.1f, 8.3f)
-                cubicTo(15.5f, 9f, 14.4f, 9.1f, 13.4f, 8.6f)
+            line(Fur.shade(0.2f), 0.12f, Mono.Cut) {
+                moveTo(13.6f, 10.55f)
+                cubicTo(13.9f, 11.05f, 14.4f, 11.05f, 14.6f, 10.65f)
+                moveTo(15f, 10.15f)
+                cubicTo(15.3f, 10.65f, 15.8f, 10.55f, 15.9f, 10.15f)
+            }
+            line(Belt, 0.14f, Mono.Skip) {
+                moveTo(15.25f, 9.05f)
+                cubicTo(15.55f, 9.3f, 15.95f, 9.25f, 16.15f, 9f)
+            }
+            // The moustache: two curling lobes.
+            fill(Fur, gap = 0.15f) {
+                moveTo(15.9f, 8.1f)
+                cubicTo(15.3f, 7.9f, 14.4f, 8.2f, 14f, 8.9f)
+                cubicTo(13.7f, 9.3f, 13.9f, 9.6f, 14.3f, 9.3f)
+                cubicTo(14.8f, 9f, 15.4f, 8.9f, 15.9f, 8.75f)
+                cubicTo(16.4f, 8.9f, 16.9f, 9.1f, 17.1f, 8.9f)
+                cubicTo(17.3f, 8.6f, 17f, 8.2f, 16.5f, 8.1f)
                 close()
             }
-            fill(Skin.shade(0.08f), gap = 0.15f) { circle(15.6f, 7.55f, 0.5f) }
-            // The cap: flopping back, a pompom at its tip, a fur brim.
-            joint(J.HAT, 13.95f, 5.6f) {
-                fill(CoatRed) {
-                    moveTo(12f, 5.2f)
-                    cubicTo(11.9f, 3.4f, 13.1f, 2.4f, 14.3f, 2.5f)
-                    cubicTo(15.4f, 2.6f, 16f, 3.6f, 15.9f, 5.2f)
+            line(Fur.shade(0.15f), 0.1f, Mono.Skip) {
+                moveTo(14.6f, 8.75f)
+                cubicTo(15f, 8.5f, 15.4f, 8.45f, 15.8f, 8.5f)
+            }
+            // The nose: round, rosy, shining.
+            fill(Skin.shade(0.04f), gap = 0.15f) { circle(16.25f, 7.55f, 0.58f) }
+            fill(Rosy.copy(alpha = 0.6f), Mono.Skip) { circle(16.35f, 7.65f, 0.4f) }
+            fill(Color.White.copy(alpha = 0.7f), Mono.Skip) { circle(16.08f, 7.35f, 0.12f) }
+            // The cap, in its colours even in the silhouette: the red crown flopping back,
+            // a fluffy pompom, a fur brim with a soft edge.
+            joint(J.HAT, 14.4f, 5.2f) {
+                fill(CoatRed, Mono.Own, gap = 0.12f) {
+                    moveTo(12.4f, 5f)
+                    cubicTo(12.3f, 3.2f, 13.6f, 2f, 15f, 2.2f)
+                    cubicTo(16.2f, 2.4f, 16.8f, 3.6f, 16.6f, 5f)
                     close()
                 }
-                joint(J.HAT_TIP, 12.6f, 3.2f) {
-                    fill(CoatRed) {
-                        moveTo(12.8f, 2.9f)
-                        cubicTo(11.4f, 2.1f, 9.8f, 2.6f, 9.3f, 4.1f)
-                        lineTo(10.4f, 4.4f)
-                        cubicTo(10.8f, 3.7f, 11.6f, 3.5f, 12.5f, 4.1f)
+                line(CoatRed.shade(0.2f), 0.16f, Mono.Skip) {
+                    moveTo(15.6f, 2.6f)
+                    cubicTo(16.1f, 3.2f, 16.2f, 4f, 16.1f, 4.7f)
+                }
+                joint(J.HAT_TIP, 13f, 2.9f) {
+                    fill(CoatRed, Mono.Own, gap = 0.12f) {
+                        moveTo(13.4f, 2.6f)
+                        cubicTo(12f, 1.8f, 10.4f, 2.2f, 9.9f, 3.7f)
+                        lineTo(11f, 4.1f)
+                        cubicTo(11.4f, 3.4f, 12.2f, 3.2f, 13.1f, 3.8f)
                         close()
                     }
-                    fill(Fur, gap = 0.2f) { circle(9.7f, 4.6f, 0.85f) }
+                    fill(Fur, Mono.Own, gap = 0.15f) {
+                        circle(10.35f, 4.25f, 0.72f)
+                        circle(9.85f, 3.95f, 0.48f)
+                        circle(10.8f, 4.7f, 0.44f)
+                        circle(9.9f, 4.72f, 0.44f)
+                    }
                 }
-                fill(Fur, gap = 0.25f) { round(11.7f, 5f, 4.5f, 1.1f, 0.55f) }
-                line(Fur.shade(0.1f), 0.12f, Mono.Skip) {
-                    for (k in 0 until 6) seg(12.2f + k * 0.7f, 5.3f, 12.4f + k * 0.7f, 5.8f)
+                fill(Fur, Mono.Own, gap = 0.2f) {
+                    round(12f, 4.55f, 5f, 1.25f, 0.62f)
+                    for (k in 0 until 8) circle(12.35f + k * 0.62f, 5.78f, 0.27f)
+                }
+                line(Fur.shade(0.14f), 0.1f, Mono.Skip) {
+                    for (k in 0 until 9) {
+                        val x = 12.4f + k * 0.52f
+                        moveTo(x, 4.85f)
+                        cubicTo(x + 0.15f, 5.05f, x + 0.05f, 5.3f, x + 0.2f, 5.5f)
+                    }
                 }
             }
         }
@@ -713,6 +795,26 @@ private fun sleigh() = figure {
     }
     line(Gold, 0.35f, Mono.Cut) { circle(29.2f, 9.9f, 0.55f) }
     fill(Gold, Mono.Cut) { star(6.4f, 15.6f, 0.8f) }
+    // A garland of fir along the rim with red berries, and a sprig of holly at the front.
+    line(Holly, 0.45f, Mono.Skip) {
+        moveTo(3.2f, 13.75f)
+        for (k in 0 until 6) {
+            val x0 = 3.2f + k * 3.1f
+            cubicTo(x0 + 1f, 14.45f, x0 + 2.1f, 14.5f, x0 + 3.1f, 13.85f + k * 0.04f)
+        }
+    }
+    fill(CandyRed, Mono.Skip) {
+        for (k in 0 until 6) circle(4.75f + k * 3.1f, 14.35f, 0.22f)
+    }
+    fill(Holly, Mono.Skip) {
+        oval(23.3f, 15.2f, 0.75f, 0.34f)
+        oval(24.3f, 15.55f, 0.75f, 0.34f)
+    }
+    fill(CandyRed, Mono.Skip) {
+        circle(23.75f, 15.6f, 0.24f)
+        circle(24.1f, 15.2f, 0.24f)
+        circle(23.55f, 15.85f, 0.2f)
+    }
     // A tartan blanket over Santa's knees, hanging over the side.
     fill(Tartan, gap = 0.25f) {
         moveTo(9.6f, 13.55f)
@@ -917,6 +1019,8 @@ private fun reindeer(leads: Boolean) = figure {
                 seg(27.4f, 7f, 27.0f, 8.15f)
             }
         }
+        // The head nods on the neck.
+        joint(J.DEER_HEAD, 26.2f, 5.6f) {
         // Antlers: two branching beams.
         line(Antler, 0.62f, gap = 0.12f) {
             moveTo(26.5f, 3.6f)
@@ -990,6 +1094,7 @@ private fun reindeer(leads: Boolean) = figure {
         } else {
             fill(Hoof) { circle(32.4f, 5.95f, 0.65f) }
             fill(Color.White.copy(alpha = 0.5f), Mono.Skip) { circle(32.2f, 5.75f, 0.18f) }
+        }
         }
     }
     // The collar with three bells.
@@ -1252,25 +1357,38 @@ fun DrawScope.drawSleighTab(
         val sp = pose.speed
         if (sp < 0.02f) return
         val fade = min(1f, sp * 1.6f)
-        // Trees going by behind the train, near ones faster, far ones slower and smaller;
-        // drawn behind what is there already.
-        for (layer in 0..1) {
-            val far = layer == 1
-            val cell = if (far) 1.5f else 2.3f
-            val run = pose.distance * (if (far) 0.55f else 1f)
-            val k0 = floor((run - 1.2f) / cell).toInt()
-            val k1 = floor((run + count + 1.2f) / cell).toInt()
+        // Trees going by behind the train, here and there, at all depths: the near ones
+        // larger and faster, the far ones smaller, slower and fainter; firs mostly, a snowy
+        // bush, a bare tree; swaying a little. Drawn behind what is there already, the near
+        // ones first.
+        for (layer in 0 until TREE_LAYERS) {
+            val p = TREE_PARALLAX[layer]
+            val cell = TREE_CELL[layer]
+            val run = pose.distance * p
+            val k0 = floor((run - count - 1.2f) / cell).toInt()
+            val k1 = floor((run + 0.6f) / cell).toInt()
             for (k in k0..k1) {
-                if (hash01(if (far) 61 else 67, k) > (if (far) 0.55f else 0.5f)) continue
-                val at = k * cell + hash01(if (far) 71 else 73, k) * cell * 0.6f
-                // In tab widths from tab 0's left edge: it comes in on the right.
-                val barX = at - run + 0.4f
-                val x = (barX - index) * width
-                val size = (if (far) 9f else 15f) * (0.8f + 0.35f * hash01(79, k + layer * 1000)) * unit
-                if (x < -size || x > width + size) continue
-                val base = top + (if (far) 20.4f else SleighTrain.GROUND) * unit
-                val a = fade * (if (far) 0.45f else 0.8f)
-                tree(x, base, size, coloured, plain, a, far)
+                val seed = layer * 1009 + k
+                val n = (hash01(61, seed) * (TREE_MOST[layer] + 0.999f)).toInt()
+                for (m in 0 until n) {
+                    val at = (k + hash01(67, seed * 5 + m)) * cell
+                    // In tab widths from tab 0's left edge: it comes in on the right.
+                    val barX = at - run + count + 0.4f
+                    val x = (barX - index) * width
+                    val pick = hash01(71, seed * 5 + m)
+                    val size = (TREE_SIZE[layer] * (0.75f + 0.5f * hash01(73, seed * 5 + m))) * unit
+                    if (x < -size || x > width + size) continue
+                    val base = top + (SleighTrain.GROUND + 0.2f - 0.25f * layer) * unit
+                    val a = fade * TREE_ALPHA[layer]
+                    val sway = 3f * sp * sin(pose.time * (1.1f + hash01(79, seed * 5 + m)) + 6.28f * pick)
+                    withTransform({ rotate(sway, Offset(x, base)) }) {
+                        when {
+                            layer < 2 && pick < 0.15f -> bush(x, base, size * 0.32f, coloured, plain, a * 0.8f)
+                            pick > 0.85f -> bareTree(x, base, size, coloured, plain, a)
+                            else -> tree(x, base, size, coloured, plain, a, far = layer >= 2)
+                        }
+                    }
+                }
             }
         }
         // The wind: thin streaks rushing by.
@@ -1302,8 +1420,8 @@ fun DrawScope.drawSleighTab(
                     if (index == 1) reins(coloured)
                     if (index == 3 && pose.noseGlow > 0f) {
                         // The lead's nose glowing brighter (it is looking at it).
-                        val nx = placed.x(J.NECK, 32.5f, 5.9f)
-                        val ny = placed.y(J.NECK, 32.5f, 5.9f)
+                        val nx = placed.x(J.DEER_HEAD, 32.5f, 5.9f)
+                        val ny = placed.y(J.DEER_HEAD, 32.5f, 5.9f)
                         drawCircle(CandyRed.copy(alpha = 0.32f * pose.noseGlow), 2.2f + 1.3f * pose.noseGlow, Offset(nx, ny))
                         drawCircle(Color(0xFFFF6B7A).copy(alpha = 0.8f * pose.noseGlow), 0.95f, Offset(nx, ny))
                         drawCircle(Color.White.copy(alpha = 0.85f * pose.noseGlow), 0.38f, Offset(nx - 0.3f, ny - 0.3f))
@@ -1353,6 +1471,70 @@ internal fun hoofAt(fig: FigureData, pose: FloatArray, fetlock: Int, fore: Boole
 }
 
 private val hoofPlaces = JointPlaces()
+
+/** The depths trees stand at, near to far: how fast they go by, how far apart, how many
+ * together at most, how tall (grid units), how strongly drawn. */
+private const val TREE_LAYERS = 4
+private val TREE_PARALLAX = floatArrayOf(1f, 0.74f, 0.5f, 0.3f)
+private val TREE_CELL = floatArrayOf(2.6f, 2f, 1.5f, 1.1f)
+private val TREE_MOST = intArrayOf(2, 2, 3, 3)
+private val TREE_SIZE = floatArrayOf(16f, 11f, 7.5f, 5f)
+private val TREE_ALPHA = floatArrayOf(0.85f, 0.65f, 0.45f, 0.3f)
+
+/** A snowy bush: a few round clumps with snow on top. */
+private fun DrawScope.bush(x: Float, base: Float, size: Float, coloured: Boolean, plain: Color, alpha: Float) {
+    val body = Path().apply {
+        circle(x - size * 0.35f, base - size * 0.32f, size * 0.38f)
+        circle(x + size * 0.3f, base - size * 0.3f, size * 0.36f)
+        circle(x, base - size * 0.5f, size * 0.42f)
+    }
+    if (!coloured) {
+        drawPath(body, plain.copy(alpha = alpha * 0.35f), blendMode = BlendMode.DstOver)
+        return
+    }
+    val snow = Path().apply {
+        oval(x, base - size * 0.82f, size * 0.36f, size * 0.14f)
+        oval(x - size * 0.4f, base - size * 0.62f, size * 0.24f, size * 0.1f)
+        oval(x + size * 0.36f, base - size * 0.58f, size * 0.22f, size * 0.1f)
+    }
+    drawPath(snow, SnowWhite.copy(alpha = alpha), blendMode = BlendMode.DstOver)
+    drawPath(body, Fir.shade(0.15f).copy(alpha = alpha), blendMode = BlendMode.DstOver)
+}
+
+/** A bare winter tree: a trunk forking into branches, snow along them in colour. */
+private fun DrawScope.bareTree(x: Float, base: Float, size: Float, coloured: Boolean, plain: Color, alpha: Float) {
+    val w = size * 0.035f
+    val limbs = Path().apply {
+        moveTo(x, base)
+        lineTo(x, base - size * 0.55f)
+        lineTo(x - size * 0.22f, base - size * 0.92f)
+        moveTo(x, base - size * 0.55f)
+        lineTo(x + size * 0.2f, base - size * 0.95f)
+        moveTo(x, base - size * 0.4f)
+        lineTo(x + size * 0.26f, base - size * 0.62f)
+        moveTo(x, base - size * 0.32f)
+        lineTo(x - size * 0.24f, base - size * 0.55f)
+        moveTo(x - size * 0.12f, base - size * 0.74f)
+        lineTo(x - size * 0.3f, base - size * 0.8f)
+        moveTo(x + size * 0.1f, base - size * 0.76f)
+        lineTo(x + size * 0.28f, base - size * 0.82f)
+    }
+    val stroke = Stroke(width = w * 2f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+    if (!coloured) {
+        drawPath(limbs, plain.copy(alpha = alpha * 0.35f), style = stroke, blendMode = BlendMode.DstOver)
+        return
+    }
+    val snow = Path().apply {
+        moveTo(x - size * 0.2f, base - size * 0.9f)
+        lineTo(x - size * 0.05f, base - size * 0.66f)
+        moveTo(x + size * 0.18f, base - size * 0.93f)
+        lineTo(x + size * 0.05f, base - size * 0.7f)
+        moveTo(x + size * 0.24f, base - size * 0.6f)
+        lineTo(x + size * 0.08f, base - size * 0.48f)
+    }
+    drawPath(snow, SnowWhite.copy(alpha = alpha), style = Stroke(width = w * 1.4f, cap = StrokeCap.Round), blendMode = BlendMode.DstOver)
+    drawPath(limbs, FirTrunk.copy(alpha = alpha), style = stroke, blendMode = BlendMode.DstOver)
+}
 
 /** How large the bullfinch is against the grid of the figures. */
 private const val BIRD_SIZE = 1.05f

@@ -55,8 +55,9 @@ class SleighMotion(seed: Int = 1) {
     private var drive = 0f
     /** Time since Santa gave the word, or negative. */
     private var commanded = -1f
-    /** The gallop's phase, in strides. */
+    /** The gallop's phase, in strides: the train's, and each reindeer's own (out of step). */
     private var stride = 0f
+    private val strides = floatArrayOf(0f, 0f, 0f, -0.13f)
     private var distance = 0f
     /** The tab under the droplet, or -1. */
     private var lensTab = -1
@@ -196,8 +197,15 @@ class SleighMotion(seed: Int = 1) {
             if (commanded > COMMAND) commanded = -1f
         }
         val sp = speed
-        if (sp > 0f) stride += (1.2f + 1.2f * sp) * step
+        if (sp > 0f) {
+            // Each reindeer at its own pace, wandering a little: now in step, now not.
+            val base = (1.2f + 1.2f * sp) * step
+            stride += base
+            strides[2] += base * (1f + 0.035f * sin(time * 0.71f))
+            strides[3] += base * (1.045f + 0.035f * sin(time * 0.53f + 2f))
+        }
         if (stride > 1000f) stride -= 1000f
+        for (f in 2..3) if (strides[f] > 1000f) strides[f] -= 1000f
         distance += sp * CRUISE * step
         moveBird(step)
         stir()
@@ -305,9 +313,8 @@ class SleighMotion(seed: Int = 1) {
         if (a > 0f) {
             val amp = ease(min(1f, a * 1.3f))
             for (f in 2..3) {
-                // The lead a little out of step with the other one.
-                val u0 = stride + (if (f == 3) -0.13f else 0f)
-                gallop(f, u0, amp)
+                // Each in its own stride, its stretch wandering a little too.
+                gallop(f, strides[f], amp * (1f + 0.05f * sin(t * (if (f == 3) 0.61f else 0.47f) + f)))
             }
             p.set(3, J.SCARF, turn = -12f * a + 7f * a * sin(t * 15f), sx = 1f + 0.2f * a)
             p.set(1, J.ROOT, dy = 0.14f * a * sin(stride * 4f * PI.toFloat() + 1f))
@@ -333,6 +340,7 @@ class SleighMotion(seed: Int = 1) {
             p.reinPhase = commanded * 22f
             for (f in 2..3) {
                 p.add(f, J.NECK, turn = -7f * sin(PI.toFloat() * c))
+                p.add(f, J.DEER_HEAD, turn = -4f * sin(PI.toFloat() * c))
                 p.add(f, J.EAR, turn = 10f * sin(PI.toFloat() * c))
             }
         }
@@ -408,13 +416,15 @@ class SleighMotion(seed: Int = 1) {
                 }
                 DEER_HEAD -> {
                     p.add(actor, J.NECK, turn = 9f * hold(q, 0.25f, 0.3f))
+                    p.add(actor, J.DEER_HEAD, turn = 5f * hold(q, 0.3f, 0.3f))
                     p.add(actor, J.PUPIL, dy = 0.06f * hold(q, 0.25f, 0.3f))
                 }
                 DEER_NOSE -> {
                     // It looks down at its own nose, cross-eyed; the nose glows brighter and
                     // brighter; a happy little shake of the head.
                     val look = hold(q, 0.15f, 0.2f)
-                    p.add(actor, J.NECK, turn = 11f * look + 4f * sin((q - 0.8f) * 10f * PI.toFloat()) * bump(q, 0.8f, 1f))
+                    p.add(actor, J.NECK, turn = 8f * look + 4f * sin((q - 0.8f) * 10f * PI.toFloat()) * bump(q, 0.8f, 1f))
+                    p.add(actor, J.DEER_HEAD, turn = 7f * look)
                     p.add(actor, J.PUPIL, dx = 0.14f * look, dy = 0.13f * look)
                     p.noseGlow = look * (0.65f + 0.35f * sin(q * 8f * PI.toFloat()))
                     if (q in 0.72f..0.8f) p.set(actor, J.EYE, sy = 0.15f)
@@ -473,8 +483,10 @@ class SleighMotion(seed: Int = 1) {
         val u = frac(u0)
         val uf = frac(u0 + FAR_LAG)
         p.set(f, J.ROOT, turn = amp * key(BODY_TURN, u), dy = amp * key(BODY_DY, u), sx = 1f + amp * (key(BODY_SX, u) - 1f))
+        // The neck swings, the head nods against it so it stays steadier; the ears flop.
         p.set(f, J.NECK, turn = amp * key(NECK, u))
-        p.set(f, J.EAR, turn = -18f * amp)
+        p.set(f, J.DEER_HEAD, turn = amp * key(HEAD, u))
+        p.set(f, J.EAR, turn = amp * (-18f + 7f * sin(2f * PI.toFloat() * (u + 0.3f))))
         p.set(f, J.TAIL, turn = amp * key(TAIL, u))
         p.set(f, J.FORE_NEAR, turn = amp * key(FORE_SHOULDER, u))
         p.set(f, J.KNEE_NEAR, turn = amp * key(FORE_KNEE, u))
@@ -534,7 +546,7 @@ class SleighMotion(seed: Int = 1) {
         // Each hoof as it strikes the ground and as it pushes off.
         var leg = 0
         for (f in 2..3) {
-            val u0 = stride + (if (f == 3) -0.13f else 0f)
+            val u0 = strides[f]
             for (far in listOf(false, true)) {
                 val u = frac(u0 + if (far) FAR_LAG else 0f)
                 for (fore in listOf(true, false)) {
@@ -659,29 +671,31 @@ class SleighMotion(seed: Int = 1) {
         const val BLINK = 0.16f
 
         /**
-         * The gallop, keyed at the quarters of a stride: stretched out in the air, the
-         * forelegs striking and sweeping back, gathered with the hind legs under, the hind
-         * legs pushing off. Degrees, clockwise (a leg turned so swings its hoof back);
+         * The gallop, keyed at the eighths of a stride: stretched out in the air, the
+         * forelegs reaching, striking and sweeping back under the body, gathered with the
+         * hind legs swung under, the hind legs striking and pushing off, the forelegs folding
+         * and swinging forward. Degrees, clockwise (a leg turned so swings its hoof back);
          * the body's rise in grid units (up is less), its stretch.
          */
-        val FORE_SHOULDER = floatArrayOf(-40f, 0f, 28f, -15f)
-        val FORE_KNEE = floatArrayOf(5f, 0f, 35f, 95f)
-        val FORE_FETLOCK = floatArrayOf(-10f, 0f, 35f, 55f)
-        val HIND_HIP = floatArrayOf(38f, 0f, -28f, 8f)
-        val HIND_HOCK = floatArrayOf(-8f, -70f, -10f, 10f)
-        val HIND_FETLOCK = floatArrayOf(25f, 55f, 0f, -10f)
-        val BODY_DY = floatArrayOf(-0.9f, -0.25f, 0.35f, -0.1f)
-        val BODY_TURN = floatArrayOf(-3f, 1.5f, 3f, -0.5f)
-        val BODY_SX = floatArrayOf(1.05f, 1f, 0.95f, 0.99f)
-        val NECK = floatArrayOf(-6f, 0f, 8f, 2f)
-        val TAIL = floatArrayOf(-28f, -18f, -32f, -22f)
+        val FORE_SHOULDER = floatArrayOf(-42f, -25f, -8f, 12f, 28f, 18f, -10f, -32f)
+        val FORE_KNEE = floatArrayOf(8f, 0f, 0f, 0f, 15f, 70f, 95f, 40f)
+        val FORE_FETLOCK = floatArrayOf(-12f, -5f, 5f, 15f, 35f, 60f, 55f, 10f)
+        val HIND_HIP = floatArrayOf(40f, 28f, 5f, -20f, -30f, -10f, 12f, 30f)
+        val HIND_HOCK = floatArrayOf(-6f, -45f, -75f, -40f, -12f, -5f, 5f, 0f)
+        val HIND_FETLOCK = floatArrayOf(30f, 50f, 55f, 20f, -5f, 5f, 15f, 25f)
+        val BODY_DY = floatArrayOf(-0.9f, -0.7f, -0.2f, 0.25f, 0.35f, 0.15f, -0.3f, -0.75f)
+        val BODY_TURN = floatArrayOf(-3f, -1.5f, 1.5f, 3f, 2.5f, 0.5f, -1.5f, -3f)
+        val BODY_SX = floatArrayOf(1.05f, 1.03f, 1f, 0.97f, 0.95f, 0.96f, 0.99f, 1.03f)
+        val NECK = floatArrayOf(-5f, -2f, 3f, 7f, 8f, 5f, 0f, -4f)
+        val HEAD = floatArrayOf(3f, 1f, -2f, -4f, -4f, -2f, 0f, 2f)
+        val TAIL = floatArrayOf(-30f, -22f, -16f, -22f, -32f, -26f, -20f, -26f)
         /** The far legs come down a little after the near ones. */
         const val FAR_LAG = -0.06f
         /** When in a stride the hooves strike and push off. */
-        const val FORE_STRIKE = 0.2f
-        const val FORE_LIFT = 0.46f
+        const val FORE_STRIKE = 0.25f
+        const val FORE_LIFT = 0.55f
         const val HIND_STRIKE = 0.5f
-        const val HIND_LIFT = 0.84f
+        const val HIND_LIFT = 0.8f
 
         const val BIRD_LOOK = 0
         const val BIRD_TAIL = 1

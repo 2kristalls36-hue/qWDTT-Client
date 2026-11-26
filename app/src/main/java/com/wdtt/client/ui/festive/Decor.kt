@@ -22,6 +22,7 @@ import com.wdtt.client.ui.components.surface.LiquidGlass
 import com.wdtt.client.ui.components.surface.LocalGlassBackdrop
 import kotlin.math.PI
 import kotlin.math.cos
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sin
@@ -272,8 +273,10 @@ private fun crystal(p: Path, cx: Float, cy: Float, radius: Float, turn: Float, a
 
 /**
  * The one garland of the maximum level: hung across the top of the screen under the
- * status bar, in two shallow sags, with a few lights that glow and gently brighten and
- * dim, each at its own pace. It hangs over the page background, not inside any element.
+ * status bar, in two shallow sags. Once a second its lights change colour one after
+ * another along the wire, each blinking as it changes (see [GarlandChase]); with
+ * animations off they stay as they are. It hangs over the page background, not inside
+ * any element.
  */
 @Composable
 fun TopGarland(modifier: Modifier = Modifier) {
@@ -284,16 +287,46 @@ fun TopGarland(modifier: Modifier = Modifier) {
         val geo = garlandGeometry(size.width, density, 2.dp.toPx(), spans = 2, perSpan = 4, sagDp = 9f)
         val bulb = 2.6.dp.toPx()
         val glow = 8.dp.toPx()
-        val t = f.time()
+        val t = if (f.moving) f.time() else null
         drawPath(geo.wire, wireColor, alpha = 0.85f, style = Stroke(width = 1.dp.toPx()))
         geo.bulbs.forEachIndexed { i, b ->
-            val c = GarlandColors[i % GarlandColors.size]
-            val period = 2.6f + 2f * hash01(3, i)
-            val tw = if (f.moving) 0.72f + 0.28f * (0.5f + 0.5f * sin(t * 2f * PI.toFloat() / period + hash01(5, i) * 6.28f)) else 1f
-            drawCircle(Brush.radialGradient(listOf(c.copy(alpha = 0.5f * tw), Color.Transparent), center = b, radius = glow), glow, b)
-            drawCircle(c, bulb, b, alpha = 0.78f + 0.22f * tw)
-            drawCircle(Color.White, bulb * 0.38f, b - Offset(bulb * 0.3f, bulb * 0.3f), alpha = 0.65f * tw)
+            val c = GarlandColors[if (t != null) GarlandChase.colour(i, t) else GarlandChase.still(i)]
+            val lit = if (t != null) GarlandChase.brightness(i, t) else 1f
+            drawCircle(Brush.radialGradient(listOf(c.copy(alpha = 0.5f * lit), Color.Transparent), center = b, radius = glow), glow, b)
+            drawCircle(c, bulb, b, alpha = 0.3f + 0.7f * lit)
+            drawCircle(Color.White, bulb * 0.38f, b - Offset(bulb * 0.3f, bulb * 0.3f), alpha = 0.65f * lit)
         }
+    }
+}
+
+/**
+ * The garland's lights running: once a [STEP] the lights change colour one after another
+ * along the wire, [RUN] apart, each dimming for a moment ([BLINK]) and coming back in the
+ * colour the light before it had, so the colours run along the wire. Two lights side by
+ * side never show the same colour, not even while the change runs along: where it has
+ * passed and where it has not yet, they are two colours apart.
+ */
+internal object GarlandChase {
+    const val STEP = 1f
+    const val RUN = 0.07f
+    const val BLINK = 0.18f
+    private const val DIM = 0.25f
+
+    /** The colour of light [i] (an index into [GarlandColors]) at [t] seconds. */
+    fun colour(i: Int, t: Float): Int {
+        val step = floor((t - i * RUN) / STEP).toInt()
+        return Math.floorMod(step - i, GarlandColors.size)
+    }
+
+    /** The colour of light [i] with animations off. */
+    fun still(i: Int): Int = Math.floorMod(-i, GarlandColors.size)
+
+    /** How bright light [i] is at [t]: 1, dipping to [DIM] as its colour changes. */
+    fun brightness(i: Int, t: Float): Float {
+        val since = (t - i * RUN).mod(STEP)
+        val off = min(since, STEP - since) / (BLINK / 2f)
+        if (off >= 1f) return 1f
+        return DIM + (1f - DIM) * off * off * (3f - 2f * off)
     }
 }
 

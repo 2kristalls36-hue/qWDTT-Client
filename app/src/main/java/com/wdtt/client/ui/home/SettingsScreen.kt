@@ -1,7 +1,5 @@
 package com.wdtt.client.ui.home
 
-import com.wdtt.client.ui.festive.frost
-import com.wdtt.client.ui.festive.snowCap
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -473,10 +471,8 @@ private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) 
     Column(
         Modifier
             .fillMaxWidth()
-            .snowCap(com.wdtt.client.ui.components.layout.fitRadius(20.dp), seed = title.length)
             .clip(com.wdtt.client.ui.components.layout.fitShape(20.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
-            .frost(seed = title.length, strength = 0.45f)
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {

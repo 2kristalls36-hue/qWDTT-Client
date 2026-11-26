@@ -1,7 +1,5 @@
 package com.wdtt.client.ui.profiles
 
-import com.wdtt.client.ui.festive.frost
-import com.wdtt.client.ui.festive.snowCap
 import android.content.ClipboardManager
 import android.content.Context
 import android.net.Uri
@@ -315,10 +313,8 @@ private fun ProfileRow(profile: ConnectionProfile, active: Boolean, ping: Long, 
     Row(
         Modifier
             .fillMaxWidth()
-            .snowCap(com.wdtt.client.ui.components.layout.fitRadius(20.dp), seed = 5)
             .clip(shape)
             .background(scheme.surface)
-            .frost(seed = 5, strength = 0.5f)
             .then(if (active) Modifier.border(1.5.dp, scheme.primary.copy(alpha = 0.6f), shape) else Modifier)
             .clickable(role = Role.Button, onClickLabel = "Открыть сведения о профиле", onClick = onClick)
             .padding(16.dp),

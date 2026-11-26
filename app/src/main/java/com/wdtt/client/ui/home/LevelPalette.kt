@@ -31,9 +31,7 @@ internal data class LevelColors(
 @Composable
 internal fun levelColors(level: PowerLevel): LevelColors {
     val dark = isSystemInDarkTheme() || MaterialTheme.colorScheme.background.luminanceIsDark()
-    // New Year: the colours of the garland lights take the place of the neon.
-    val neon = if (com.wdtt.client.ui.festive.LocalFestive.current.active) com.wdtt.client.ui.festive.GarlandColors.take(4)
-        else if (dark) Neon.Dark else Neon.Light
+    val neon = if (dark) Neon.Dark else Neon.Light
     return when (level) {
         // Stable is the calm blue of the theme, balanced is green.
         PowerLevel.Stable -> LevelColors(

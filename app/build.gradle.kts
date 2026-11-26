@@ -35,9 +35,6 @@ android {
         // so a phone on USB can be checked with adb. Off in published builds.
         val logcatMirror = providers.gradleProperty("logcatMirror").orNull.toBoolean()
         buildConfigField("boolean", "LOGCAT_MIRROR", logcatMirror.toString())
-        // -PfestivePreview=true: the New Year decoration on any date (preview builds only).
-        val festivePreview = providers.gradleProperty("festivePreview").orNull.toBoolean()
-        buildConfigField("boolean", "FESTIVE_PREVIEW", festivePreview.toString())
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

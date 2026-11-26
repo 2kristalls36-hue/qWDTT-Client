@@ -1,7 +1,5 @@
 package com.wdtt.client.ui.home
 
-import androidx.compose.ui.graphics.luminance
-import androidx.compose.foundation.layout.offset
 import android.widget.Toast
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -392,8 +390,7 @@ private fun BrandTitle(blend: Float, modifier: Modifier = Modifier) {
     val g = (blend * 2f).coerceIn(0f, 1f)
     val k = ((blend - 0.5f) * 2f).coerceIn(0f, 1f)
     val accent = lerp(levelColors(PowerLevel.Stable).accent, levelColors(PowerLevel.Balanced).accent, g)
-    // The neon of «qWDTT» stays as it is, also in the New Year days.
-    val neon = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) Neon.Dark else Neon.Light
+    val neon = levelColors(PowerLevel.Maximum).neon
     val motion = rememberMotionScale()
     // The neon drifts only while it is visible.
     val drift = if (k > 0.01f && motion > 0.01f) {
@@ -405,22 +402,16 @@ private fun BrandTitle(blend: Float, modifier: Modifier = Modifier) {
         )
     } else null
     val period = with(androidx.compose.ui.platform.LocalDensity.current) { 220.dp.toPx() }
-    val festive = com.wdtt.client.ui.festive.LocalFestive.current
-    // New Year: «qWDTT» in the warm yellow of the garland, like the chosen tab; a deeper
-    // yellow on a light ground.
-    val titleAccent = if (festive.active) {
-        if (MaterialTheme.colorScheme.background.luminance() < 0.5f) com.wdtt.client.ui.festive.GarlandColors[1] else Color(0xFFE0A100)
-    } else accent
     // Two-tone level colour, deeper at the start of the word; neon laid over it by k.
     val fill = Modifier
         .graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
         .drawWithContent {
             drawContent()
             drawRect(
-                Brush.linearGradient(listOf(lerp(titleAccent, Color.Black, 0.12f), lerp(titleAccent, Color.White, 0.18f)), end = Offset(size.width, size.height)),
+                Brush.linearGradient(listOf(lerp(accent, Color.Black, 0.12f), lerp(accent, Color.White, 0.18f)), end = Offset(size.width, size.height)),
                 blendMode = androidx.compose.ui.graphics.BlendMode.SrcIn,
             )
-            if (k > 0.01f && !festive.active) {
+            if (k > 0.01f) {
                 val shift = (drift?.value ?: 0.3f) * period
                 drawRect(
                     Brush.linearGradient(
@@ -434,15 +425,16 @@ private fun BrandTitle(blend: Float, modifier: Modifier = Modifier) {
                 )
             }
         }
-    // The logo of the brandbook, in two lines as on the app icon, 50 dp tall. New Year:
-    // «Client» becomes a candy cane and the year stands under «qWDTT».
+    // The logo of the brandbook, in two lines as on the app icon, 50 dp tall.
     Box(modifier.clearAndSetSemantics { contentDescription = "qWDTT Client" }) {
-        val logo = Modifier.size(
-            width = (50f * com.wdtt.client.ui.theme.Brand.LOGO_WIDTH / com.wdtt.client.ui.theme.Brand.LOGO_HEIGHT).dp,
-            height = 50.dp,
+        com.wdtt.client.ui.theme.BrandWordmark(
+            Modifier
+                .size(
+                    width = (50f * com.wdtt.client.ui.theme.Brand.LOGO_WIDTH / com.wdtt.client.ui.theme.Brand.LOGO_HEIGHT).dp,
+                    height = 50.dp,
+                )
+                .then(fill),
         )
-        com.wdtt.client.ui.theme.BrandWordmark(logo.then(fill), withClient = !festive.active)
-        if (festive.active) com.wdtt.client.ui.theme.BrandCandyClient(festive.year, logo)
     }
 }
 

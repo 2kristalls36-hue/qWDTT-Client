@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
@@ -85,6 +86,10 @@ fun SnowGlobe(
     ground: ((Float, Float) -> Float)? = null,
 ) {
     val festive = LocalFestive.current
+    // By night (the dark theme) the drift is moonlit, pale blue, like Santa's train on it.
+    val night = androidx.compose.material3.MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val driftBody = if (night) NightDrift else SnowShade
+    val driftTop = if (night) NightDriftTop else SnowWhite
     if (!festive.active) return
     val holder = remember { GlobeHolder() }
     var frame by remember { mutableIntStateOf(0) }
@@ -177,14 +182,14 @@ fun SnowGlobe(
                 path.close()
                 holder.drift = path
             }
-            drawPath(body, SnowShade)
+            drawPath(body, driftBody)
             for (i in 0 until sim.flakes) {
                 if (!sim.lying[i]) continue
-                grain(warp, sim.x[i] * k, sim.y[i] * k, sim.radius[i] * 1.55f * k, SnowShade, 1f, at)
+                grain(warp, sim.x[i] * k, sim.y[i] * k, sim.radius[i] * 1.55f * k, driftBody, 1f, at)
             }
             for (i in 0 until sim.flakes) {
                 if (!sim.exposed(i)) continue
-                grain(warp, sim.x[i] * k, sim.y[i] * k, sim.radius[i] * (0.95f + 0.3f * sim.size[i]) * k, SnowWhite, 1f, at)
+                grain(warp, sim.x[i] * k, sim.y[i] * k, sim.radius[i] * (0.95f + 0.3f * sim.size[i]) * k, driftTop, 1f, at)
             }
 
             // ---- Flakes in the liquid: crumbs, and crystals tumbling as they fall.
@@ -288,8 +293,11 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawCrystal(c: Offs
     drawCircle(Color.White, stroke * 0.9f, c, alpha = 0.95f * fade)
 }
 
-/** The body of the heap: snow in its own shade. */
+/** The body of the drift: snow in its own shade. */
 private val SnowShade = Color(0xFFE1E9F5)
+/** The drift by moonlight: its body and its top. */
+private val NightDrift = Color(0xFFAFC2E4)
+private val NightDriftTop = Color(0xFFCFDCF5)
 
 /**
  * Feeds [motion] from the accelerometer while the app is in front (see [MotionFilter]:

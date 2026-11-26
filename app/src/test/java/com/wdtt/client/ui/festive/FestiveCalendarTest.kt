@@ -24,6 +24,9 @@ class FestiveCalendarTest {
         // A preview build on any other day: the coming one.
         assertEquals(2027, FestiveCalendar.year(LocalDate.of(2026, 11, 26)))
         assertEquals(2028, FestiveCalendar.year(LocalDate.of(2027, 1, 3)))
+        // The same build meets the next New Year as it comes.
+        assertEquals(2028, FestiveCalendar.year(LocalDate.of(2027, 12, 31)))
+        assertEquals(2028, FestiveCalendar.year(LocalDate.of(2028, 1, 2)))
     }
 
     @Test fun nextMidnightWhenTheDecorationStartsOrEnds() {

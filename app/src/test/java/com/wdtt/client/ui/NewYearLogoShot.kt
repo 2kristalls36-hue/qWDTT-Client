@@ -29,7 +29,7 @@ import org.robolectric.annotation.GraphicsMode
 class NewYearLogoShot {
     @get:Rule val compose = createComposeRule()
 
-    private fun shot(theme: String) {
+    private fun shot(theme: String, year: Int = 2027) {
         compose.setContent {
             ArdttTheme(themeMode = theme) {
                 Column(Modifier.background(MaterialTheme.colorScheme.background).padding(20.dp)) {
@@ -37,15 +37,17 @@ class NewYearLogoShot {
                         val box = Modifier.size((h * Brand.LOGO_WIDTH / Brand.LOGO_HEIGHT).dp, h.dp)
                         Box(Modifier.padding(bottom = (h * 0.45f).dp)) {
                             BrandWordmark(box, withClient = false)
-                            BrandCandyClient(2027, box)
+                            BrandCandyClient(year, box)
                         }
                     }
                 }
             }
         }
-        compose.onRoot().captureRoboImage("build/outputs/roborazzi/newyear_logo_$theme.png")
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/newyear_logo_$theme${if (year == 2027) "" else "_$year"}.png")
     }
 
     @Test fun dark() = shot("dark")
     @Test fun light() = shot("light")
+    /** The same build a year on: every digit has its outline. */
+    @Test fun nextYear() = shot("dark", 2028)
 }

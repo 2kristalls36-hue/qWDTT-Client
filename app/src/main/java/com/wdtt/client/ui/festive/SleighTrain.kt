@@ -252,8 +252,8 @@ internal class Part(
     val nightColor: Color? by lazy { color?.let { if (lit) it else moon(it) } }
 
     /**
-     * The edge the moon lights (it is up behind on the left): the part less itself moved a
-     * little away from the moon. Only for parts large enough to show it.
+     * The edge the moon lights (it is up on the right, ahead of the train): the part less
+     * itself moved a little away from the moon. Only for parts large enough to show it.
      */
     val rim: Path? by lazy {
         if (stroke > 0f || color == null || mono == Mono.Cut || lit) return@lazy null
@@ -265,7 +265,7 @@ internal class Part(
 }
 
 /** How far the lit edge reaches in from the side of the moon, grid units. */
-private const val RIM_SHIFT_X = 0.32f
+private const val RIM_SHIFT_X = -0.32f
 private const val RIM_SHIFT_Y = 0.28f
 
 /** A figure: its parts in drawing order and its joints (pivot, parent). */
@@ -1281,13 +1281,15 @@ private fun owl() = figure {
 private var nightNow = false
 
 /**
- * A colour by moonlight: darker and deep blue, its own hue kept (a red coat turns crimson,
- * white snow pale blue; not grey). The lights are not changed (see [Part.lit]).
+ * A colour by moonlight: darker and bluer, its own hue kept and a little richer (a red coat
+ * deep red, a reindeer warm brown, white snow pale blue; not grey). The blue is a filter,
+ * not a wash over everything: a wash would dull the warm colours to grey. The lights are not
+ * changed (see [Part.lit]).
  */
 private fun moon(c: Color): Color {
     val l = 0.299f * c.red + 0.587f * c.green + 0.114f * c.blue
-    fun ch(v: Float, k: Float, add: Float) = ((v + (l - v) * 0.15f) * k + add).coerceIn(0f, 1f)
-    return Color(ch(c.red, 0.6f, 0.02f), ch(c.green, 0.66f, 0.04f), ch(c.blue, 0.8f, 0.13f), c.alpha)
+    fun ch(v: Float, k: Float, add: Float) = ((v + (v - l) * 0.15f) * k + add).coerceIn(0f, 1f)
+    return Color(ch(c.red, 0.72f, 0.01f), ch(c.green, 0.72f, 0.02f), ch(c.blue, 0.88f, 0.06f), c.alpha)
 }
 
 /** The moon's light on the lit edges. */
@@ -1296,10 +1298,11 @@ private val MoonRim = Color(0xFFD6E4FF)
 private val MoonShadow = Color(0xFF0A1226)
 
 /**
- * The shadows the moon casts on the snow: a point [h] above the ground lands [SHADOW_RUN]·h
- * to the right of its foot and [SHADOW_DROP]·h nearer, below the ground line.
+ * The shadows the moon casts on the snow: a point h above the ground lands [SHADOW_RUN]·h
+ * along from its foot (to the left: the moon is on the right) and [SHADOW_DROP]·h nearer,
+ * below the ground line.
  */
-private const val SHADOW_RUN = 0.55f
+private const val SHADOW_RUN = -0.55f
 private const val SHADOW_DROP = 0.12f
 private val shadowMatrix = Matrix().apply {
     val g = SleighTrain.GROUND
@@ -1612,11 +1615,11 @@ fun DrawScope.drawSleighTab(
     }
 
     fun shadows() {
-        // This figure's shadow and the end of the one on its left (they fall to the right),
+        // This figure's shadow and the end of the one on its right (they fall to the left),
         // all on one layer so overlapping parts do not darken each other.
         val canvas = drawContext.canvas
         canvas.saveLayer(Rect(-width, -height, width * 2f, height * 2f), androidx.compose.ui.graphics.Paint().apply { alpha = 0.42f })
-        for (i in maxOf(0, index - 1)..index) {
+        for (i in index..minOf(index + 1, count - 1)) {
             val figure = SleighTrain.figures[i]
             val at = if (i == index) placed else neighbour.also { it.place(figure, pose.joints[i]) }
             translate(left + (i - index) * width, top) {

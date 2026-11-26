@@ -124,10 +124,21 @@ fun AppRoot(settingsStore: SettingsStore) {
             modifier = Modifier.fillMaxSize(),
         ) { page ->
             when (pageOrder[page]) {
-                Routes.HOME -> com.wdtt.client.ui.home.HomeScreen(
-                    settingsStore = settingsStore,
-                    onOpenProfiles = { route = Routes.PROFILES },
-                )
+                Routes.HOME -> Box(Modifier.fillMaxSize()) {
+                    com.wdtt.client.ui.home.HomeScreen(
+                        settingsStore = settingsStore,
+                        onOpenProfiles = { route = Routes.PROFILES },
+                    )
+                    // New Year, maximum level: one garland across the top of the main screen,
+                    // under the status bar; it slides away with the screen.
+                    com.wdtt.client.ui.festive.TopGarland(
+                        Modifier
+                            .align(Alignment.TopCenter)
+                            .fillMaxWidth()
+                            .windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.statusBars)
+                            .height(18.dp),
+                    )
+                }
                 Routes.PROFILES -> com.wdtt.client.ui.profiles.ProfilesScreen(settingsStore)
                 Routes.SETTINGS -> com.wdtt.client.ui.home.SettingsScreen()
                 else -> com.wdtt.client.ui.apps.AppsScreen(settingsStore)
@@ -149,14 +160,6 @@ fun AppRoot(settingsStore: SettingsStore) {
                 com.wdtt.client.lite.PowerLevel.Maximum -> if (festive.active) com.wdtt.client.ui.components.layout.NavAccent.Sheen(com.wdtt.client.ui.festive.GarlandColors[1])
                     else com.wdtt.client.ui.components.layout.NavAccent.Neon(levelColors.neon)
             },
-        )
-        // New Year, maximum level: one garland across the top, under the status bar.
-        com.wdtt.client.ui.festive.TopGarland(
-            Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
-                .windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.statusBars)
-                .height(18.dp),
         )
         com.wdtt.client.ui.festive.SnowfallOverlay(Modifier.fillMaxSize())
     }

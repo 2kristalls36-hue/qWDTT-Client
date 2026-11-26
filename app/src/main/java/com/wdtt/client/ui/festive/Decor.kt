@@ -272,7 +272,7 @@ private fun crystal(p: Path, cx: Float, cy: Float, radius: Float, turn: Float, a
 }
 
 /**
- * The one garland of the maximum level: hung across the top of the screen under the
+ * The one garland of the maximum level: hung across the top of the main screen under the
  * status bar, in two shallow sags. Once a second its lights change colour one after
  * another along the wire, each blinking as it changes (see [GarlandChase]); with
  * animations off they stay as they are. It hangs over the page background, not inside

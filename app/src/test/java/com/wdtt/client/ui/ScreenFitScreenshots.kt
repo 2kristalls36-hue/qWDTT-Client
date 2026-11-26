@@ -1,6 +1,8 @@
 package com.wdtt.client.ui
 
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -35,6 +37,9 @@ import org.robolectric.shadows.ShadowLooper
 class ScreenFitScreenshots {
     @get:Rule val compose = createEmptyComposeRule()
 
+    /** A tab by its label (on New Year days the label is the description of its figure). */
+    private fun tab(label: String) = compose.onNode(hasText(label) or hasContentDescription(label), useUnmergedTree = true)
+
     @After fun reset() {
         screenShapeOverride = null
         com.wdtt.client.ui.festive.festiveDateOverride = null
@@ -64,10 +69,10 @@ class ScreenFitScreenshots {
             settle(40)
             captureScreenRoboImage("build/outputs/roborazzi/screenfit/$dir/home_settled.png")
         }
-        compose.onNodeWithText("Обход").performClick()
+        tab("Обход").performClick()
         settle(10)
         captureScreenRoboImage("build/outputs/roborazzi/screenfit/$dir/apps.png")
-        compose.onNodeWithText("Настройки").performClick()
+        tab("Настройки").performClick()
         settle(10)
         captureScreenRoboImage("build/outputs/roborazzi/screenfit/$dir/settings_top.png")
         compose.onRoot().performTouchInput { swipeUp(startY = height * 0.7f, endY = height * 0.7f - 700f, durationMillis = 700) }

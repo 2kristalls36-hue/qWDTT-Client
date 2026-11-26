@@ -39,6 +39,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import com.wdtt.client.ui.festive.SleighTrain
+import com.wdtt.client.ui.festive.drawSleighTab
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.clipRect
@@ -82,6 +84,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.PlatformTextStyle
@@ -772,6 +775,8 @@ private fun Modifier.navTint(
     color: Color,
     accent: NavAccent,
     clock: () -> Float,
+    /** False where the tab draws its own colours under the droplet (the New Year train). */
+    recolour: Boolean = true,
 ): Modifier {
     val period = with(androidx.compose.ui.platform.LocalDensity.current) { 220.dp.toPx() }
     val trackPad = with(androidx.compose.ui.platform.LocalDensity.current) { NavBarDefaults.TrackPadding.toPx() }
@@ -779,6 +784,7 @@ private fun Modifier.navTint(
         .graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
         .drawWithContent {
             drawContent()
+            if (!recolour) return@drawWithContent
             val w = size.width
             // The droplet in this tab's coordinates, kept inside the bar as the droplet is.
             val (l, r) = dropletRangeInTab(droplet(), index, count, w, trackPad)
@@ -993,6 +999,9 @@ private fun NavBarTab(
         )
     }
     val iconPose = tabIconPose(iconMotion, iconProgress.value)
+    // New Year: the tabs are Santa's train (see SleighTrain), joined across the gaps, in
+    // their own colours under the droplet instead of the accent colour.
+    val train = com.wdtt.client.ui.festive.LocalFestive.current.active && count == SleighTrain.count
     // Over clear glass the page shows right behind the tab: a halo follows the outline of
     // the icon and the label, and the faded grey of the other tabs turns full-strength, so
     // they stand apart from the text of the page.
@@ -1026,7 +1035,7 @@ private fun NavBarTab(
         modifier = modifier
             .fillMaxHeight()
             .haloOutsideDroplet(halo, index, count, droplet)
-            .navTint(index, count, droplet, selectedColor, accent, clock = accentClock)
+            .navTint(index, count, droplet, selectedColor, accent, clock = accentClock, recolour = !train)
             .selectable(
                 selected = selected,
                 interactionSource = interactionSource,
@@ -1040,10 +1049,26 @@ private fun NavBarTab(
                     onSelect()
                 },
             )
-            .semantics { this.selected = selected },
+            .semantics { this.selected = selected }
+            .drawBehind {
+                if (train) {
+                    val (l, r) = dropletRangeInTab(droplet(), index, count, size.width, NavBarDefaults.TrackPadding.toPx())
+                    drawSleighTab(index, size.width, size.height, SleighTrain.height.toPx(), paint.color, l, r)
+                }
+            },
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        if (train) {
+            // Drawn behind (see above), in place of the icon and the label; the label is read out.
+            Spacer(
+                Modifier
+                    .fillMaxWidth()
+                    .height(SleighTrain.height)
+                    .semantics { contentDescription = item.label },
+            )
+            return@Column
+        }
         Box(contentAlignment = Alignment.TopEnd) {
             val glyph = Modifier.size(ArdttSize.Icon)
             if (iconMotion == TabIconMotion.Sift) {

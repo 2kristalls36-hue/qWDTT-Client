@@ -46,7 +46,8 @@ class SleighFilm {
         var frame = 0
         for (s in 0 until 60 * 34) {
             val t = s * dt
-            motion.advance(dt, t in 10f..21f)
+            // The droplet on Santa, then on the lead reindeer.
+            motion.advance(dt, t in 10f..21f, if (t < 5f) 1f else 3f)
             if (s % 3 != 0) continue
             val image = ImageBitmap(w, h)
             val canvas = Canvas(image)
@@ -59,8 +60,9 @@ class SleighFilm {
                         translate(pad + slot * i, y) {
                             // Each tab on a layer of its own, as in the bar.
                             canvas.saveLayer(Rect(-slot, -tabH, slot * 2f, tabH * 2f), Paint())
-                            val from = if (row == 0) -1e5f else -slot * i
-                            val to = if (row == 0) 1e5f else slot * (1.02f - i)
+                            val lens = if (t < 5f) 1f else 3f
+                            val from = if (row == 0) -1e5f else slot * (lens - 0.01f - i)
+                            val to = if (row == 0) 1e5f else slot * (lens + 1.01f - i)
                             drawSleighTab(i, slot, tabH, tallest, plain, from, to, motion.pose)
                             canvas.restore()
                         }

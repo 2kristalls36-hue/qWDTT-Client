@@ -100,6 +100,10 @@ internal object J {
     const val FORE_NEAR = 12
     const val KNEE_NEAR = 13
     const val SCARF = 14
+    const val FETLOCK_HIND_FAR = 15
+    const val FETLOCK_FORE_FAR = 16
+    const val FETLOCK_HIND_NEAR = 17
+    const val FETLOCK_FORE_NEAR = 18
     // The bullfinch.
     const val BIRD_HEAD = 1
     const val BIRD_WING = 2
@@ -107,7 +111,7 @@ internal object J {
     const val BIRD_EYE = 4
     const val BIRD_LEGS = 5
 
-    const val COUNT = 16
+    const val COUNT = 20
 }
 
 /**
@@ -131,6 +135,14 @@ class TrainPose {
     var reinPhase = 0f
     /** How brightly the lead reindeer's nose glows, 0..1 more than usual. */
     var noseGlow = 0f
+    /** How much the figures are in their colours outside the droplet (all of them, going). */
+    var colour = 0f
+    /** Snow thrown up by the hooves and runners: figure, place (grid units), size, age 0..1. */
+    internal val dustFigure = IntArray(MAX_DUST) { -1 }
+    internal val dustX = FloatArray(MAX_DUST)
+    internal val dustY = FloatArray(MAX_DUST)
+    internal val dustSize = FloatArray(MAX_DUST)
+    internal val dustAge = FloatArray(MAX_DUST)
     /** The bullfinch: its feet in the trailer's grid units, its size, which way it faces. */
     var birdX = SleighTrain.PERCH.x
     var birdY = SleighTrain.PERCH.y
@@ -155,6 +167,8 @@ class TrainPose {
         reinSlack = 1f
         reinFlick = 0f
         noseGlow = 0f
+        colour = 0f
+        dustFigure.fill(-1)
         birdX = SleighTrain.PERCH.x
         birdY = SleighTrain.PERCH.y
         birdScale = 1f
@@ -183,6 +197,7 @@ class TrainPose {
     companion object {
         const val BIRD = 4
         internal const val FIGURES = 5
+        internal const val MAX_DUST = 96
         /** At rest, for the still pictures. */
         val Rest = TrainPose()
     }
@@ -724,33 +739,70 @@ private fun sleigh() = figure {
  */
 private fun reindeer(leads: Boolean) = figure {
     root(16f, 13f)
-    // A leg: the thigh or forearm on [hip], the lower leg on [knee], a hoof with a tuft.
-    fun leg(hip: Int, knee: Int, dx: Float, fore: Boolean, coat: Color, gap: Float) {
-        val hx = (if (fore) 23.4f else 11f) + dx
-        val kx = (if (fore) 23.45f else 10.95f) + dx
-        val ky = if (fore) 18f else 18.6f
-        joint(hip, hx, 14.2f) {
-            fill(coat, gap = gap) {
-                if (fore) poly(21.9f + dx, 13.8f, 24.9f + dx, 13.8f, 24.2f + dx, 18f, 22.8f + dx, 18f, 22.3f + dx, 16f)
-                else poly(9.4f + dx, 13.2f, 12.7f + dx, 13.8f, 11.6f + dx, 18.6f, 10.3f + dx, 18.6f, 9.8f + dx, 16.2f)
-            }
-            joint(knee, kx, ky) {
+    // A leg: the haunch and gaskin (or the forearm) on [hip], the cannon on [knee], the
+    // pastern with the hoof on [fetlock]. Standing, a hind leg makes its natural zigzag.
+    fun leg(hip: Int, knee: Int, fetlock: Int, dx: Float, fore: Boolean, coat: Color, gap: Float) {
+        if (fore) {
+            joint(hip, 23.3f + dx, 13.2f) {
                 fill(coat, gap = gap) {
-                    if (fore) poly(22.85f + dx, 17.8f, 24.05f + dx, 17.8f, 24.2f + dx, 21.5f, 23.1f + dx, 21.6f)
-                    else poly(10.3f + dx, 18.4f, 11.6f + dx, 18.4f, 11.85f + dx, 21.5f, 10.85f + dx, 21.6f)
-                    circle(kx, ky, 0.64f)
+                    moveTo(21.6f + dx, 12.4f)
+                    lineTo(24.9f + dx, 12.4f)
+                    cubicTo(25.3f + dx, 13.6f, 24.8f + dx, 14.8f, 24.1f + dx, 15.6f)
+                    cubicTo(24f + dx, 16.4f, 23.95f + dx, 17.2f, 23.95f + dx, 18f)
+                    lineTo(22.85f + dx, 18f)
+                    cubicTo(22.8f + dx, 17.2f, 22.75f + dx, 16.5f, 22.6f + dx, 15.8f)
+                    cubicTo(21.9f + dx, 15f, 21.4f + dx, 13.6f, 21.6f + dx, 12.4f)
+                    close()
                 }
-                val fx = (if (fore) 23.5f else 11.4f) + dx
-                fill(Cream, Mono.Skip) { poly(fx - 0.7f, 20.85f, fx + 0.6f, 20.85f, fx + 0.75f, 21.4f, fx - 0.75f, 21.4f) }
-                fill(Hoof, gap = 0.2f) { poly(fx - 0.8f, 21.3f, fx + 0.8f, 21.3f, fx + 1.1f, 22.6f, fx - 1f, 22.6f) }
+                joint(knee, 23.4f + dx, 18f) {
+                    fill(coat, gap = gap) {
+                        poly(22.95f + dx, 17.9f, 23.9f + dx, 17.9f, 23.78f + dx, 21f, 23.05f + dx, 21f)
+                        circle(23.4f + dx, 18f, 0.58f)
+                    }
+                    joint(fetlock, 23.4f + dx, 21f) {
+                        fill(coat, gap = gap) {
+                            poly(23.05f + dx, 20.9f, 23.75f + dx, 20.9f, 24.15f + dx, 21.7f, 23.45f + dx, 21.8f)
+                            circle(23.4f + dx, 21f, 0.45f)
+                        }
+                        fill(Cream, Mono.Skip) { oval(23.45f + dx, 21.1f, 0.55f, 0.28f) }
+                        fill(Hoof, gap = 0.18f) { poly(23.15f + dx, 21.6f, 24.45f + dx, 21.5f, 24.8f + dx, 22.6f, 23.1f + dx, 22.6f) }
+                    }
+                }
+            }
+        } else {
+            joint(hip, 10.6f + dx, 13.4f) {
+                fill(coat, gap = gap) {
+                    moveTo(8f + dx, 12.4f)
+                    lineTo(12.8f + dx, 12.6f)
+                    cubicTo(13.6f + dx, 13.6f, 13.5f + dx, 15f, 12.9f + dx, 15.9f)
+                    cubicTo(12.2f + dx, 16.9f, 11.5f + dx, 17.8f, 11.2f + dx, 18.9f)
+                    lineTo(10f + dx, 18.95f)
+                    cubicTo(9.6f + dx, 17.6f, 8.9f + dx, 16.6f, 8.4f + dx, 15.6f)
+                    cubicTo(7.9f + dx, 14.6f, 7.8f + dx, 13.4f, 8f + dx, 12.4f)
+                    close()
+                }
+                joint(knee, 10.6f + dx, 18.9f) {
+                    fill(coat, gap = gap) {
+                        poly(10.05f + dx, 18.8f, 11.1f + dx, 18.8f, 10.95f + dx, 21f, 10.2f + dx, 21f)
+                        circle(10.58f + dx, 18.9f, 0.62f)
+                    }
+                    joint(fetlock, 10.58f + dx, 21f) {
+                        fill(coat, gap = gap) {
+                            poly(10.2f + dx, 20.9f, 10.9f + dx, 20.9f, 11.3f + dx, 21.7f, 10.6f + dx, 21.8f)
+                            circle(10.58f + dx, 21f, 0.45f)
+                        }
+                        fill(Cream, Mono.Skip) { oval(10.62f + dx, 21.1f, 0.55f, 0.28f) }
+                        fill(Hoof, gap = 0.18f) { poly(10.3f + dx, 21.6f, 11.6f + dx, 21.5f, 11.95f + dx, 22.6f, 10.25f + dx, 22.6f) }
+                    }
+                }
             }
         }
     }
     // The far legs, a shade darker, then the near ones.
-    leg(J.HIND_FAR, J.HOCK_FAR, -1.6f, fore = false, coat = DeerDeep, gap = 0f)
-    leg(J.FORE_FAR, J.KNEE_FAR, 1.1f, fore = true, coat = DeerDeep, gap = 0f)
-    leg(J.HIND_NEAR, J.HOCK_NEAR, 0f, fore = false, coat = Deer, gap = 0.3f)
-    leg(J.FORE_NEAR, J.KNEE_NEAR, 0f, fore = true, coat = Deer, gap = 0.3f)
+    leg(J.HIND_FAR, J.HOCK_FAR, J.FETLOCK_HIND_FAR, -1.6f, fore = false, coat = DeerDeep, gap = 0f)
+    leg(J.FORE_FAR, J.KNEE_FAR, J.FETLOCK_FORE_FAR, 1.1f, fore = true, coat = DeerDeep, gap = 0f)
+    leg(J.HIND_NEAR, J.HOCK_NEAR, J.FETLOCK_HIND_NEAR, 0f, fore = false, coat = Deer, gap = 0.3f)
+    leg(J.FORE_NEAR, J.KNEE_NEAR, J.FETLOCK_FORE_NEAR, 0f, fore = true, coat = Deer, gap = 0.3f)
     // A short white tail.
     joint(J.TAIL, 7.2f, 10.9f) {
         fill(Cream, gap = 0.15f) {
@@ -783,6 +835,13 @@ private fun reindeer(leads: Boolean) = figure {
     line(DeerDeep, 0.35f, Mono.Skip) {
         moveTo(10.5f, 10f)
         cubicTo(14f, 9.5f, 18.5f, 9.35f, 21.5f, 9.75f)
+    }
+    // The haunch and the shoulder.
+    line(DeerDeep.copy(alpha = 0.55f), 0.2f, Mono.Skip) {
+        moveTo(9.4f, 11.2f)
+        cubicTo(11.6f, 11.8f, 12.6f, 13.6f, 12.2f, 15.6f)
+        moveTo(22.6f, 10.8f)
+        cubicTo(23.6f, 12f, 23.9f, 13.8f, 23.4f, 15.4f)
     }
     // The harness: a saddle pad edged in gold with tassels, the girth strap (cut) with a
     // buckle; on the lead's pad a gold star, on the other one a sprig of holly.
@@ -991,7 +1050,7 @@ private fun bullfinch() = figure {
 private val strokeRound = Stroke(width = 1f, cap = StrokeCap.Round, join = StrokeJoin.Round)
 
 /** The joints' places just now, for one figure at a time (drawing is on one thread). */
-private class Placed {
+internal class JointPlaces {
     val a = FloatArray(J.COUNT)
     val b = FloatArray(J.COUNT)
     val c = FloatArray(J.COUNT)
@@ -1041,8 +1100,8 @@ private class Placed {
     fun y(j: Int, px: Float, py: Float) = b[j] * px + d[j] * py + f[j]
 }
 
-private val placed = Placed()
-private val neighbour = Placed()
+private val placed = JointPlaces()
+private val neighbour = JointPlaces()
 
 private fun DrawScope.part(p: Part, coloured: Boolean, plain: Color, alpha: Float = 1f) {
     val own = coloured || p.mono == Mono.Own
@@ -1062,7 +1121,7 @@ private fun DrawScope.part(p: Part, coloured: Boolean, plain: Color, alpha: Floa
     drawPath(p.path, color, style = style)
 }
 
-private fun DrawScope.parts(fig: FigureData, at: Placed, coloured: Boolean, plain: Color, alpha: Float = 1f) {
+private fun DrawScope.parts(fig: FigureData, at: JointPlaces, coloured: Boolean, plain: Color, alpha: Float = 1f) {
     for (p in fig.parts) {
         if (at.still[p.joint]) part(p, coloured, plain, alpha)
         else withTransform({ transform(at.matrix[p.joint]) }) { part(p, coloured, plain, alpha) }
@@ -1151,21 +1210,14 @@ fun DrawScope.drawSleighTab(
         drawPath(path, color, style = Stroke(0.45f, cap = StrokeCap.Round))
     }
 
-    fun puffs(coloured: Boolean) {
-        // Snow thrown up behind the runners or the hind hooves.
-        val sp = pose.speed
-        if (sp < 0.05f) return
-        val (x0, y0) = if (index < 2) 1.2f to 21.9f else 5f to 22.3f
-        val n = 7
-        for (k in 0 until n) {
-            val life = ((pose.time * (1.6f + 1.4f * sp) + k / n.toFloat()) % 1f)
-            val seed = floor(pose.time * (1.6f + 1.4f * sp) + k / n.toFloat()).toInt() * 7 + k
-            val drift = 0.6f + 0.8f * hash01(index * 31 + 5, seed)
-            val x = x0 - life * 5.5f * drift
-            val y = y0 - life * 1.4f * drift - sin(life * PI.toFloat()) * 0.8f
-            val r = (0.3f + life * 0.9f) * (0.7f + 0.5f * hash01(index * 31 + 9, seed))
-            val a = (1f - life) * 0.65f * min(1f, sp * 2f)
-            drawCircle(if (coloured) SnowWhite.copy(alpha = a) else plain.copy(alpha = a * 0.6f), r, Offset(x, y))
+    fun dust(coloured: Boolean) {
+        // Snow thrown up where a hoof strikes or a runner slides (grid units of this figure).
+        for (k in 0 until TrainPose.MAX_DUST) {
+            if (pose.dustFigure[k] != index) continue
+            val age = pose.dustAge[k]
+            val a = (1f - age) * (1f - age) * 0.75f
+            val r = pose.dustSize[k] * (1f + 1.2f * age)
+            drawCircle(if (coloured) SnowWhite.copy(alpha = a) else plain.copy(alpha = a * 0.6f), r, Offset(pose.dustX[k], pose.dustY[k]))
         }
     }
 
@@ -1244,7 +1296,7 @@ fun DrawScope.drawSleighTab(
                         drawCircle(Color(0xFFFF6B7A).copy(alpha = 0.8f * pose.noseGlow), 0.95f, Offset(nx, ny))
                         drawCircle(Color.White.copy(alpha = 0.85f * pose.noseGlow), 0.38f, Offset(nx - 0.3f, ny - 0.3f))
                     }
-                    puffs(coloured)
+                    dust(coloured)
                 }
             }
             bird(coloured)
@@ -1252,17 +1304,43 @@ fun DrawScope.drawSleighTab(
         }
     }
 
+    // Outside the droplet: the silhouette, its colours coming up over it as the train goes.
+    fun outside() {
+        val c = pose.colour
+        if (c >= 0.999f) {
+            pass(coloured = true)
+            return
+        }
+        pass(coloured = false)
+        if (c <= 0.001f) return
+        val canvas = drawContext.canvas
+        canvas.saveLayer(Rect(-width, -height, width * 2f, height * 2f), androidx.compose.ui.graphics.Paint().apply { alpha = c })
+        pass(coloured = true)
+        canvas.restore()
+    }
+
     val reach = height
     when {
-        colourTo <= 0f || colourFrom >= width -> pass(coloured = false)
+        colourTo <= 0f || colourFrom >= width -> outside()
         colourFrom <= 0f && colourTo >= width -> pass(coloured = true)
         else -> {
-            clipRect(left = -width, top = -reach, right = colourFrom, bottom = height + reach) { pass(coloured = false) }
-            clipRect(left = colourTo, top = -reach, right = width * 2f, bottom = height + reach) { pass(coloured = false) }
+            clipRect(left = -width, top = -reach, right = colourFrom, bottom = height + reach) { outside() }
+            clipRect(left = colourTo, top = -reach, right = width * 2f, bottom = height + reach) { outside() }
             clipRect(left = colourFrom, top = -reach, right = colourTo, bottom = height + reach) { pass(coloured = true) }
         }
     }
 }
+
+/** Where the bottom of a hoof is (grid units of the figure, its joints placed). */
+internal fun hoofAt(fig: FigureData, pose: FloatArray, fetlock: Int, fore: Boolean, far: Boolean, out: FloatArray) {
+    hoofPlaces.place(fig, pose)
+    val dx = if (far) (if (fore) 1.1f else -1.6f) else 0f
+    val hx = (if (fore) 23.95f else 11.1f) + dx
+    out[0] = hoofPlaces.x(fetlock, hx, 22.6f)
+    out[1] = hoofPlaces.y(fetlock, hx, 22.6f)
+}
+
+private val hoofPlaces = JointPlaces()
 
 /** How large the bullfinch is against the grid of the figures. */
 private const val BIRD_SIZE = 1.05f

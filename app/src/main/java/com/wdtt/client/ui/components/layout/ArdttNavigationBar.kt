@@ -398,7 +398,7 @@ fun ArdttNavigationBar(
     // New Year, in the glass bar only: the tabs are Santa's train (see SleighTrain).
     val festiveNow = com.wdtt.client.ui.festive.LocalFestive.current
     val sleigh = if (festiveNow.active && glassBar && count == SleighTrain.count) {
-        com.wdtt.client.ui.festive.rememberSleighMotion(festiveNow)
+        com.wdtt.client.ui.festive.rememberSleighMotion(festiveNow) { selPos.value }
     } else null
     // Where the finger took the droplet. A drag moves it by the finger's travel from there,
     // so taking it off-centre does not make it (and the screens with it) jump to the finger.

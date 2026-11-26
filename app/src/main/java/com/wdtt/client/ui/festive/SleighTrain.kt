@@ -250,7 +250,23 @@ internal class Part(
 ) {
     /** Its colour by moonlight. */
     val nightColor: Color? by lazy { color?.let { if (lit) it else moon(it) } }
+
+    /**
+     * The edge the moon lights (it is up behind on the left): the part less itself moved a
+     * little away from the moon. Only for parts large enough to show it.
+     */
+    val rim: Path? by lazy {
+        if (stroke > 0f || color == null || mono == Mono.Cut || lit) return@lazy null
+        val b = path.getBounds()
+        if (b.width < 1.4f && b.height < 1.4f) return@lazy null
+        val away = Path().apply { addPath(path, Offset(RIM_SHIFT_X, RIM_SHIFT_Y)) }
+        Path().apply { op(path, away, androidx.compose.ui.graphics.PathOperation.Difference) }
+    }
 }
+
+/** How far the lit edge reaches in from the side of the moon, grid units. */
+private const val RIM_SHIFT_X = 0.32f
+private const val RIM_SHIFT_Y = 0.28f
 
 /** A figure: its parts in drawing order and its joints (pivot, parent). */
 internal class FigureData(
@@ -1265,13 +1281,34 @@ private fun owl() = figure {
 private var nightNow = false
 
 /**
- * A colour by moonlight: less saturated, darker, a little blue. The lights are not changed
- * (see [Part.lit]).
+ * A colour by moonlight: darker and deep blue, its own hue kept (a red coat turns crimson,
+ * white snow pale blue; not grey). The lights are not changed (see [Part.lit]).
  */
 private fun moon(c: Color): Color {
     val l = 0.299f * c.red + 0.587f * c.green + 0.114f * c.blue
-    fun ch(v: Float, k: Float, add: Float) = ((v + (l - v) * 0.42f) * k + add).coerceIn(0f, 1f)
-    return Color(ch(c.red, 0.66f, 0.02f), ch(c.green, 0.7f, 0.03f), ch(c.blue, 0.78f, 0.07f), c.alpha)
+    fun ch(v: Float, k: Float, add: Float) = ((v + (l - v) * 0.15f) * k + add).coerceIn(0f, 1f)
+    return Color(ch(c.red, 0.6f, 0.02f), ch(c.green, 0.66f, 0.04f), ch(c.blue, 0.8f, 0.13f), c.alpha)
+}
+
+/** The moon's light on the lit edges. */
+private val MoonRim = Color(0xFFD6E4FF)
+/** A shadow on the snow by moonlight. */
+private val MoonShadow = Color(0xFF0A1226)
+
+/**
+ * The shadows the moon casts on the snow: a point [h] above the ground lands [SHADOW_RUN]·h
+ * to the right of its foot and [SHADOW_DROP]·h nearer, below the ground line.
+ */
+private const val SHADOW_RUN = 0.55f
+private const val SHADOW_DROP = 0.12f
+private val shadowMatrix = Matrix().apply {
+    val g = SleighTrain.GROUND
+    values[0] = 1f
+    values[1] = 0f
+    values[4] = -SHADOW_RUN
+    values[5] = -SHADOW_DROP
+    values[12] = SHADOW_RUN * g
+    values[13] = (1f + SHADOW_DROP) * g
 }
 
 /** [c] as it is seen now: by moonlight at night. */
@@ -1366,6 +1403,15 @@ private fun DrawScope.part(p: Part, coloured: Boolean, plain: Color, alpha: Floa
         drawPath(p.path, ink.copy(alpha = color.alpha), style = edge)
     }
     drawPath(p.path, color, style = style)
+    // By night the moon lights an edge of each larger part.
+    if (nightNow && coloured) p.rim?.let { drawPath(it, MoonRim.copy(alpha = 0.42f * alpha)) }
+}
+
+/** The silhouette of a part, for its shadow (cut details and colour-only ones left out). */
+private fun DrawScope.shade(p: Part) {
+    if (p.color == null || p.mono == Mono.Cut || p.mono == Mono.Skip) return
+    val style = if (p.stroke > 0f) Stroke(p.stroke, cap = strokeRound.cap, join = strokeRound.join) else Fill
+    drawPath(p.path, MoonShadow, style = style)
 }
 
 private fun DrawScope.parts(fig: FigureData, at: JointPlaces, coloured: Boolean, plain: Color, alpha: Float = 1f) {
@@ -1465,14 +1511,24 @@ fun DrawScope.drawSleighTab(
         drawPath(path, color, style = Stroke(0.45f, cap = StrokeCap.Round))
     }
 
-    fun dust(coloured: Boolean) {
-        // Snow thrown up where a hoof strikes or a runner slides (grid units of this figure).
-        for (k in 0 until TrainPose.MAX_DUST) {
-            if (pose.dustFigure[k] != index) continue
-            val age = pose.dustAge[k]
-            val a = (1f - age) * (1f - age) * 0.75f
-            val r = pose.dustSize[k] * (1f + 1.2f * age)
-            drawCircle(if (coloured) seen(SnowWhite).copy(alpha = a) else plain.copy(alpha = a * 0.6f), r, Offset(pose.dustX[k], pose.dustY[k]))
+    fun dust() {
+        // Snow thrown up where a hoof strikes or a runner slides: white puffs with a soft blue
+        // shade under them, snow in the silhouette too. This figure's, and those drifting in
+        // from the next one on the right.
+        for (i in index..minOf(index + 1, count - 1)) {
+            translate(left + (i - index) * width, top) {
+                scale(unit, unit, pivot = Offset.Zero) {
+                    for (k in 0 until TrainPose.MAX_DUST) {
+                        if (pose.dustFigure[k] != i) continue
+                        val age = pose.dustAge[k]
+                        val a = (1f - age) * (1f - age) * 0.85f
+                        val r = pose.dustSize[k] * (1f + 1.2f * age)
+                        val c = Offset(pose.dustX[k], pose.dustY[k])
+                        drawCircle(seen(IceBlue).copy(alpha = a * 0.55f), r * 1.1f, c + Offset(0f, r * 0.25f))
+                        drawCircle(seen(SnowWhite).copy(alpha = a), r, c)
+                    }
+                }
+            }
         }
     }
 
@@ -1555,10 +1611,34 @@ fun DrawScope.drawSleighTab(
         }
     }
 
+    fun shadows() {
+        // This figure's shadow and the end of the one on its left (they fall to the right),
+        // all on one layer so overlapping parts do not darken each other.
+        val canvas = drawContext.canvas
+        canvas.saveLayer(Rect(-width, -height, width * 2f, height * 2f), androidx.compose.ui.graphics.Paint().apply { alpha = 0.42f })
+        for (i in maxOf(0, index - 1)..index) {
+            val figure = SleighTrain.figures[i]
+            val at = if (i == index) placed else neighbour.also { it.place(figure, pose.joints[i]) }
+            translate(left + (i - index) * width, top) {
+                scale(unit, unit, pivot = Offset.Zero) {
+                    withTransform({ transform(shadowMatrix) }) {
+                        for (p in figure.parts) {
+                            if (at.still[p.joint]) shade(p)
+                            else withTransform({ transform(at.matrix[p.joint]) }) { shade(p) }
+                        }
+                    }
+                }
+            }
+        }
+        canvas.restore()
+    }
+
     fun pass(coloured: Boolean) {
         clipRect(left = 0f, top = -height, right = width, bottom = height * 2f) {
             if (layers and SleighLayers.BACKDROP != 0) {
                 scenery(coloured)
+                if (nightNow) shadows()
+                dust()
                 hitch(coloured)
             }
             if (layers and SleighLayers.FIGURE == 0) return@clipRect
@@ -1587,7 +1667,6 @@ fun DrawScope.drawSleighTab(
                         drawCircle(Color(0xFFFF6B7A).copy(alpha = 0.8f * pose.noseGlow), 0.95f, Offset(nx, ny))
                         drawCircle(Color.White.copy(alpha = 0.85f * pose.noseGlow), 0.38f, Offset(nx - 0.3f, ny - 0.3f))
                     }
-                    dust(coloured)
                 }
             }
             bird(coloured)

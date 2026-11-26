@@ -8,6 +8,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
@@ -58,6 +59,14 @@ class SleighFilm {
                 for (row in 0..2) {
                     val y = pad + row * (tabH + pad)
                     drawRoundRect(Color(0xFF1E2633), androidx.compose.ui.geometry.Offset(pad / 2f, y), Size(w - pad, tabH), androidx.compose.ui.geometry.CornerRadius(tabH / 2f))
+                    // The drift the train rides on, as in the bar.
+                    val ground = SleighTrain.groundIn(slot * 4, tabH, 0f, 0f, tallest)
+                    val bar = androidx.compose.ui.graphics.Path().apply {
+                        addRoundRect(androidx.compose.ui.geometry.RoundRect(pad / 2f, y, w - pad / 2f, y + tabH, androidx.compose.ui.geometry.CornerRadius(tabH / 2f)))
+                    }
+                    clipPath(bar) {
+                        drawRect(Color(0xFFE1E9F5), androidx.compose.ui.geometry.Offset(0f, y + ground), Size(w.toFloat(), tabH))
+                    }
                     for (i in 0 until 4) {
                         translate(pad + slot * i, y) {
                             // Each tab on a layer of its own, as in the bar.

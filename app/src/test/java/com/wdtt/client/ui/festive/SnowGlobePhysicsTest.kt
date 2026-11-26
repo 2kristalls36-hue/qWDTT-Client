@@ -9,7 +9,7 @@ import kotlin.math.abs
 class SnowGlobePhysicsTest {
     private val dt = 1f / 60f
 
-    private fun settle(sim: SnowGlobePhysics, tiltX: Float = 0f, tiltY: Float = 1f, maxSteps: Int = 60 * 120): Int {
+    private fun settle(sim: SnowGlobePhysics, tiltX: Float = 0f, tiltY: Float = 1f, maxSteps: Int = 60 * 240): Int {
         var steps = 0
         while (sim.step(dt, tiltX = tiltX, tiltY = tiltY) && steps < maxSteps) steps++
         return steps
@@ -25,8 +25,9 @@ class SnowGlobePhysicsTest {
         val sim = SnowGlobePhysics(5.5f)
         sim.scatter()
         val steps = settle(sim)
-        // Slow: still falling after three seconds, all down within two minutes.
-        assertTrue("settles slowly but surely: $steps steps, ${sim.describe()}", steps in 180 until 60 * 120)
+        // Slow: still falling after three seconds, all down within four minutes (light
+        // snow in a thick liquid; most of it is down long before).
+        assertTrue("settles slowly but surely: $steps steps, ${sim.describe()}", steps in 180 until 60 * 240)
         assertEquals(0, sim.floating)
         assertFalse(sim.step(dt))
         assertTrue(sim.consistent())
@@ -59,7 +60,7 @@ class SnowGlobePhysicsTest {
         val depth = xs.map { px -> (-2..2).map { sim.columnDepth(px + it * 2 * sim.grain) }.average().toFloat() }
         val hi = depth.max()
         val lo = depth.min()
-        assertTrue("bumps within the drift: $lo..$hi", hi - lo < 0.1f)
+        assertTrue("bumps within the drift: $lo..$hi", hi - lo < 0.12f)
         assertTrue("there is a drift: $lo", lo > 0.1f)
     }
 
@@ -146,12 +147,13 @@ class SnowGlobePhysicsTest {
     @Test fun upsideDownTheSnowFallsToTheOtherWall() {
         val sim = SnowGlobePhysics(5.5f)
         sim.settleAll()
-        repeat(60 * 60) { sim.step(dt, tiltX = 0f, tiltY = -1f) }
+        // Light snow sinks slowly: give it a couple of minutes each way.
+        repeat(60 * 150) { sim.step(dt, tiltX = 0f, tiltY = -1f) }
         val up = sim.lyingInTopHalf()
         assertTrue("on the top wall now: $up of ${sim.flakes}, ${sim.describe()}", up > 0.95f * sim.flakes)
         assertTrue(sim.consistent())
         // And back again.
-        repeat(60 * 60) { sim.step(dt) }
+        repeat(60 * 150) { sim.step(dt) }
         val down = sim.lyingInBottomHalf()
         assertTrue("back on the bottom: $down", down > 0.95f * sim.flakes)
     }
@@ -159,7 +161,7 @@ class SnowGlobePhysicsTest {
     @Test fun turnedBackTheSnowDoesNotHangFromTheTop() {
         val sim = SnowGlobePhysics(5.5f)
         sim.settleAll()
-        repeat(60 * 40) { sim.step(dt, tiltX = 0f, tiltY = -1f) }
+        repeat(60 * 150) { sim.step(dt, tiltX = 0f, tiltY = -1f) }
         val hanging = sim.lyingInTopHalf()
         // Upright again: within two seconds most of it has let go of the top wall.
         repeat(120) { sim.step(dt) }
@@ -172,7 +174,9 @@ class SnowGlobePhysicsTest {
             val sim = SnowGlobePhysics(5.5f)
             sim.settleAll()
             val a = Math.toRadians(degrees)
-            repeat(60 * 20) { sim.step(dt, tiltX = Math.sin(a).toFloat(), tiltY = Math.cos(a).toFloat()) }
+            // Light snow slides over slowly, and what it threw up sinks slowly: a minute
+            // and a half for nearly all of it to come to rest.
+            repeat(60 * 90) { sim.step(dt, tiltX = Math.sin(a).toFloat(), tiltY = Math.cos(a).toFloat()) }
             val moves = sim.moves
             val sinking = sim.floating
             repeat(60 * 3) { sim.step(dt, tiltX = Math.sin(a).toFloat(), tiltY = Math.cos(a).toFloat()) }

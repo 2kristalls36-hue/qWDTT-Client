@@ -147,8 +147,9 @@ class RoundGlobeTraining {
             val run = Run(SnowGlobePhysics(5.5f), 13)
             run.sim.settleAll()
             run.hand.aim = degrees
-            // The heap slides over and comes to rest within about ten seconds.
-            repeat(60 * 16) { run.step() }
+            // Light snow slides over within half a minute; what it threw up sinks for a
+            // while longer.
+            repeat(60 * 90) { run.step() }
             val sinking = run.sim.floating
             val startX = run.sim.x.copyOf()
             val startY = run.sim.y.copyOf()
@@ -174,7 +175,7 @@ class RoundGlobeTraining {
 
     /**
      * Held in the hand: still, then turned to 15° and 35°, back, a droplet sweep (bar
-     * only), a shake, upside down, upright.
+     * only), a shake, upside down, upright, on its side, upright.
      */
     private fun renderFilm(sim: SnowGlobePhysics, path: String, hPx: Int, wPx: Int) {
         val dir = File(path).apply { mkdirs(); listFiles()?.forEach { it.delete() } }
@@ -182,25 +183,25 @@ class RoundGlobeTraining {
         sim.settleAll()
         var frame = 0
         var lastX = 0.5f / 4 * sim.aspect
-        for (s in 0 until 60 * 41) {
+        for (s in 0 until 60 * 84) {
             val t = s * run.dt
             run.hand.aim = when {
                 t < 2f -> 0.0
-                t < 5f -> 15.0
-                t < 8f -> 35.0
-                t < 18f -> 0.0
-                t < 26f -> 180.0
-                t < 29f -> 0.0
-                t < 37f -> -95.0
+                t < 7f -> 15.0
+                t < 14f -> 35.0
+                t < 36f -> 0.0
+                t < 52f -> 180.0
+                t < 58f -> 0.0
+                t < 76f -> -95.0
                 else -> 0.0
             }
-            val shaking = t in 13f..13.6f
+            val shaking = t in 20f..20.6f
             run.hand.shakeX = if (shaking) (if (((t * 10).toInt()) % 2 == 0) 16.0 else -16.0) else 0.0
             run.hand.shakeY = if (shaking) (if (((t * 10).toInt()) % 2 == 0) 10.0 else -10.0) else 0.0
             val bar = sim.aspect > 2f
             val pos = when {
-                !bar || t < 10f -> 0f
-                t < 10.6f -> (t - 10f) / 0.6f * 3f
+                !bar || t < 16f -> 0f
+                t < 16.6f -> (t - 16f) / 0.6f * 3f
                 else -> 3f
             }
             val dx = (pos + 0.5f) / 4f * sim.aspect
@@ -266,14 +267,14 @@ class RoundGlobeTraining {
             g.color = Color(0xC7, 0xD0, 0xE6)
             val label = when {
                 t < 2f -> "held still"
-                t < 5f -> "turned 15°"
-                t < 8f -> "turned 35°"
-                t < 10f -> "held upright"
-                t < 13f -> if (bar) "droplet sweep" else "held upright"
-                t < 18f -> if (t < 13.6f) "shake" else "blizzard settles"
-                t < 26f -> "upside down"
-                t < 29f -> "upright"
-                t < 37f -> "held on its side"
+                t < 7f -> "turned 15°"
+                t < 14f -> "turned 35°"
+                t < 16f -> "held upright"
+                t < 20f -> if (bar) "droplet sweep" else "held upright"
+                t < 36f -> if (t < 20.6f) "shake" else "blizzard settles"
+                t < 52f -> "upside down"
+                t < 58f -> "upright"
+                t < 76f -> "held on its side"
                 else -> "upright"
             }
             g.drawString("t=%.1fs  %s".format(t, label), 0, -10)

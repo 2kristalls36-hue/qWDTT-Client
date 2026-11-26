@@ -34,7 +34,8 @@ class GarlandChaseTest {
         }
         // Along the wire, in turn: each a moment after the one before it.
         for (i in 1 until lights) {
-            val lag = changes[i][1] - changes[i - 1][1]
+            val before = changes[i - 1][1]
+            val lag = changes[i].first { it > before } - before
             assertEquals("light $i after ${i - 1}", GarlandChase.RUN, lag, 0.01f)
         }
     }

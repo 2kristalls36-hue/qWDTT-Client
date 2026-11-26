@@ -81,8 +81,8 @@ object SleighTrain {
     internal const val REINS_Y = 12f
     /** Where the bullfinch sits on the trailer (its feet on the lantern's arm), grid units. */
     internal val PERCH = Offset(31.9f, 9.8f)
-    /** Where the reins leave Santa's mitten, in the arm's own place. */
-    internal val MITTEN = Offset(21f, 11.7f)
+    /** Where the reins leave Santa's mitten, in the hand's own place. */
+    internal val MITTEN = Offset(19.5f, 11.8f)
     /** The ground under the runners and hooves. */
     internal const val GROUND = 22.6f
 }
@@ -99,6 +99,7 @@ internal object J {
     const val HAT_TIP = 4
     const val ARM = 5
     const val SANTA_EYE = 6
+    const val HAND = 7
     // A reindeer.
     const val NECK = 1
     const val DEER_HEAD = 2
@@ -247,26 +248,40 @@ internal class Part(
     val outline: Float = 0f,
     /** A light (the lantern, the bulbs, the red nose, an owl's eyes): bright at night too. */
     val lit: Boolean = false,
+    /**
+     * Parts of one limb (a leg's segments): drawn as one piece, outlined round the whole of
+     * it and not at each joint, without light and shade of their own (they would mark the
+     * joints like a wooden toy's).
+     */
+    val group: Int = -1,
 ) {
     /** Its colour by moonlight. */
     val nightColor: Color? by lazy { color?.let { if (lit) it else moon(it) } }
 
     /**
-     * The edge the moon lights (it is up on the right, ahead of the train): the part less
-     * itself moved a little away from the moon. Only for parts large enough to show it.
+     * The edges of the part the light falls on and the side away from it, by day (the sun
+     * up on the left) and by night (the moon up on the right): the part less itself moved
+     * a little away from the light, or towards it. Only for parts large enough to show them.
      */
-    val rim: Path? by lazy {
-        if (stroke > 0f || color == null || mono == Mono.Cut || lit) return@lazy null
+    val dayLit: Path? by lazy { edge(LIGHT_X, LIGHT_Y) }
+    val dayShaded: Path? by lazy { edge(-SHADE_X, -SHADE_Y) }
+    val nightLit: Path? by lazy { edge(-LIGHT_X, LIGHT_Y) }
+    val nightShaded: Path? by lazy { edge(SHADE_X, -SHADE_Y) }
+
+    private fun edge(dx: Float, dy: Float): Path? {
+        if (stroke > 0f || color == null || mono == Mono.Cut || lit || group >= 0) return null
         val b = path.getBounds()
-        if (b.width < 1.4f && b.height < 1.4f) return@lazy null
-        val away = Path().apply { addPath(path, Offset(RIM_SHIFT_X, RIM_SHIFT_Y)) }
-        Path().apply { op(path, away, androidx.compose.ui.graphics.PathOperation.Difference) }
+        if (b.width < 1.4f && b.height < 1.4f) return null
+        val moved = Path().apply { addPath(path, Offset(dx, dy)) }
+        return Path().apply { op(path, moved, androidx.compose.ui.graphics.PathOperation.Difference) }
     }
 }
 
-/** How far the lit edge reaches in from the side of the moon, grid units. */
-private const val RIM_SHIFT_X = -0.32f
-private const val RIM_SHIFT_Y = 0.28f
+/** How far the lit edge reaches in from the side of the light, and the shaded one from the other side, grid units. */
+private const val LIGHT_X = 0.32f
+private const val LIGHT_Y = 0.28f
+private const val SHADE_X = 0.42f
+private const val SHADE_Y = 0.36f
 
 /** A figure: its parts in drawing order and its joints (pivot, parent). */
 internal class FigureData(
@@ -348,8 +363,18 @@ private class Figure {
         at = was
     }
 
+    private var groupNow = -1
+
+    /** The parts made in [body] are one limb (see [Part.group]). */
+    fun group(id: Int, body: Figure.() -> Unit) {
+        val was = groupNow
+        groupNow = id
+        body()
+        groupNow = was
+    }
+
     fun fill(color: Color?, mono: Mono = Mono.Fill, gap: Float = 0f, outline: Float = 0f, lit: Boolean = false, body: Path.() -> Unit) {
-        parts += Part(Path().apply(body), color, mono, 0f, gap, 0f, at, outline, lit)
+        parts += Part(Path().apply(body), color, mono, 0f, gap, 0f, at, outline, lit, groupNow)
     }
 
     fun line(color: Color?, width: Float, mono: Mono = Mono.Fill, gap: Float = 0f, dash: Float = 0f, body: Path.() -> Unit) {
@@ -634,22 +659,25 @@ private fun sleigh() = figure {
         fill(Belt, Mono.Cut) { rect(10.1f, 12.5f, 7.2f, 0.8f) }
         fill(Gold) { rect(13.05f, 12.3f, 1.2f, 1.2f) }
         fill(Belt, Mono.Cut) { rect(13.4f, 12.65f, 0.5f, 0.5f) }
-        // The arm held out, a fur cuff, a mitten on the reins; drawn before the head, so
-        // it comes out from under the beard.
+        // The arm, its elbow kept in at his side, a fur cuff, a mitten on the reins; drawn
+        // before the head, so it comes out from under the beard. The cuff and mitten on a
+        // joint of their own: when the arm reaches up and straightens, only the sleeve grows.
         joint(J.ARM, 15.6f, 10.6f) {
             fill(CoatRed, gap = 0.3f) {
                 moveTo(15f, 9.8f)
-                cubicTo(16.8f, 10f, 18.4f, 10.4f, 19.6f, 10.9f)
-                lineTo(19.7f, 12.3f)
-                cubicTo(18.2f, 12.4f, 16.8f, 12.6f, 15.4f, 12.8f)
+                cubicTo(16.3f, 10f, 17.3f, 10.45f, 18.1f, 10.95f)
+                lineTo(18.15f, 12.45f)
+                cubicTo(17.1f, 12.6f, 16.2f, 12.7f, 15.4f, 12.85f)
                 close()
             }
-            fill(Fur, gap = 0.15f) { round(19.1f, 10.6f, 1.1f, 1.9f, 0.4f) }
-            fill(Mitten, gap = 0.2f) {
-                circle(20.7f, 11.6f, 0.95f)
-                circle(20.9f, 10.7f, 0.4f)
+            joint(J.HAND, 17.6f, 11.7f) {
+                fill(Fur, gap = 0.15f) { round(17.6f, 10.75f, 1.1f, 1.9f, 0.4f) }
+                fill(Mitten, gap = 0.2f) {
+                    circle(19.2f, 11.7f, 0.95f)
+                    circle(19.4f, 10.8f, 0.4f)
+                }
+                line(Mitten.tint(0.4f), 0.15f, Mono.Skip) { seg(18.5f, 11.3f, 19.8f, 11.5f) }
             }
-            line(Mitten.tint(0.4f), 0.15f, Mono.Skip) { seg(20f, 11.2f, 21.3f, 11.4f) }
         }
         // A fur collar showing beside the beard.
         fill(Fur, gap = 0.15f) {
@@ -754,43 +782,62 @@ private fun sleigh() = figure {
             fill(Skin.shade(0.04f), gap = 0.15f) { circle(16.25f, 7.55f, 0.58f) }
             fill(Rosy.copy(alpha = 0.6f), Mono.Skip) { circle(16.35f, 7.65f, 0.4f) }
             fill(Color.White.copy(alpha = 0.7f), Mono.Skip) { circle(16.08f, 7.35f, 0.12f) }
-            // The cap, in its colours even in the silhouette: the red crown flopping back,
-            // a fluffy pompom, a fur brim with a soft edge.
+            // The cap, plush, in its colours even in the silhouette: the red crown rising and
+            // folding over backwards, its tip hanging down with a fluffy pompom, a thick fur
+            // brim with a soft, uneven edge.
             joint(J.HAT, 14.4f, 5.2f) {
                 fill(CoatRed, Mono.Own, gap = 0.12f) {
-                    moveTo(12.4f, 5f)
-                    cubicTo(12.3f, 3.2f, 13.6f, 2f, 15f, 2.2f)
-                    cubicTo(16.2f, 2.4f, 16.8f, 3.6f, 16.6f, 5f)
+                    moveTo(12.1f, 4.7f)
+                    cubicTo(12f, 3.2f, 13.3f, 1.7f, 14.9f, 1.45f)
+                    cubicTo(16.3f, 1.6f, 16.95f, 3f, 16.7f, 4.6f)
                     close()
                 }
-                line(CoatRed.shade(0.2f), 0.16f, Mono.Skip) {
-                    moveTo(15.6f, 2.6f)
-                    cubicTo(16.1f, 3.2f, 16.2f, 4f, 16.1f, 4.7f)
+                // The velvet's sheen and a fold.
+                line(CoatRed.tint(0.3f), 0.22f, Mono.Skip) {
+                    moveTo(15.55f, 1.95f)
+                    cubicTo(16.05f, 2.5f, 16.3f, 3.3f, 16.25f, 4.2f)
                 }
-                joint(J.HAT_TIP, 13f, 2.9f) {
+                line(CoatRed.shade(0.3f), 0.16f, Mono.Skip) {
+                    moveTo(13.4f, 2.6f)
+                    cubicTo(13.9f, 3.1f, 14.1f, 3.8f, 14.05f, 4.4f)
+                }
+                joint(J.HAT_TIP, 13.6f, 1.9f) {
                     fill(CoatRed, Mono.Own, gap = 0.12f) {
-                        moveTo(13.4f, 2.6f)
-                        cubicTo(12f, 1.8f, 10.4f, 2.2f, 9.9f, 3.7f)
-                        lineTo(11f, 4.1f)
-                        cubicTo(11.4f, 3.4f, 12.2f, 3.2f, 13.1f, 3.8f)
+                        moveTo(14.7f, 1.5f)
+                        cubicTo(13.2f, 1.3f, 11.75f, 1.85f, 10.95f, 2.95f)
+                        lineTo(10.35f, 3.8f)
+                        cubicTo(11.2f, 3.35f, 12.1f, 3.05f, 13.1f, 3.2f)
+                        cubicTo(13.6f, 2.6f, 14.1f, 2f, 14.7f, 1.5f)
                         close()
                     }
+                    line(CoatRed.shade(0.32f), 0.14f, Mono.Skip) {
+                        moveTo(13.5f, 2.35f)
+                        cubicTo(12.6f, 2.45f, 11.8f, 2.8f, 11.1f, 3.4f)
+                    }
+                    // The pompom: a fluffy ball.
                     fill(Fur, Mono.Own, gap = 0.15f) {
-                        circle(10.35f, 4.25f, 0.72f)
-                        circle(9.85f, 3.95f, 0.48f)
-                        circle(10.8f, 4.7f, 0.44f)
-                        circle(9.9f, 4.72f, 0.44f)
+                        circle(10.25f, 4.15f, 0.78f)
+                        circle(9.62f, 3.85f, 0.42f)
+                        circle(10.85f, 3.7f, 0.38f)
+                        circle(10.8f, 4.65f, 0.42f)
+                        circle(9.75f, 4.65f, 0.4f)
+                        circle(10.25f, 3.35f, 0.36f)
                     }
                 }
+                // The fur brim: a thick soft band, uneven at its edges.
                 fill(Fur, Mono.Own, gap = 0.2f) {
-                    round(12f, 4.55f, 5f, 1.25f, 0.62f)
-                    for (k in 0 until 8) circle(12.35f + k * 0.62f, 5.78f, 0.27f)
-                }
-                line(Fur.shade(0.14f), 0.1f, Mono.Skip) {
+                    round(11.85f, 4.45f, 5.15f, 1.35f, 0.67f)
                     for (k in 0 until 9) {
-                        val x = 12.4f + k * 0.52f
-                        moveTo(x, 4.85f)
-                        cubicTo(x + 0.15f, 5.05f, x + 0.05f, 5.3f, x + 0.2f, 5.5f)
+                        val x = 12.1f + k * 0.58f
+                        circle(x, 4.5f + 0.08f * (k % 2), 0.34f)
+                        circle(x + 0.29f, 5.78f - 0.06f * (k % 3), 0.3f)
+                    }
+                }
+                line(Fur.shade(0.13f), 0.1f, Mono.Skip) {
+                    for (k in 0 until 10) {
+                        val x = 12.3f + k * 0.5f
+                        moveTo(x, 4.75f)
+                        cubicTo(x + 0.18f, 4.98f, x + 0.04f, 5.25f, x + 0.22f, 5.5f)
                     }
                 }
             }
@@ -888,56 +935,67 @@ private fun reindeer(leads: Boolean) = figure {
     // A leg: the haunch and gaskin (or the forearm) on [hip], the cannon on [knee], the
     // pastern with the hoof on [fetlock]. Standing, a hind leg makes its natural zigzag.
     fun leg(hip: Int, knee: Int, fetlock: Int, dx: Float, fore: Boolean, coat: Color, gap: Float) {
+        // The coat of the leg is one piece (outlined round the whole of it); the hoof apart.
         if (fore) {
             joint(hip, 23.3f + dx, 13.2f) {
-                fill(coat, gap = gap) {
-                    moveTo(21.6f + dx, 12.4f)
-                    lineTo(24.9f + dx, 12.4f)
-                    cubicTo(25.3f + dx, 13.6f, 24.8f + dx, 14.8f, 24.1f + dx, 15.6f)
-                    cubicTo(24f + dx, 16.4f, 23.95f + dx, 17.2f, 23.95f + dx, 18f)
-                    lineTo(22.85f + dx, 18f)
-                    cubicTo(22.8f + dx, 17.2f, 22.75f + dx, 16.5f, 22.6f + dx, 15.8f)
-                    cubicTo(21.9f + dx, 15f, 21.4f + dx, 13.6f, 21.6f + dx, 12.4f)
-                    close()
+                group(hip) {
+                    fill(coat, gap = gap) {
+                        moveTo(21.6f + dx, 12.4f)
+                        lineTo(24.9f + dx, 12.4f)
+                        cubicTo(25.3f + dx, 13.6f, 24.8f + dx, 14.8f, 24.1f + dx, 15.6f)
+                        cubicTo(24f + dx, 16.4f, 23.95f + dx, 17.2f, 23.95f + dx, 18f)
+                        lineTo(22.85f + dx, 18f)
+                        cubicTo(22.8f + dx, 17.2f, 22.75f + dx, 16.5f, 22.6f + dx, 15.8f)
+                        cubicTo(21.9f + dx, 15f, 21.4f + dx, 13.6f, 21.6f + dx, 12.4f)
+                        close()
+                    }
                 }
                 joint(knee, 23.4f + dx, 18f) {
-                    fill(coat, gap = gap) {
-                        poly(22.95f + dx, 17.9f, 23.9f + dx, 17.9f, 23.78f + dx, 21f, 23.05f + dx, 21f)
-                        circle(23.4f + dx, 18f, 0.58f)
+                    group(hip) {
+                        fill(coat, gap = gap) {
+                            poly(22.95f + dx, 17.9f, 23.9f + dx, 17.9f, 23.78f + dx, 21f, 23.05f + dx, 21f)
+                            circle(23.42f + dx, 18f, 0.48f)
+                        }
                     }
                     joint(fetlock, 23.4f + dx, 21f) {
-                        fill(coat, gap = gap) {
-                            poly(23.05f + dx, 20.9f, 23.75f + dx, 20.9f, 24.15f + dx, 21.7f, 23.45f + dx, 21.8f)
-                            circle(23.4f + dx, 21f, 0.45f)
+                        group(hip) {
+                            fill(coat, gap = gap) {
+                                poly(23.05f + dx, 20.9f, 23.75f + dx, 20.9f, 24.15f + dx, 21.7f, 23.45f + dx, 21.8f)
+                                circle(23.41f + dx, 21f, 0.36f)
+                            }
                         }
-                        fill(Cream, Mono.Skip) { oval(23.45f + dx, 21.1f, 0.55f, 0.28f) }
                         fill(Hoof, outline = 0.2f) { poly(23.15f + dx, 21.6f, 24.45f + dx, 21.5f, 24.8f + dx, 22.6f, 23.1f + dx, 22.6f) }
                     }
                 }
             }
         } else {
             joint(hip, 10.6f + dx, 13.4f) {
-                fill(coat, gap = gap) {
-                    moveTo(8f + dx, 12.4f)
-                    lineTo(12.8f + dx, 12.6f)
-                    cubicTo(13.6f + dx, 13.6f, 13.5f + dx, 15f, 12.9f + dx, 15.9f)
-                    cubicTo(12.2f + dx, 16.9f, 11.5f + dx, 17.8f, 11.2f + dx, 18.9f)
-                    lineTo(10f + dx, 18.95f)
-                    cubicTo(9.6f + dx, 17.6f, 8.9f + dx, 16.6f, 8.4f + dx, 15.6f)
-                    cubicTo(7.9f + dx, 14.6f, 7.8f + dx, 13.4f, 8f + dx, 12.4f)
-                    close()
+                group(hip) {
+                    fill(coat, gap = gap) {
+                        moveTo(8f + dx, 12.4f)
+                        lineTo(12.8f + dx, 12.6f)
+                        cubicTo(13.6f + dx, 13.6f, 13.5f + dx, 15f, 12.9f + dx, 15.9f)
+                        cubicTo(12.2f + dx, 16.9f, 11.5f + dx, 17.8f, 11.2f + dx, 18.9f)
+                        lineTo(10f + dx, 18.95f)
+                        cubicTo(9.6f + dx, 17.6f, 8.9f + dx, 16.6f, 8.4f + dx, 15.6f)
+                        cubicTo(7.9f + dx, 14.6f, 7.8f + dx, 13.4f, 8f + dx, 12.4f)
+                        close()
+                    }
                 }
                 joint(knee, 10.6f + dx, 18.9f) {
-                    fill(coat, gap = gap) {
-                        poly(10.05f + dx, 18.8f, 11.1f + dx, 18.8f, 10.95f + dx, 21f, 10.2f + dx, 21f)
-                        circle(10.58f + dx, 18.9f, 0.62f)
+                    group(hip) {
+                        fill(coat, gap = gap) {
+                            poly(10.05f + dx, 18.8f, 11.1f + dx, 18.8f, 10.95f + dx, 21f, 10.2f + dx, 21f)
+                            circle(10.58f + dx, 18.9f, 0.53f)
+                        }
                     }
                     joint(fetlock, 10.58f + dx, 21f) {
-                        fill(coat, gap = gap) {
-                            poly(10.2f + dx, 20.9f, 10.9f + dx, 20.9f, 11.3f + dx, 21.7f, 10.6f + dx, 21.8f)
-                            circle(10.58f + dx, 21f, 0.45f)
+                        group(hip) {
+                            fill(coat, gap = gap) {
+                                poly(10.2f + dx, 20.9f, 10.9f + dx, 20.9f, 11.3f + dx, 21.7f, 10.6f + dx, 21.8f)
+                                circle(10.57f + dx, 21f, 0.36f)
+                            }
                         }
-                        fill(Cream, Mono.Skip) { oval(10.62f + dx, 21.1f, 0.55f, 0.28f) }
                         fill(Hoof, outline = 0.2f) { poly(10.3f + dx, 21.6f, 11.6f + dx, 21.5f, 11.95f + dx, 22.6f, 10.25f + dx, 22.6f) }
                     }
                 }
@@ -1298,22 +1356,26 @@ private val MoonRim = Color(0xFFD6E4FF)
 /** A shadow on the snow by moonlight. */
 private val MoonShadow = Color(0xFF0A1226)
 
+/** The sun's light on the lit edges, and the shadows on the snow by day (blue, as on snow). */
+private val SunRim = Color(0xFFFFF2D2)
+private val SunShadow = Color(0xFF4A6390)
+
 /**
- * The shadows the moon casts on the snow: a point h above the ground lands [SHADOW_RUN]·h
- * along from its foot (to the left: the moon is on the right) and [SHADOW_DROP]·h nearer,
- * below the ground line.
+ * A shadow cast on the snow: a point h above the ground lands run·h along from its foot and
+ * drop·h nearer, below the ground line. By night the moon is low on the right, the shadows
+ * long to the left; by day the sun is high on the left, the shadows short to the right.
  */
-private const val SHADOW_RUN = -0.55f
-private const val SHADOW_DROP = 0.12f
-private val shadowMatrix = Matrix().apply {
+private fun castMatrix(run: Float, drop: Float) = Matrix().apply {
     val g = SleighTrain.GROUND
     values[0] = 1f
     values[1] = 0f
-    values[4] = -SHADOW_RUN
-    values[5] = -SHADOW_DROP
-    values[12] = SHADOW_RUN * g
-    values[13] = (1f + SHADOW_DROP) * g
+    values[4] = -run
+    values[5] = -drop
+    values[12] = run * g
+    values[13] = (1f + drop) * g
 }
+private val nightCast = castMatrix(-0.55f, 0.12f)
+private val dayCast = castMatrix(0.3f, 0.09f)
 
 /** [c] as it is seen now: by moonlight at night. */
 private fun seen(c: Color): Color = if (nightNow) moon(c) else c
@@ -1385,7 +1447,12 @@ internal class JointPlaces {
 private val placed = JointPlaces()
 private val neighbour = JointPlaces()
 
-private fun DrawScope.part(p: Part, coloured: Boolean, plain: Color, alpha: Float = 1f) {
+/** Draw a part whole, only its outline ring, or only its body (for limbs, see [Part.group]). */
+private const val WHOLE = 0
+private const val RING = 1
+private const val BODY = 2
+
+private fun DrawScope.part(p: Part, coloured: Boolean, plain: Color, alpha: Float = 1f, mode: Int = WHOLE) {
     val own = coloured || p.mono == Mono.Own
     if (!own && p.mono == Mono.Skip) return
     val color = (if (own) (if (nightNow) p.nightColor else p.color) ?: return else plain)
@@ -1393,35 +1460,62 @@ private fun DrawScope.part(p: Part, coloured: Boolean, plain: Color, alpha: Floa
     val effect = if (p.dash > 0f) PathEffect.dashPathEffect(floatArrayOf(p.dash, p.dash)) else null
     val style = if (p.stroke > 0f) Stroke(p.stroke, cap = strokeRound.cap, join = strokeRound.join, pathEffect = effect) else Fill
     if (!own && p.mono == Mono.Cut) {
-        drawPath(p.path, Color.Black, style = style, blendMode = BlendMode.Clear)
+        if (mode != RING) drawPath(p.path, Color.Black, style = style, blendMode = BlendMode.Clear)
         return
     }
-    if (p.gap > 0f) {
+    if (p.gap > 0f && mode != BODY) {
         val ring = Stroke(p.stroke + 2f * p.gap, cap = strokeRound.cap, join = strokeRound.join)
         if (own) drawPath(p.path, color.shade(0.45f).copy(alpha = color.alpha), style = ring)
         else drawPath(p.path, Color.Black, style = ring, blendMode = BlendMode.Clear)
     }
-    if (p.outline > 0f) {
+    if (p.outline > 0f && mode != BODY) {
         val edge = Stroke(p.stroke + 2f * p.outline, cap = strokeRound.cap, join = strokeRound.join)
         val ink = if (own) color.shade(0.55f) else plain.shade(0.7f)
         drawPath(p.path, ink.copy(alpha = color.alpha), style = edge)
     }
+    if (mode == RING) return
     drawPath(p.path, color, style = style)
-    // By night the moon lights an edge of each larger part.
-    if (nightNow && coloured) p.rim?.let { drawPath(it, MoonRim.copy(alpha = 0.42f * alpha)) }
+    // In colour each larger part has a side away from the light, in a deeper shade of its
+    // own colour, and an edge the light falls on: the moon's cool light by night, the sun's
+    // warm light by day.
+    if (coloured) {
+        (if (nightNow) p.nightShaded else p.dayShaded)?.let {
+            drawPath(it, color.shade(0.32f).copy(alpha = (if (nightNow) 0.5f else 0.42f) * alpha))
+        }
+        (if (nightNow) p.nightLit else p.dayLit)?.let {
+            drawPath(it, (if (nightNow) MoonRim.copy(alpha = 0.42f * alpha) else SunRim.copy(alpha = 0.38f * alpha)))
+        }
+    }
 }
 
 /** The silhouette of a part, for its shadow (cut details and colour-only ones left out). */
 private fun DrawScope.shade(p: Part) {
     if (p.color == null || p.mono == Mono.Cut || p.mono == Mono.Skip) return
     val style = if (p.stroke > 0f) Stroke(p.stroke, cap = strokeRound.cap, join = strokeRound.join) else Fill
-    drawPath(p.path, MoonShadow, style = style)
+    drawPath(p.path, if (nightNow) MoonShadow else SunShadow, style = style)
 }
 
 private fun DrawScope.parts(fig: FigureData, at: JointPlaces, coloured: Boolean, plain: Color, alpha: Float = 1f) {
-    for (p in fig.parts) {
-        if (at.still[p.joint]) part(p, coloured, plain, alpha)
-        else withTransform({ transform(at.matrix[p.joint]) }) { part(p, coloured, plain, alpha) }
+    fun one(p: Part, mode: Int) {
+        if (at.still[p.joint]) part(p, coloured, plain, alpha, mode)
+        else withTransform({ transform(at.matrix[p.joint]) }) { part(p, coloured, plain, alpha, mode) }
+    }
+    val all = fig.parts
+    var i = 0
+    while (i < all.size) {
+        val g = all[i].group
+        if (g < 0) {
+            one(all[i], WHOLE)
+            i++
+            continue
+        }
+        // A limb: the outline round all of it first, then its segments over it, so no
+        // line is left across it at the joints.
+        var j = i
+        while (j < all.size && all[j].group == g) j++
+        for (k in i until j) one(all[k], RING)
+        for (k in i until j) one(all[k], BODY)
+        i = j
     }
 }
 
@@ -1495,8 +1589,8 @@ fun DrawScope.drawSleighTab(
 
     fun reins(coloured: Boolean) {
         // From Santa's mitten over the front of the sleigh to the first reindeer.
-        val mx = placed.x(J.ARM, SleighTrain.MITTEN.x, SleighTrain.MITTEN.y)
-        val my = placed.y(J.ARM, SleighTrain.MITTEN.x, SleighTrain.MITTEN.y)
+        val mx = placed.x(J.HAND, SleighTrain.MITTEN.x, SleighTrain.MITTEN.y)
+        val my = placed.y(J.HAND, SleighTrain.MITTEN.x, SleighTrain.MITTEN.y)
         val ex = placed.x(J.ROOT, SleighTrain.WIDE, SleighTrain.REINS_Y)
         val ey = placed.y(J.ROOT, SleighTrain.WIDE, SleighTrain.REINS_Y)
         val sag = 0.25f + 0.9f * pose.reinSlack
@@ -1616,16 +1710,18 @@ fun DrawScope.drawSleighTab(
     }
 
     fun shadows() {
-        // This figure's shadow and the end of the one on its right (they fall to the left),
-        // all on one layer so overlapping parts do not darken each other.
+        // This figure's shadow and the ends of its neighbours' (by night they fall to the
+        // left, by day to the right), all on one layer so overlapping parts do not darken
+        // each other.
         val canvas = drawContext.canvas
-        canvas.saveLayer(Rect(-width, -height, width * 2f, height * 2f), androidx.compose.ui.graphics.Paint().apply { alpha = 0.42f })
-        for (i in index..minOf(index + 1, count - 1)) {
+        val cast = if (nightNow) nightCast else dayCast
+        canvas.saveLayer(Rect(-width, -height, width * 2f, height * 2f), androidx.compose.ui.graphics.Paint().apply { alpha = if (nightNow) 0.42f else 0.3f })
+        for (i in maxOf(0, index - 1)..minOf(index + 1, count - 1)) {
             val figure = SleighTrain.figures[i]
             val at = if (i == index) placed else neighbour.also { it.place(figure, pose.joints[i]) }
             translate(left + (i - index) * width, top) {
                 scale(unit, unit, pivot = Offset.Zero) {
-                    withTransform({ transform(shadowMatrix) }) {
+                    withTransform({ transform(cast) }) {
                         for (p in figure.parts) {
                             if (at.still[p.joint]) shade(p)
                             else withTransform({ transform(at.matrix[p.joint]) }) { shade(p) }
@@ -1641,7 +1737,7 @@ fun DrawScope.drawSleighTab(
         clipRect(left = 0f, top = -height, right = width, bottom = height * 2f) {
             if (layers and SleighLayers.BACKDROP != 0) {
                 scenery(coloured)
-                if (nightNow) shadows()
+                shadows()
                 dust()
                 hitch(coloured)
             }
@@ -1702,6 +1798,12 @@ fun DrawScope.drawSleighTab(
             clipRect(left = colourFrom, top = -reach, right = colourTo, bottom = height + reach) { pass(coloured = true) }
         }
     }
+}
+
+/** Where the bottom of a reindeer's hoof is when it stands (grid units). */
+internal fun SleighTrain.hoofRest(fore: Boolean, far: Boolean): Offset {
+    val dx = if (far) (if (fore) 1.1f else -1.6f) else 0f
+    return Offset((if (fore) 23.95f else 11.1f) + dx, 22.6f)
 }
 
 /** Where the bottom of a hoof is (grid units of the figure, its joints placed). */

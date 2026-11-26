@@ -93,6 +93,39 @@ class SleighMotionTest {
         assertEquals("none anywhere else", 0, elsewhere)
     }
 
+    @Test fun aHoofOnTheSnowGoesBackWithTheGroundAndNeverSlidesForward() {
+        val m = SleighMotion(seed = 9)
+        run(m, 8f, travel = true)
+        val hoof = FloatArray(2)
+        val legs = listOf(
+            Triple(J.FETLOCK_FORE_NEAR, true, false), Triple(J.FETLOCK_FORE_FAR, true, true),
+            Triple(J.FETLOCK_HIND_NEAR, false, false), Triple(J.FETLOCK_HIND_FAR, false, true),
+        )
+        val last = FloatArray(8) { Float.NaN }
+        var planted = 0
+        var slid = 0
+        var down = 0
+        repeat(120) {
+            m.advance(dt, true, 0f)
+            var k = 0
+            for (f in 2..3) for ((j, fore, far) in legs) {
+                hoofAt(SleighTrain.figures[f], m.pose.joints[f], j, fore, far, hoof)
+                // Down on the snow.
+                val onSnow = hoof[1] > SleighTrain.GROUND - 0.15f
+                if (onSnow && !last[k].isNaN()) {
+                    planted++
+                    if (hoof[0] - last[k] > 0.05f) slid++
+                }
+                if (onSnow) down++
+                last[k] = if (onSnow) hoof[0] else Float.NaN
+                k++
+            }
+        }
+        println("hooves on the snow: $planted frames, slid forward in $slid; down share ${down / (120f * 8)}")
+        assertTrue("the hooves come down: $planted", planted > 120)
+        assertTrue("a planted hoof does not slide forward: $slid of $planted", slid <= planted / 20)
+    }
+
     @Test fun itStopsTheColoursFadeAndTheBirdComesBack() {
         val m = SleighMotion(seed = 3)
         run(m, 12f, travel = true)

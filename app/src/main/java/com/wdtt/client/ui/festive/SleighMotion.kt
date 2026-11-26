@@ -10,7 +10,11 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.acos
+import kotlin.math.atan2
+import kotlin.math.cos
 import kotlin.math.exp
+import kotlin.math.hypot
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
@@ -371,8 +375,10 @@ class SleighMotion(seed: Int = 1) {
                     p.add(TrainPose.BIRD, J.BIRD_WING, turn = -12f * b)
                 }
                 SANTA_HAT -> {
-                    // The arm up to the cap, the cap set straight, the arm down.
-                    p.add(1, J.ARM, turn = -95f * hold(q, 0.25f, 0.3f))
+                    // The arm up to the cap, straightening to reach it, the cap set
+                    // straight, the arm down.
+                    val up = hold(q, 0.25f, 0.3f)
+                    reachForTheCap(p, up)
                     val w = bump(q, 0.28f, 0.68f)
                     p.add(1, J.HAT, turn = -7f * sin((q - 0.28f) / 0.4f * 2f * PI.toFloat()) * w, dy = -0.25f * w)
                     p.add(1, J.HAT_TIP, turn = 9f * sin((q - 0.28f) / 0.4f * 3f * PI.toFloat()) * w)
@@ -474,32 +480,81 @@ class SleighMotion(seed: Int = 1) {
     }
 
     /**
-     * Reindeer [f] in the gallop at stride [u0], as much as [amp]: it stretches out, all four
-     * legs off the ground, then gathers them under itself; the forelegs strike, then the hind
-     * legs push off. The body rises and falls, stretches and gathers, the head nods against it.
+     * Reindeer [f] in the gallop at stride [u0], as much as [amp], as a horse gallops (after
+     * Muybridge): four beats, the hooves coming down one by one, a hind, the other hind, a
+     * fore, the leading fore; then one flight with the legs gathered under the body (not
+     * stretched out). Each hoof, while it is down, stays on the snow and goes back under the
+     * body as the ground goes by; lifted, it is carried forward in an arc. The legs bend to
+     * reach where their hooves are (two-bone reach: hip or shoulder, knee or hock). The body
+     * rocks fore and aft, rising in the flight, sinking onto the forelegs; the neck swings
+     * as a counterweight, the head steadier on it.
      */
     private fun gallop(f: Int, u0: Float, amp: Float) {
         val p = pose
         val u = frac(u0)
-        val uf = frac(u0 + FAR_LAG)
-        p.set(f, J.ROOT, turn = amp * key(BODY_TURN, u), dy = amp * key(BODY_DY, u), sx = 1f + amp * (key(BODY_SX, u) - 1f))
-        // The neck swings, the head nods against it so it stays steadier; the ears flop.
+        val fig = SleighTrain.figures[f]
+        val dy = amp * key(BODY_DY, u)
+        val pitch = amp * key(BODY_TURN, u)
+        p.set(f, J.ROOT, turn = pitch, dy = dy)
         p.set(f, J.NECK, turn = amp * key(NECK, u))
         p.set(f, J.DEER_HEAD, turn = amp * key(HEAD, u))
-        p.set(f, J.EAR, turn = amp * (-18f + 7f * sin(2f * PI.toFloat() * (u + 0.3f))))
+        p.set(f, J.EAR, turn = amp * (-18f + 6f * sin(2f * PI.toFloat() * (u + 0.3f))))
         p.set(f, J.TAIL, turn = amp * key(TAIL, u))
-        p.set(f, J.FORE_NEAR, turn = amp * key(FORE_SHOULDER, u))
-        p.set(f, J.KNEE_NEAR, turn = amp * key(FORE_KNEE, u))
-        p.set(f, J.FETLOCK_FORE_NEAR, turn = amp * key(FORE_FETLOCK, u))
-        p.set(f, J.FORE_FAR, turn = amp * key(FORE_SHOULDER, uf))
-        p.set(f, J.KNEE_FAR, turn = amp * key(FORE_KNEE, uf))
-        p.set(f, J.FETLOCK_FORE_FAR, turn = amp * key(FORE_FETLOCK, uf))
-        p.set(f, J.HIND_NEAR, turn = amp * key(HIND_HIP, u))
-        p.set(f, J.HOCK_NEAR, turn = amp * key(HIND_HOCK, u))
-        p.set(f, J.FETLOCK_HIND_NEAR, turn = amp * key(HIND_FETLOCK, u))
-        p.set(f, J.HIND_FAR, turn = amp * key(HIND_HIP, uf))
-        p.set(f, J.HOCK_FAR, turn = amp * key(HIND_HOCK, uf))
-        p.set(f, J.FETLOCK_HIND_FAR, turn = amp * key(HIND_FETLOCK, uf))
+        val px = fig.pivotX[J.ROOT]
+        val py = fig.pivotY[J.ROOT]
+        val co = cos(pitch * DEG)
+        val si = sin(pitch * DEG)
+        for (leg in LEGS) {
+            // Where in its own stride this leg is: 0 as its hoof strikes the snow.
+            val ph = frac(u - leg.strike)
+            val hx = fig.pivotX[leg.hip]
+            val hy = fig.pivotY[leg.hip]
+            val kx = fig.pivotX[leg.knee]
+            val ky = fig.pivotY[leg.knee]
+            val rest = SleighTrain.hoofRest(leg.fore, leg.far)
+            val a = hypot(kx - hx, ky - hy)
+            val b = hypot(rest.x - kx, rest.y - ky)
+            val upper0 = atan2(ky - hy, kx - hx)
+            val lower0 = atan2(rest.y - ky, rest.x - kx)
+            // Where the hoof is to be on the screen: down, on the snow, going back with it;
+            // lifted, carried forward in an arc. Then the same place in the body's own frame
+            // (the body rises, sinks and tips), so a hoof on the snow stays put on it.
+            val reach = STRIDE_REACH * amp
+            val wx: Float
+            val wy: Float
+            var fold = 0f
+            if (ph < STANCE) {
+                val t = ph / STANCE
+                wx = rest.x + reach * (1f - 2f * t)
+                wy = SleighTrain.GROUND
+            } else {
+                val t = (ph - STANCE) / (1f - STANCE)
+                wx = rest.x - reach + 2f * reach * ease(t)
+                wy = SleighTrain.GROUND - (if (leg.fore) FORE_LIFT_H else HIND_LIFT_H) * amp * sin(PI.toFloat() * t)
+                fold = sin(PI.toFloat() * t)
+            }
+            val qx = wx - px
+            val qy = wy - py - dy
+            val tx = px + qx * co + qy * si
+            val ty = py - qx * si + qy * co
+            // Two-bone reach from the hip to the hoof; the knee forward, the hock back.
+            val dx = tx - hx
+            val dyy = ty - hy
+            val d = hypot(dx, dyy).coerceIn(abs(a - b) + 0.01f, a + b - 0.001f)
+            val base = atan2(dyy, dx)
+            val bend = acos(((a * a + d * d - b * b) / (2f * a * d)).coerceIn(-1f, 1f))
+            val upper = if (leg.fore) base - bend else base + bend
+            val kneeX = hx + a * cos(upper)
+            val kneeY = hy + a * sin(upper)
+            val lower = atan2(ty - kneeY, tx - kneeX)
+            val hipTurn = wrap(upper - upper0)
+            val kneeTurn = wrap(lower - lower0) - hipTurn
+            p.set(f, leg.hip, turn = hipTurn / DEG)
+            p.set(f, leg.knee, turn = kneeTurn / DEG)
+            // The hoof kept level on the snow; lifted, it flips back.
+            val level = -wrap(lower - lower0) / DEG * (1f - fold)
+            p.set(f, leg.fetlock, turn = level + (if (leg.fore) FORE_FOLD else HIND_FOLD) * amp * fold)
+        }
     }
 
     /** The bullfinch on its way: [f] 0 in its place, 1 far off over the top left. */
@@ -544,29 +599,18 @@ class SleighMotion(seed: Int = 1) {
             return
         }
         // Each hoof as it strikes the ground and as it pushes off.
-        var leg = 0
+        var k = 0
         for (f in 2..3) {
-            val u0 = strides[f]
-            for (far in listOf(false, true)) {
-                val u = frac(u0 + if (far) FAR_LAG else 0f)
-                for (fore in listOf(true, false)) {
-                    val was = lastU[leg]
-                    lastU[leg] = u
-                    leg++
-                    if (was < 0f) continue
-                    val strike = if (fore) FORE_STRIKE else HIND_STRIKE
-                    val lift = if (fore) FORE_LIFT else HIND_LIFT
-                    val n = (a * 2.5f).roundToInt()
-                    if (n <= 0) continue
-                    val fetlock = when {
-                        fore && far -> J.FETLOCK_FORE_FAR
-                        fore -> J.FETLOCK_FORE_NEAR
-                        far -> J.FETLOCK_HIND_FAR
-                        else -> J.FETLOCK_HIND_NEAR
-                    }
-                    if (crossed(was, u, strike)) puff(f, fetlock, fore, far, n, kick = false)
-                    if (crossed(was, u, lift)) puff(f, fetlock, fore, far, n, kick = true)
-                }
+            for (leg in LEGS) {
+                val u = frac(strides[f] - leg.strike)
+                val was = lastU[k]
+                lastU[k] = u
+                k++
+                if (was < 0f) continue
+                val n = (a * 2.5f).roundToInt()
+                if (n <= 0) continue
+                if (crossed(was, u, 0f)) puff(f, leg.fetlock, leg.fore, leg.far, n, kick = false)
+                if (crossed(was, u, STANCE)) puff(f, leg.fetlock, leg.fore, leg.far, n, kick = true)
             }
         }
         // Under the runners of the two sleighs, steadily.
@@ -671,31 +715,43 @@ class SleighMotion(seed: Int = 1) {
         const val BLINK = 0.16f
 
         /**
-         * The gallop, keyed at the eighths of a stride: stretched out in the air, the
-         * forelegs reaching, striking and sweeping back under the body, gathered with the
-         * hind legs swung under, the hind legs striking and pushing off, the forelegs folding
-         * and swinging forward. Degrees, clockwise (a leg turned so swings its hoof back);
-         * the body's rise in grid units (up is less), its stretch.
+         * The gallop, a horse's (four beats, one flight with the legs gathered): when in a
+         * stride each hoof strikes the snow, a hind, the other hind, a fore, the leading fore;
+         * how long it stays down; how far it goes back under the body meanwhile and how high
+         * it is lifted (grid units); how far the fetlock flips back when lifted (degrees).
          */
-        val FORE_SHOULDER = floatArrayOf(-42f, -25f, -8f, 12f, 28f, 18f, -10f, -32f)
-        val FORE_KNEE = floatArrayOf(8f, 0f, 0f, 0f, 15f, 70f, 95f, 40f)
-        val FORE_FETLOCK = floatArrayOf(-12f, -5f, 5f, 15f, 35f, 60f, 55f, 10f)
-        val HIND_HIP = floatArrayOf(40f, 28f, 5f, -20f, -30f, -10f, 12f, 30f)
-        val HIND_HOCK = floatArrayOf(-6f, -45f, -75f, -40f, -12f, -5f, 5f, 0f)
-        val HIND_FETLOCK = floatArrayOf(30f, 50f, 55f, 20f, -5f, 5f, 15f, 25f)
-        val BODY_DY = floatArrayOf(-0.9f, -0.7f, -0.2f, 0.25f, 0.35f, 0.15f, -0.3f, -0.75f)
-        val BODY_TURN = floatArrayOf(-3f, -1.5f, 1.5f, 3f, 2.5f, 0.5f, -1.5f, -3f)
-        val BODY_SX = floatArrayOf(1.05f, 1.03f, 1f, 0.97f, 0.95f, 0.96f, 0.99f, 1.03f)
-        val NECK = floatArrayOf(-5f, -2f, 3f, 7f, 8f, 5f, 0f, -4f)
-        val HEAD = floatArrayOf(3f, 1f, -2f, -4f, -4f, -2f, 0f, 2f)
-        val TAIL = floatArrayOf(-30f, -22f, -16f, -22f, -32f, -26f, -20f, -26f)
-        /** The far legs come down a little after the near ones. */
-        const val FAR_LAG = -0.06f
-        /** When in a stride the hooves strike and push off. */
-        const val FORE_STRIKE = 0.25f
-        const val FORE_LIFT = 0.55f
-        const val HIND_STRIKE = 0.5f
-        const val HIND_LIFT = 0.8f
+        private class Leg(val hip: Int, val knee: Int, val fetlock: Int, val fore: Boolean, val far: Boolean, val strike: Float)
+        private val LEGS = listOf(
+            Leg(J.HIND_NEAR, J.HOCK_NEAR, J.FETLOCK_HIND_NEAR, fore = false, far = false, strike = 0f),
+            Leg(J.HIND_FAR, J.HOCK_FAR, J.FETLOCK_HIND_FAR, fore = false, far = true, strike = 0.1f),
+            Leg(J.FORE_NEAR, J.KNEE_NEAR, J.FETLOCK_FORE_NEAR, fore = true, far = false, strike = 0.3f),
+            Leg(J.FORE_FAR, J.KNEE_FAR, J.FETLOCK_FORE_FAR, fore = true, far = true, strike = 0.42f),
+        )
+        const val STANCE = 0.34f
+        const val STRIDE_REACH = 4.2f
+        const val FORE_LIFT_H = 3.6f
+        const val HIND_LIFT_H = 2.6f
+        const val FORE_FOLD = 65f
+        const val HIND_FOLD = 40f
+        /**
+         * The body over a stride, keyed at its eighths from the first hind strike: its sinking
+         * (down is more: it sinks as the legs take it, most on the forelegs, and rises in the
+         * flight), its tip (nose down is more: up over the hind legs, down over the forelegs),
+         * the neck swinging against it, the head steadier, the tail.
+         */
+        val BODY_DY = floatArrayOf(0.35f, 0.55f, 0.55f, 0.75f, 0.55f, -0.2f, -0.65f, -0.3f)
+        val BODY_TURN = floatArrayOf(-2f, -3f, -1.5f, 1.5f, 3f, 2f, 0f, -1f)
+        val NECK = floatArrayOf(-3f, -4f, -2f, 3f, 6f, 4f, -1f, -3f)
+        val HEAD = floatArrayOf(2f, 2.5f, 1f, -2f, -3.5f, -2f, 1f, 1.5f)
+        val TAIL = floatArrayOf(-24f, -20f, -18f, -22f, -28f, -32f, -30f, -26f)
+        const val DEG = (PI / 180.0).toFloat()
+
+        fun wrap(r: Float): Float {
+            var x = r
+            while (x > PI.toFloat()) x -= 2f * PI.toFloat()
+            while (x < -PI.toFloat()) x += 2f * PI.toFloat()
+            return x
+        }
 
         const val BIRD_LOOK = 0
         const val BIRD_TAIL = 1
@@ -754,6 +810,18 @@ class SleighMotion(seed: Int = 1) {
         /** A bell from [a] to [b], 0 elsewhere. */
         fun bump(q: Float, a: Float, b: Float): Float = if (q <= a || q >= b) 0f else bell((q - a) / (b - a))
     }
+}
+
+/**
+ * Santa's arm up to the front of his cap, [up] 0..1: it comes forward past his face
+ * and straightens to reach; the sleeve grows, the mitten keeps its size.
+ */
+internal fun reachForTheCap(p: TrainPose, up: Float) {
+    p.add(1, J.ARM, turn = -89f * up, dx = 1.3f * up)
+    val k = J.ARM * 5
+    p.joints[1][k + 3] = 1f + 0.48f * up
+    p.joints[1][k + 4] = 1f - 0.2f * up
+    p.set(1, J.HAND, sx = 1f / (1f + 0.48f * up), sy = 1f / (1f - 0.2f * up))
 }
 
 /**

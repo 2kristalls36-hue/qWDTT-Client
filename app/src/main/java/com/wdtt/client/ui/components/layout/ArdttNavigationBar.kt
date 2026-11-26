@@ -39,9 +39,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import com.wdtt.client.ui.festive.SleighTrain
+import com.wdtt.client.ui.festive.drawSleighTab
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.clipRect
+import com.wdtt.client.ui.festive.frost
+import com.wdtt.client.ui.festive.snowCap
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.material.icons.outlined.FolderOpen
@@ -80,6 +84,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.PlatformTextStyle
@@ -558,6 +563,7 @@ fun ArdttNavigationBar(
             dark = dark,
             blur = backdrop.frost(),
             modifier = outer
+                .snowCap(barRadius, seed = 1)
                 .shadow(18.dp, barShape, ambientColor = Color.Black.copy(alpha = 0.25f), spotColor = Color.Black.copy(alpha = 0.25f))
                 .height(ArdttSize.NavTrack)
                 .then(grabWatch)
@@ -579,6 +585,7 @@ fun ArdttNavigationBar(
                 Box(
                     Modifier
                         .matchParentSize()
+                        .frost(seed = 2, strength = 0.8f)
                         .onGloballyPositioned { panelGlass.origin = it.positionInRoot() }
                         .drawWithContent {
                             val offset = panelGlass.origin - backdrop.origin
@@ -598,6 +605,8 @@ fun ArdttNavigationBar(
                             drawContent()
                         },
                 ) {
+                    // New Year: snow inside the glass, stirred by the droplet and a shake.
+                    com.wdtt.client.ui.festive.SnowGlobe({ selPos.value }, count, barRadius / ArdttSize.NavTrack, Modifier.matchParentSize())
                     tabs()
                 }
                 val trackH = ArdttSize.NavTrack
@@ -639,6 +648,9 @@ fun ArdttNavigationBar(
                         blur = 0.dp,
                         underlay = lerp(colors.surface, Color.White, if (dark) 0.06f else 0.5f),
                         fringe = 0.45f, dispersion = 0.2f,
+                        // Gentler bend across the top and bottom edges: the snow lying under
+                        // the droplet is not drawn out into streaks.
+                        verticalBend = 0.5f,
                         modifier = Modifier.fillMaxSize(),
                     ) {}
                 }
@@ -655,12 +667,13 @@ fun ArdttNavigationBar(
         tonalElevation = ArdttElevation.None,
         // A shadow graphics layer paints this translucent shell opaque for a frame.
         shadowElevation = ArdttElevation.None,
-        modifier = outer,
+        modifier = outer.snowCap(barRadius, seed = 1),
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(ArdttSize.NavTrack)
+                .frost(seed = 2, strength = 0.8f)
                 .then(grabWatch)
                 .then(dragToSelect),
         ) {
@@ -762,6 +775,8 @@ private fun Modifier.navTint(
     color: Color,
     accent: NavAccent,
     clock: () -> Float,
+    /** False where the tab draws its own colours under the droplet (the New Year train). */
+    recolour: Boolean = true,
 ): Modifier {
     val period = with(androidx.compose.ui.platform.LocalDensity.current) { 220.dp.toPx() }
     val trackPad = with(androidx.compose.ui.platform.LocalDensity.current) { NavBarDefaults.TrackPadding.toPx() }
@@ -769,6 +784,7 @@ private fun Modifier.navTint(
         .graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
         .drawWithContent {
             drawContent()
+            if (!recolour) return@drawWithContent
             val w = size.width
             // The droplet in this tab's coordinates, kept inside the bar as the droplet is.
             val (l, r) = dropletRangeInTab(droplet(), index, count, w, trackPad)
@@ -983,6 +999,9 @@ private fun NavBarTab(
         )
     }
     val iconPose = tabIconPose(iconMotion, iconProgress.value)
+    // New Year: the tabs are Santa's train (see SleighTrain), joined across the gaps, in
+    // their own colours under the droplet instead of the accent colour.
+    val train = com.wdtt.client.ui.festive.LocalFestive.current.active && count == SleighTrain.count
     // Over clear glass the page shows right behind the tab: a halo follows the outline of
     // the icon and the label, and the faded grey of the other tabs turns full-strength, so
     // they stand apart from the text of the page.
@@ -1016,7 +1035,7 @@ private fun NavBarTab(
         modifier = modifier
             .fillMaxHeight()
             .haloOutsideDroplet(halo, index, count, droplet)
-            .navTint(index, count, droplet, selectedColor, accent, clock = accentClock)
+            .navTint(index, count, droplet, selectedColor, accent, clock = accentClock, recolour = !train)
             .selectable(
                 selected = selected,
                 interactionSource = interactionSource,
@@ -1030,10 +1049,26 @@ private fun NavBarTab(
                     onSelect()
                 },
             )
-            .semantics { this.selected = selected },
+            .semantics { this.selected = selected }
+            .drawBehind {
+                if (train) {
+                    val (l, r) = dropletRangeInTab(droplet(), index, count, size.width, NavBarDefaults.TrackPadding.toPx())
+                    drawSleighTab(index, size.width, size.height, SleighTrain.height.toPx(), paint.color, l, r)
+                }
+            },
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        if (train) {
+            // Drawn behind (see above), in place of the icon and the label; the label is read out.
+            Spacer(
+                Modifier
+                    .fillMaxWidth()
+                    .height(SleighTrain.height)
+                    .semantics { contentDescription = item.label },
+            )
+            return@Column
+        }
         Box(contentAlignment = Alignment.TopEnd) {
             val glyph = Modifier.size(ArdttSize.Icon)
             if (iconMotion == TabIconMotion.Sift) {

@@ -8,6 +8,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.vector.PathParser
+import androidx.compose.ui.graphics.asAndroidPath
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
 
 /**
  * The brand, as described in docs/brand/BRANDBOOK.md: colours and the logo outlines.
@@ -40,7 +43,7 @@ object Brand {
  * [Brand.LOGO_WIDTH] : [Brand.LOGO_HEIGHT].
  */
 @Composable
-fun BrandWordmark(modifier: Modifier = Modifier) {
+fun BrandWordmark(modifier: Modifier = Modifier, withClient: Boolean = true) {
     val qwdtt = remember { PathParser().parsePathString(QWDTT_OUTLINE).toPath() }
     val client = remember { PathParser().parsePathString(CLIENT_LETTERS).toPath() }
     Canvas(modifier) {
@@ -50,9 +53,151 @@ fun BrandWordmark(modifier: Modifier = Modifier) {
             translate(-Brand.LOGO_X, -Brand.LOGO_Y)
         }) {
             // As on the app icon: each line tilted up by 6° about its own point.
-            withTransform({ rotate(-6f, pivot = Offset(54f, 50f)) }) { drawPath(client, Color.Black) }
+            if (withClient) withTransform({ rotate(-6f, pivot = Offset(54f, 50f)) }) { drawPath(client, Color.Black) }
             withTransform({ rotate(-6f, pivot = Offset(54f, 62f)) }) { drawPath(qwdtt, Color.Black) }
         }
+    }
+}
+
+/** Left and right ink edges of «Client», in logo units (before its 6° tilt). */
+private const val CLIENT_LEFT = 28.04f
+private const val CLIENT_RIGHT = 84.20f
+/** Baseline of «qWDTT». */
+private const val QWDTT_BASELINE = 65f
+/** The year is as wide as «Client» and a little lower than that would make it. */
+private const val YEAR_HEIGHT_SCALE = 0.8f
+
+/** The year in the digits of «qWDTT», as wide as «Client», with its top at [top]. */
+internal fun brandYearPath(year: Int, top: Float): androidx.compose.ui.graphics.Path {
+    val parser = PathParser()
+    val out = androidx.compose.ui.graphics.Path()
+    var x = 0f
+    year.toString().map { it - '0' }.forEach { d ->
+        out.addPath(parser.parsePathString(DIGIT_OUTLINES[d]).toPath(), Offset(x, 0f))
+        x += DIGIT_ADVANCE[d]
+    }
+    val b = out.getBounds()
+    val k = (CLIENT_RIGHT - CLIENT_LEFT) / b.width
+    out.translate(Offset(-b.left, -b.top))
+    out.transform(androidx.compose.ui.graphics.Matrix().apply { scale(k, k * YEAR_HEIGHT_SCALE) })
+    out.translate(Offset(CLIENT_LEFT, top))
+    return out
+}
+
+/**
+ * New Year form of the logo, laid over [BrandWordmark] drawn without «Client» (same box).
+ * «Client» is a candy cane bent into the word: a round white tube along the centre lines
+ * of its strokes, with a dark edge, a shadow on its lower side and wide red bands that
+ * wind round it at a slant, following every turn of the letters. The year stands under
+ * «qWDTT» in its digits, in red.
+ */
+@Composable
+fun BrandCandyClient(year: Int, modifier: Modifier = Modifier) {
+    val strokes = remember { CLIENT_CANDY_STROKES.map { PathParser().parsePathString(it).toPath().asAndroidPath() } }
+    val yearPath = remember(year) { brandYearPath(year, QWDTT_BASELINE + 1.6f) }
+    val lightGround = androidx.compose.material3.MaterialTheme.colorScheme.background.let { 0.299f * it.red + 0.587f * it.green + 0.114f * it.blue } > 0.5f
+    val paints = remember(lightGround) { CandyPaints(lightGround) }
+    Canvas(modifier) {
+        val k = size.width / Brand.LOGO_WIDTH
+        withTransform({
+            scale(k, k, pivot = Offset.Zero)
+            translate(-Brand.LOGO_X, -Brand.LOGO_Y)
+        }) {
+            withTransform({ rotate(-6f, pivot = Offset(54f, 50f)) }) {
+                drawIntoCanvas { c -> paints.draw(c.nativeCanvas, strokes) }
+            }
+            val b = yearPath.getBounds()
+            withTransform({ rotate(-6f, pivot = Offset(54f, b.center.y)) }) {
+                drawPath(yearPath, Color(0xFFD7263D))
+            }
+        }
+    }
+}
+
+/** Tube width of the candy, logo units: thicker than the script, like a real cane. */
+private const val CANDY_TUBE = 1.75f
+/** Distance between the red bands along the tube, and the length of one band. */
+private const val CANDY_PERIOD = 3.1f
+private const val CANDY_BAND = 1.4f
+
+/** Paints of the candy cane, layer by layer (all in logo units). */
+private class CandyPaints(light: Boolean) {
+    private fun stroke(color: Int, width: Float) = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        style = android.graphics.Paint.Style.STROKE
+        strokeWidth = width
+        strokeCap = android.graphics.Paint.Cap.ROUND
+        strokeJoin = android.graphics.Paint.Join.ROUND
+        this.color = color
+    }
+
+    /** A band across the tube: a parallelogram, slanted like the stripes of a cane. */
+    private fun band(width: Float): android.graphics.Path {
+        val h = width / 2f
+        val slant = width * 0.55f
+        val b = CANDY_BAND / 2f
+        return android.graphics.Path().apply {
+            moveTo(-b - slant / 2f, -h)
+            lineTo(b - slant / 2f, -h)
+            lineTo(b + slant / 2f, h)
+            lineTo(-b + slant / 2f, h)
+            close()
+        }
+    }
+
+    private fun bands(color: Int, width: Float) = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        style = android.graphics.Paint.Style.FILL
+        this.color = color
+        pathEffect = android.graphics.PathDashPathEffect(band(width), CANDY_PERIOD, 0.6f, android.graphics.PathDashPathEffect.Style.ROTATE)
+    }
+
+    private val edge = stroke(if (light) 0xFF2B0A10.toInt() else 0xFF140A0C.toInt(), CANDY_TUBE + 0.42f)
+    private val shade = stroke(0xFFC9CED8.toInt(), CANDY_TUBE)
+    private val white = stroke(0xFFFFFFFF.toInt(), CANDY_TUBE * 0.74f)
+    private val red = bands(0xFFE0273B.toInt(), CANDY_TUBE)
+    /** Shadow along the lower side of the tube, over the white and the red alike. */
+    private val shadow = stroke(0x2E3A0010, CANDY_TUBE * 0.3f)
+    private val gloss = stroke(0x99FFFFFF.toInt(), CANDY_TUBE * 0.15f)
+    /** The light comes from the upper left: highlights move there, the shadow below. */
+    private val lift = -CANDY_TUBE * 0.11f
+
+    fun draw(canvas: android.graphics.Canvas, strokes: List<android.graphics.Path>) {
+        // Each layer over all strokes before the next, so where strokes cross no edge
+        // line runs across a tube.
+        strokes.forEach { canvas.drawPath(it, edge) }
+        strokes.forEach { canvas.drawPath(it, shade) }
+        canvas.save()
+        canvas.translate(lift, lift)
+        strokes.forEach { canvas.drawPath(it, white) }
+        canvas.restore()
+        strokes.forEach { canvas.drawPath(it, red) }
+        canvas.save()
+        canvas.translate(-lift * 1.9f, -lift * 1.9f)
+        strokes.forEach { canvas.drawPath(it, shadow) }
+        canvas.translate(lift * 4.2f, lift * 4.2f)
+        strokes.forEach { canvas.drawPath(it, gloss) }
+        canvas.restore()
+        drawDot(canvas)
+    }
+
+    /** The dot of the «i»: a round sweet with one slanted band. */
+    private fun drawDot(canvas: android.graphics.Canvas) {
+        val x = CLIENT_DOT_X
+        val y = CLIENT_DOT_Y
+        val r = CLIENT_DOT_R
+        canvas.drawCircle(x, y, r + 0.21f, edge.withFill())
+        canvas.drawCircle(x, y, r, shade.withFill())
+        canvas.drawCircle(x + lift * 0.6f, y + lift * 0.6f, r * 0.8f, white.withFill())
+        canvas.save()
+        canvas.clipPath(android.graphics.Path().apply { addCircle(x, y, r, android.graphics.Path.Direction.CW) })
+        canvas.rotate(-40f, x, y)
+        canvas.drawRect(x - r, y - r * 0.28f, x + r, y + r * 0.28f, red.withFill())
+        canvas.restore()
+        canvas.drawCircle(x - r * 0.35f, y - r * 0.35f, r * 0.18f, gloss.withFill())
+    }
+
+    private fun android.graphics.Paint.withFill() = android.graphics.Paint(this).apply {
+        style = android.graphics.Paint.Style.FILL
+        pathEffect = null
     }
 }
 
@@ -141,3 +286,154 @@ internal const val CLIENT_LETTERS =
         "Q51.836 40.439 52.526 40.439Q53.142 40.439 53.492 40.713Q53.777 40.936 53.777 41.382" +
         "Q53.777 42.007 53.394 42.352Q52.987 42.721 52.262 42.721Q51.564 42.721 51.267 42.446" +
         "Q50.989 42.187 50.989 41.668Z"
+
+/**
+ * Digits 0–9 of the font of «qWDTT» (Poppins, bold italic) as outlines, in font units
+ * (1000 to the em), y down from the baseline; for the year under the logo. [DIGIT_ADVANCE]
+ * is the advance of each.
+ */
+internal val DIGIT_OUTLINES = arrayOf(
+    // 0
+    "M403 -725Q522 -725 577.5 -660.5Q633 -596 633 -481Q633 -434 621 -364Q592 -198 508 -100.5Q424 -3 276 -3" +
+        "Q157 -3 102.5 -67.5Q48 -132 48 -247Q48 -300 59 -364Q88 -530 171.5 -627.5Q255 -725 403 -725ZM463 -461" +
+        "Q463 -511 443 -538Q423 -565 375 -565Q306 -565 274.5 -512Q243 -459 227 -364Q216 -302 216 -267Q216 -217 236 -190" +
+        "Q256 -163 304 -163Q373 -163 404.5 -216Q436 -269 452 -364Q463 -426 463 -461Z",
+    // 1
+    "M73 -550 101 -709H378L253 0H75L172 -550Z",
+    // 2
+    "M51 -165Q160 -243 225 -294Q290 -345 337.5 -398.5Q385 -452 393 -501Q396 -515 396 -527Q396 -556 380.5 -571" +
+        "Q365 -586 334 -586Q257 -586 236 -477H70Q96 -603 178.5 -666.5Q261 -730 368 -730Q472 -730 522.5 -683" +
+        "Q573 -636 573 -559Q573 -535 569 -515Q551 -413 463.5 -325Q376 -237 247 -149H517L492 -10H-10L12 -137Z",
+    // 3
+    "M381 -747Q480 -747 533 -702Q586 -657 586 -585Q586 -567 583 -549Q571 -483 531 -441.5Q491 -400 444 -385V-381" +
+        "Q489 -365 514 -331.5Q539 -298 539 -247Q539 -225 535 -205Q518 -111 444 -52.5Q370 6 258 6Q151 6 89.5 -41" +
+        "Q28 -88 28 -184Q28 -197 32 -231H198Q196 -215 196 -209Q196 -174 216 -155Q236 -136 276 -136Q321 -136 348 -165" +
+        "Q375 -194 375 -239Q375 -276 347.5 -292.5Q320 -309 261 -309H229L254 -448H286Q399 -448 414 -528" +
+        "Q416 -540 416 -546Q416 -574 399.5 -589Q383 -604 352 -604Q314 -604 291 -581Q268 -558 259 -524H93" +
+        "Q116 -631 192 -689Q268 -747 381 -747Z",
+    // 4
+    "M22 -130 46 -268 441 -720H633L555 -278H637L611 -130H529L506 0H334L358 -130ZM441 -532 228 -278H396Z",
+    // 5
+    "M611 -581H299L275 -443Q299 -465 337 -479Q375 -493 417 -493Q511 -493 555.5 -442Q600 -391 600 -310" +
+        "Q600 -286 595 -254Q574 -137 496 -68.5Q418 0 298 0Q188 0 129 -50.5Q70 -101 70 -186Q70 -195 72 -217H238" +
+        "Q239 -186 259 -165.5Q279 -145 318 -145Q365 -145 393 -175Q421 -205 431 -255Q433 -265 433 -282Q433 -356 354 -356" +
+        "Q320 -356 295.5 -339.5Q271 -323 259 -296H94L170 -731H637Z",
+    // 6
+    "M377 -607Q320 -607 286.5 -558Q253 -509 232 -401Q261 -436 306 -456Q351 -476 401 -476Q485 -476 533 -430" +
+        "Q581 -384 581 -300Q581 -267 576 -241Q563 -168 524 -113Q485 -58 423.5 -27Q362 4 284 4Q165 4 113.5 -55" +
+        "Q62 -114 62 -225Q62 -283 77 -370Q111 -560 190.5 -652.5Q270 -745 409 -745Q511 -745 560 -692.5Q609 -640 609 -559" +
+        "Q609 -542 608 -533H449Q447 -570 430.5 -588.5Q414 -607 377 -607ZM217 -218Q217 -181 239 -161Q261 -141 303 -141" +
+        "Q347 -141 377.5 -167.5Q408 -194 416 -240Q418 -256 418 -264Q418 -300 397 -320.5Q376 -341 336 -341" +
+        "Q288 -341 252.5 -309Q217 -277 217 -218Z",
+    // 7
+    "M566 -595 200 0H21L390 -576H80L106 -721H588Z",
+    // 8
+    "M115 -518Q115 -535 118 -554Q127 -606 163.5 -652Q200 -698 262 -726Q324 -754 406 -754Q479 -754 528.5 -731.5" +
+        "Q578 -709 602 -671Q626 -633 626 -587Q626 -571 623 -554Q614 -500 581.5 -460Q549 -420 502 -397" +
+        "Q542 -376 563.5 -340.5Q585 -305 585 -258Q585 -236 581 -216Q568 -144 523.5 -92Q479 -40 412.5 -13Q346 14 270 14" +
+        "Q167 14 102.5 -35Q38 -84 38 -171Q38 -195 42 -216Q53 -279 90 -325Q127 -371 184 -397Q115 -437 115 -518ZM281 -527" +
+        "Q279 -513 279 -508Q279 -477 298.5 -459.5Q318 -442 351 -442Q394 -442 424 -471Q454 -500 454 -548" +
+        "Q454 -580 434.5 -597Q415 -614 381 -614Q343 -614 315.5 -591Q288 -568 281 -527ZM208 -225Q206 -211 206 -204" +
+        "Q206 -169 229 -147.5Q252 -126 295 -126Q350 -126 384 -160.5Q418 -195 418 -246Q418 -282 394.5 -302.5" +
+        "Q371 -323 330 -323Q283 -323 249.5 -297Q216 -271 208 -225Z",
+    // 9
+    "M294 -135Q347 -135 377.5 -182Q408 -229 426 -335Q400 -304 358.5 -287Q317 -270 270 -270Q185 -270 135 -315" +
+        "Q85 -360 85 -445Q85 -476 90 -501Q110 -613 188.5 -679Q267 -745 383 -745Q499 -745 549.5 -688Q600 -631 600 -522" +
+        "Q600 -462 586 -383Q563 -253 525 -169Q487 -85 424 -41Q361 3 267 3Q161 3 108.5 -51Q56 -105 56 -188" +
+        "Q56 -205 57 -214H216Q218 -175 236.5 -155Q255 -135 294 -135ZM444 -526Q444 -562 423 -581Q402 -600 363 -600" +
+        "Q319 -600 289 -573.5Q259 -547 251 -501Q249 -485 249 -479Q249 -445 270 -425Q291 -405 332 -405" +
+        "Q381 -405 412.5 -438Q444 -471 444 -526Z",
+)
+
+internal val DIGIT_ADVANCE = intArrayOf(652, 376, 571, 605, 677, 650, 637, 535, 648, 615)
+
+/**
+ * Centre lines of the strokes of «Client» (traced from its outline), long strokes
+ * joined where the pen runs on; for the New Year candy cane. Logo units.
+ */
+internal val CLIENT_CANDY_STROKES = arrayOf(
+    "M43.97 49.52C44.11 49.46 44.59 49.26 44.81 49.16C45.03 49.05 45.13 48.98 45.28 48.88" +
+        "C45.42 48.77 45.54 48.68 45.69 48.52C45.83 48.37 45.93 48.26 46.13 47.95C46.33 47.64 46.63 47.12 46.87 46.66" +
+        "C47.12 46.19 47.39 45.67 47.62 45.17C47.85 44.66 48.09 44.13 48.28 43.64C48.47 43.15 48.63 42.69 48.77 42.25" +
+        "C48.92 41.8 49.03 41.38 49.12 40.99C49.22 40.6 49.28 40.26 49.34 39.88C49.4 39.5 49.44 39.08 49.46 38.73" +
+        "C49.48 38.38 49.48 38.05 49.46 37.76C49.45 37.47 49.42 37.24 49.36 37C49.31 36.76 49.21 36.5 49.12 36.32" +
+        "C49.03 36.14 48.93 36.02 48.81 35.91C48.69 35.8 48.54 35.72 48.39 35.67C48.24 35.62 48.07 35.6 47.9 35.61" +
+        "C47.74 35.62 47.56 35.67 47.4 35.74C47.24 35.81 47.11 35.89 46.95 36.03C46.79 36.17 46.6 36.37 46.45 36.57" +
+        "C46.3 36.77 46.19 36.96 46.06 37.2C45.93 37.45 45.86 37.55 45.67 38.04C45.48 38.53 45.13 39.55 44.94 40.14" +
+        "C44.76 40.73 44.68 41.1 44.57 41.58C44.45 42.07 44.36 42.53 44.26 43.06C44.17 43.58 44.07 44.21 43.99 44.75" +
+        "C43.92 45.28 43.87 45.7 43.82 46.28C43.78 46.85 43.72 47.39 43.73 48.22C43.75 49.04 43.86 50.63 43.91 51.22" +
+        "C43.96 51.82 43.98 51.62 44.01 51.77C44.05 51.92 44.07 51.97 44.14 52.11C44.2 52.25 44.3 52.44 44.39 52.59" +
+        "C44.49 52.74 44.61 52.89 44.73 53.02C44.85 53.16 45.02 53.29 45.14 53.38C45.26 53.47 45.28 53.5 45.45 53.56" +
+        "C45.62 53.63 45.91 53.72 46.15 53.75C46.39 53.78 46.65 53.77 46.89 53.74C47.13 53.71 47.41 53.63 47.61 53.57" +
+        "C47.82 53.5 47.82 53.51 48.12 53.35C48.43 53.2 49.01 52.84 49.43 52.65C49.85 52.45 50.43 52.25 50.63 52.17",
+    "M43.85 51.95C43.64 52.02 43.14 52.16 42.61 52.35C42.09 52.53 41.29 52.86 40.7 53.05" +
+        "C40.11 53.23 39.54 53.37 39.08 53.46C38.62 53.56 38.33 53.59 37.95 53.63C37.57 53.68 37.14 53.71 36.79 53.72" +
+        "C36.43 53.74 36.13 53.74 35.81 53.73C35.49 53.72 35.16 53.7 34.85 53.65C34.53 53.61 34.19 53.55 33.92 53.49" +
+        "C33.64 53.42 33.46 53.38 33.2 53.28C32.94 53.19 32.6 53.04 32.35 52.92C32.1 52.8 31.92 52.68 31.71 52.54" +
+        "C31.5 52.4 31.3 52.24 31.11 52.07C30.92 51.9 30.74 51.72 30.58 51.52C30.42 51.33 30.28 51.15 30.13 50.91" +
+        "C29.98 50.68 29.8 50.32 29.7 50.09C29.59 49.87 29.57 49.78 29.5 49.57C29.44 49.37 29.36 49.1 29.31 48.85" +
+        "C29.26 48.61 29.22 48.36 29.19 48.1C29.16 47.85 29.13 47.75 29.13 47.33C29.14 46.91 29.15 46.16 29.21 45.59" +
+        "C29.28 45.02 29.38 44.42 29.5 43.91C29.63 43.39 29.78 42.95 29.96 42.5C30.15 42.04 30.45 41.5 30.63 41.17" +
+        "C30.81 40.85 30.89 40.75 31.04 40.55C31.19 40.34 31.35 40.14 31.52 39.95C31.69 39.76 31.9 39.55 32.06 39.4" +
+        "C32.22 39.25 32.32 39.16 32.5 39.03C32.67 38.89 32.88 38.74 33.12 38.6C33.36 38.45 33.69 38.28 33.94 38.17" +
+        "C34.19 38.05 34.4 37.99 34.63 37.91C34.87 37.84 35.08 37.79 35.36 37.74C35.64 37.7 36.02 37.66 36.31 37.65" +
+        "C36.6 37.64 36.83 37.65 37.08 37.68C37.33 37.7 37.61 37.76 37.82 37.81C38.03 37.87 38.17 37.92 38.33 38" +
+        "C38.5 38.08 38.66 38.18 38.8 38.29C38.95 38.4 39.08 38.52 39.2 38.66C39.32 38.8 39.42 38.96 39.51 39.12" +
+        "C39.6 39.28 39.67 39.45 39.72 39.62C39.78 39.8 39.82 39.95 39.85 40.17C39.88 40.38 39.91 40.63 39.9 40.91" +
+        "C39.89 41.19 39.83 41.6 39.78 41.85C39.74 42.09 39.65 42.29 39.62 42.38",
+    "M78.82 45.53C78.93 45.31 79.2 44.66 79.47 44.21C79.75 43.76 80.25 43.17 80.48 42.83" +
+        "C80.71 42.5 80.75 42.44 80.88 42.2C81.01 41.95 81.18 41.62 81.28 41.37C81.39 41.11 81.45 40.97 81.53 40.67" +
+        "C81.6 40.36 81.7 39.9 81.74 39.56C81.78 39.21 81.78 38.89 81.76 38.61C81.74 38.33 81.66 38.06 81.61 37.89" +
+        "C81.56 37.72 81.52 37.67 81.46 37.58C81.39 37.49 81.35 37.41 81.24 37.33C81.14 37.25 80.98 37.14 80.83 37.1" +
+        "C80.68 37.05 80.51 37.05 80.34 37.07C80.18 37.09 80.01 37.15 79.85 37.22C79.69 37.3 79.54 37.41 79.4 37.53" +
+        "C79.27 37.65 79.15 37.76 79.02 37.93C78.89 38.1 78.75 38.31 78.61 38.55C78.48 38.79 78.34 39.07 78.21 39.38" +
+        "C78.07 39.7 77.94 40.04 77.81 40.42C77.69 40.8 77.56 41.25 77.45 41.67C77.34 42.09 77.29 42.14 77.16 42.95" +
+        "C77.02 43.75 76.75 45.75 76.66 46.51C76.57 47.26 76.61 47.02 76.6 47.48C76.59 47.94 76.59 48.84 76.6 49.27" +
+        "C76.6 49.7 76.6 49.8 76.62 50.06C76.65 50.31 76.68 50.6 76.72 50.81C76.76 51.03 76.79 51.15 76.86 51.35" +
+        "C76.93 51.56 77.03 51.82 77.14 52.04C77.25 52.25 77.4 52.49 77.52 52.67C77.65 52.84 77.76 52.95 77.89 53.08" +
+        "C78.03 53.2 78.18 53.31 78.33 53.4C78.49 53.49 78.66 53.57 78.83 53.63C79 53.69 79.19 53.73 79.37 53.76" +
+        "C79.55 53.78 79.71 53.8 79.93 53.79C80.14 53.78 80.46 53.75 80.67 53.71C80.89 53.67 81.04 53.63 81.21 53.57" +
+        "C81.39 53.51 81.53 53.45 81.72 53.35C81.91 53.25 82.15 53.1 82.36 52.95C82.56 52.81 82.76 52.64 82.94 52.46" +
+        "C83.13 52.29 83.29 52.12 83.46 51.9C83.62 51.68 83.84 51.33 83.95 51.13C84.06 50.93 84.09 50.76 84.12 50.68",
+    "M52.1 45.67C52.06 45.71 51.93 45.81 51.85 45.93C51.77 46.05 51.7 46.16 51.61 46.41" +
+        "C51.51 46.67 51.4 46.92 51.28 47.47C51.15 48.01 50.94 49.16 50.85 49.69C50.76 50.22 50.77 50.36 50.75 50.65" +
+        "C50.72 50.93 50.7 51.13 50.72 51.42C50.73 51.7 50.76 52.07 50.82 52.34C50.88 52.6 51.01 52.84 51.1 53" +
+        "C51.18 53.15 51.23 53.19 51.31 53.27C51.39 53.35 51.48 53.42 51.57 53.48C51.67 53.54 51.77 53.59 51.88 53.63" +
+        "C51.98 53.66 52.04 53.7 52.21 53.7C52.39 53.7 52.69 53.69 52.92 53.64C53.15 53.59 53.23 53.6 53.61 53.38" +
+        "C53.98 53.17 54.68 52.72 55.18 52.38C55.68 52.03 56.29 51.51 56.61 51.3C56.94 51.08 56.85 51.17 57.1 51.08" +
+        "C57.36 50.98 57.87 50.85 58.17 50.75C58.46 50.65 58.63 50.58 58.85 50.48C59.08 50.38 59.32 50.24 59.51 50.13" +
+        "C59.69 50.01 59.81 49.91 59.95 49.79C60.09 49.67 60.24 49.51 60.34 49.39C60.44 49.27 60.49 49.19 60.55 49.09" +
+        "C60.62 48.99 60.67 48.91 60.72 48.77C60.78 48.62 60.86 48.42 60.89 48.24C60.93 48.06 60.95 47.85 60.95 47.7" +
+        "C60.96 47.55 60.94 47.45 60.92 47.34C60.9 47.22 60.87 47.1 60.83 46.99C60.79 46.88 60.74 46.77 60.67 46.68" +
+        "C60.61 46.58 60.56 46.5 60.46 46.41C60.35 46.31 60.19 46.18 60.03 46.11C59.87 46.03 59.7 45.98 59.52 45.95" +
+        "C59.34 45.92 59.15 45.92 58.97 45.93C58.79 45.94 58.61 45.98 58.43 46.02C58.25 46.07 58.08 46.14 57.91 46.22" +
+        "C57.75 46.3 57.59 46.4 57.45 46.52C57.3 46.63 57.16 46.76 57.04 46.89C56.91 47.03 56.79 47.18 56.69 47.33" +
+        "C56.59 47.49 56.49 47.65 56.41 47.81C56.33 47.98 56.26 48.12 56.19 48.32C56.12 48.53 56.04 48.79 55.99 49.04" +
+        "C55.93 49.28 55.89 49.57 55.87 49.78C55.85 50 55.84 50.14 55.84 50.35C55.84 50.57 55.86 50.89 55.88 51.09" +
+        "C55.9 51.3 55.97 51.5 55.98 51.58",
+    "M82.57 45.18C82.51 45.21 82.38 45.3 82.24 45.35C82.09 45.41 81.98 45.46 81.7 45.51" +
+        "C81.42 45.56 80.95 45.65 80.57 45.67C80.19 45.69 80 45.69 79.4 45.65C78.8 45.62 77.36 45.5 76.95 45.47",
+    "M70.77 46.72C70.68 46.73 70.43 46.75 70.22 46.8C70.01 46.85 69.71 46.93 69.51 47" +
+        "C69.31 47.08 69.17 47.14 69.01 47.23C68.85 47.32 68.7 47.42 68.56 47.54C68.42 47.66 68.28 47.79 68.16 47.93" +
+        "C68.04 48.07 68.04 48 67.82 48.37C67.6 48.74 67.04 49.78 66.82 50.14C66.6 50.51 66.64 50.43 66.5 50.58" +
+        "C66.36 50.73 66.21 50.89 65.97 51.06C65.74 51.24 65.25 51.54 65.1 51.63",
+    "M66.4 45.32C66.33 45.39 66.15 45.53 66.01 45.73C65.86 45.93 65.66 46.24 65.53 46.52" +
+        "C65.41 46.8 65.33 47.07 65.24 47.4C65.15 47.73 65.07 48.16 65.02 48.5C64.96 48.85 64.92 49.17 64.89 49.45" +
+        "C64.86 49.74 64.83 49.75 64.85 50.22C64.88 50.69 65 51.67 65.03 52.27C65.07 52.86 65.06 53.55 65.07 53.81",
+    "M56 51.9C56.11 52.05 56.48 52.6 56.65 52.81C56.83 53.03 56.93 53.1 57.04 53.2" +
+        "C57.16 53.31 57.24 53.35 57.34 53.42C57.44 53.49 57.52 53.53 57.66 53.6C57.8 53.66 58.01 53.74 58.18 53.79" +
+        "C58.36 53.84 58.55 53.87 58.74 53.9C58.92 53.92 59.08 53.94 59.3 53.94C59.53 53.94 59.79 53.93 60.07 53.89" +
+        "C60.35 53.85 60.72 53.77 60.98 53.7C61.25 53.62 61.28 53.61 61.67 53.43C62.07 53.25 62.94 52.79 63.34 52.62" +
+        "C63.73 52.44 63.75 52.46 64.03 52.38C64.31 52.3 64.84 52.19 65 52.15",
+    "M70.78 46.73C70.79 46.83 70.83 47.05 70.83 47.3C70.83 47.56 70.86 47.63 70.79 48.27" +
+        "C70.72 48.9 70.5 50.48 70.43 51.12C70.36 51.75 70.37 51.82 70.37 52.07C70.37 52.32 70.4 52.48 70.43 52.62" +
+        "C70.45 52.77 70.48 52.85 70.53 52.96C70.58 53.06 70.63 53.16 70.7 53.25C70.77 53.34 70.85 53.41 70.93 53.48" +
+        "C71.02 53.54 71.09 53.59 71.23 53.63C71.36 53.67 71.56 53.71 71.74 53.72C71.91 53.73 72.07 53.72 72.28 53.67" +
+        "C72.49 53.63 72.73 53.57 72.98 53.45C73.23 53.33 73.46 53.22 73.78 52.96C74.1 52.71 74.66 52.16 74.93 51.93" +
+        "C75.2 51.7 75.23 51.69 75.38 51.6C75.54 51.5 75.65 51.43 75.86 51.34C76.07 51.25 76.49 51.08 76.62 51.03",
+)
+
+/** The dot of the «i»: centre and radius, logo units. */
+internal const val CLIENT_DOT_X = 52.38f
+internal const val CLIENT_DOT_Y = 41.57f
+internal const val CLIENT_DOT_R = 1.2f

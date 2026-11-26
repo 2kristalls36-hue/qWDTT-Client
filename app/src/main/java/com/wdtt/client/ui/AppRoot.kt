@@ -16,6 +16,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Modifier
 import com.wdtt.client.SettingsStore
 import com.wdtt.client.ui.components.layout.ArdttBackdrop
@@ -82,7 +87,10 @@ fun AppRoot(settingsStore: SettingsStore) {
     val measuredShape = com.wdtt.client.ui.components.layout.rememberScreenShape()
     // Setting off: as if the corners were unknown, everything keeps its usual shape.
     val screenShape = if (screenFitOn) measuredShape else com.wdtt.client.ui.components.layout.ScreenShape.Unknown
+    // New Year: wakes up only from 31 December to 2 January.
+    val festive = com.wdtt.client.ui.festive.rememberFestive(power)
     androidx.compose.runtime.CompositionLocalProvider(
+        com.wdtt.client.ui.festive.LocalFestive provides festive,
         com.wdtt.client.ui.components.layout.LocalScreenShape provides screenShape,
         com.wdtt.client.ui.components.surface.LocalGlassBackdrop provides backdrop,
         com.wdtt.client.ui.motion.LocalAppHaptics provides appHaptics,
@@ -124,9 +132,20 @@ fun AppRoot(settingsStore: SettingsStore) {
             accent = when (level) {
                 com.wdtt.client.lite.PowerLevel.Stable -> com.wdtt.client.ui.components.layout.NavAccent.Plain
                 com.wdtt.client.lite.PowerLevel.Balanced -> com.wdtt.client.ui.components.layout.NavAccent.Sheen(levelColors.accent)
-                com.wdtt.client.lite.PowerLevel.Maximum -> com.wdtt.client.ui.components.layout.NavAccent.Neon(levelColors.neon)
+                // New Year: garland lights instead of the neon, the tab glints warm.
+                com.wdtt.client.lite.PowerLevel.Maximum -> if (festive.active) com.wdtt.client.ui.components.layout.NavAccent.Sheen(com.wdtt.client.ui.festive.GarlandColors[1])
+                    else com.wdtt.client.ui.components.layout.NavAccent.Neon(levelColors.neon)
             },
         )
+        // New Year, maximum level: one garland across the top, under the status bar.
+        com.wdtt.client.ui.festive.TopGarland(
+            Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.statusBars)
+                .height(18.dp),
+        )
+        com.wdtt.client.ui.festive.SnowfallOverlay(Modifier.fillMaxSize())
     }
     }
 }

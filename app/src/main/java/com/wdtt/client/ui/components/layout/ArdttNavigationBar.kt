@@ -1050,6 +1050,19 @@ private fun NavBarTab(
     Column(
         modifier = modifier
             .fillMaxHeight()
+            // New Year: the ropes and the trees going by are drawn behind the figures, outside
+            // the legibility border, so the border does not leave a band without snow along
+            // the ropes between the figures.
+            .then(
+                if (sleigh != null) Modifier.drawBehind {
+                    sleigh.frames[index].intValue
+                    val (l, r) = dropletRangeInTab(droplet(), index, count, size.width, NavBarDefaults.TrackPadding.toPx())
+                    drawSleighTab(
+                        index, size.width, size.height, SleighTrain.height.toPx(), paint.color, l, r, sleigh.pose,
+                        com.wdtt.client.ui.festive.SleighLayers.BACKDROP,
+                    )
+                } else Modifier,
+            )
             .haloOutsideDroplet(halo, index, count, droplet)
             .navTint(index, count, droplet, selectedColor, accent, clock = accentClock, recolour = !train)
             .selectable(
@@ -1071,7 +1084,10 @@ private fun NavBarTab(
                     // Drawn again whenever this figure moves.
                     sleigh.frames[index].intValue
                     val (l, r) = dropletRangeInTab(droplet(), index, count, size.width, NavBarDefaults.TrackPadding.toPx())
-                    drawSleighTab(index, size.width, size.height, SleighTrain.height.toPx(), paint.color, l, r, sleigh.pose)
+                    drawSleighTab(
+                        index, size.width, size.height, SleighTrain.height.toPx(), paint.color, l, r, sleigh.pose,
+                        com.wdtt.client.ui.festive.SleighLayers.FIGURE,
+                    )
                 }
             },
         verticalArrangement = Arrangement.Center,

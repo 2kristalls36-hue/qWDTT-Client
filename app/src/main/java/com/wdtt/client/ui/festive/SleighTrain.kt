@@ -231,7 +231,8 @@ internal enum class Mono {
 /**
  * One part: its [path] filled (or stroked [stroke] wide) with [color]; [gap] wide around it
  * the parts under it are cut away in the silhouette, and outlined in a darker shade in
- * colour, so it stands apart from them. It moves with [joint].
+ * colour, so it stands apart from them; [outline] wide around it a dark edge in both (so it
+ * stands apart from the snow it is on). It moves with [joint].
  */
 internal class Part(
     val path: Path,
@@ -241,6 +242,7 @@ internal class Part(
     val gap: Float,
     val dash: Float,
     val joint: Int,
+    val outline: Float = 0f,
 )
 
 /** A figure: its parts in drawing order and its joints (pivot, parent). */
@@ -318,8 +320,8 @@ private class Figure {
         at = was
     }
 
-    fun fill(color: Color?, mono: Mono = Mono.Fill, gap: Float = 0f, body: Path.() -> Unit) {
-        parts += Part(Path().apply(body), color, mono, 0f, gap, 0f, at)
+    fun fill(color: Color?, mono: Mono = Mono.Fill, gap: Float = 0f, outline: Float = 0f, body: Path.() -> Unit) {
+        parts += Part(Path().apply(body), color, mono, 0f, gap, 0f, at, outline)
     }
 
     fun line(color: Color?, width: Float, mono: Mono = Mono.Fill, gap: Float = 0f, dash: Float = 0f, body: Path.() -> Unit) {
@@ -359,7 +361,8 @@ private fun Path.star(cx: Float, cy: Float, r: Float) {
 
 /** A sled runner along the bottom, curled at the back, sweeping up in front. */
 private fun Figure.runner() {
-    fill(Gold) {
+    // A dark edge, so the runner stands apart from the snow it slides on.
+    fill(Gold, outline = 0.2f) {
         moveTo(0.6f, 20.2f)
         cubicTo(0.8f, 21.6f, 1.8f, 22.4f, 3.2f, 22.4f)
         lineTo(28.6f, 22.4f)
@@ -374,7 +377,7 @@ private fun Figure.runner() {
     }
     // The shine along it, and the knobs at its ends.
     line(Gold.tint(0.55f), 0.25f, Mono.Skip) { seg(3.4f, 21.75f, 28.4f, 21.75f) }
-    fill(Gold, gap = 0.2f) {
+    fill(Gold, outline = 0.2f) {
         circle(33.2f, 16.7f, 0.85f)
         circle(1.05f, 19.75f, 0.6f)
     }
@@ -879,7 +882,7 @@ private fun reindeer(leads: Boolean) = figure {
                             circle(23.4f + dx, 21f, 0.45f)
                         }
                         fill(Cream, Mono.Skip) { oval(23.45f + dx, 21.1f, 0.55f, 0.28f) }
-                        fill(Hoof, gap = 0.18f) { poly(23.15f + dx, 21.6f, 24.45f + dx, 21.5f, 24.8f + dx, 22.6f, 23.1f + dx, 22.6f) }
+                        fill(Hoof, outline = 0.2f) { poly(23.15f + dx, 21.6f, 24.45f + dx, 21.5f, 24.8f + dx, 22.6f, 23.1f + dx, 22.6f) }
                     }
                 }
             }
@@ -906,7 +909,7 @@ private fun reindeer(leads: Boolean) = figure {
                             circle(10.58f + dx, 21f, 0.45f)
                         }
                         fill(Cream, Mono.Skip) { oval(10.62f + dx, 21.1f, 0.55f, 0.28f) }
-                        fill(Hoof, gap = 0.18f) { poly(10.3f + dx, 21.6f, 11.6f + dx, 21.5f, 11.95f + dx, 22.6f, 10.25f + dx, 22.6f) }
+                        fill(Hoof, outline = 0.2f) { poly(10.3f + dx, 21.6f, 11.6f + dx, 21.5f, 11.95f + dx, 22.6f, 10.25f + dx, 22.6f) }
                     }
                 }
             }
@@ -1235,6 +1238,11 @@ private fun DrawScope.part(p: Part, coloured: Boolean, plain: Color, alpha: Floa
         if (own) drawPath(p.path, color.shade(0.45f).copy(alpha = color.alpha), style = ring)
         else drawPath(p.path, Color.Black, style = ring, blendMode = BlendMode.Clear)
     }
+    if (p.outline > 0f) {
+        val edge = Stroke(p.stroke + 2f * p.outline, cap = strokeRound.cap, join = strokeRound.join)
+        val ink = if (own) color.shade(0.55f) else plain.shade(0.7f)
+        drawPath(p.path, ink.copy(alpha = color.alpha), style = edge)
+    }
     drawPath(p.path, color, style = style)
 }
 
@@ -1262,6 +1270,8 @@ fun DrawScope.drawSleighTab(
     colourFrom: Float,
     colourTo: Float,
     pose: TrainPose = TrainPose.Rest,
+    /** Which of it: the figures, what is behind them (ropes, trees, wind), or both. */
+    layers: Int = SleighLayers.ALL,
 ) {
     val count = SleighTrain.count
     val fig = SleighTrain.figures[index]
@@ -1359,9 +1369,8 @@ fun DrawScope.drawSleighTab(
         val fade = min(1f, sp * 1.6f)
         // Trees going by behind the train, here and there, at all depths: the near ones
         // larger and faster, the far ones smaller, slower and fainter; firs mostly, a snowy
-        // bush, a bare tree; swaying a little. Drawn behind what is there already, the near
-        // ones first.
-        for (layer in 0 until TREE_LAYERS) {
+        // bush, a bare tree; swaying a little. Drawn before the figures, the far ones first.
+        for (layer in TREE_LAYERS - 1 downTo 0) {
             val p = TREE_PARALLAX[layer]
             val cell = TREE_CELL[layer]
             val run = pose.distance * p
@@ -1407,13 +1416,17 @@ fun DrawScope.drawSleighTab(
             // Each streak comes and goes as it passes.
             val life = ((barX + 0.3f) / (count + 0.6f)).coerceIn(0f, 1f)
             val a = fade * 0.4f * sin(life * PI.toFloat())
-            drawLine(plain.copy(alpha = a), Offset(x, y), Offset(x + len, y), strokeWidth = 0.22f * unit, cap = StrokeCap.Round, blendMode = BlendMode.DstOver)
+            drawLine(plain.copy(alpha = a), Offset(x, y), Offset(x + len, y), strokeWidth = 0.22f * unit, cap = StrokeCap.Round)
         }
     }
 
     fun pass(coloured: Boolean) {
         clipRect(left = 0f, top = -height, right = width, bottom = height * 2f) {
-            hitch(coloured)
+            if (layers and SleighLayers.BACKDROP != 0) {
+                scenery(coloured)
+                hitch(coloured)
+            }
+            if (layers and SleighLayers.FIGURE == 0) return@clipRect
             translate(left, top) {
                 scale(unit, unit, pivot = Offset.Zero) {
                     parts(fig, placed, coloured, plain)
@@ -1430,7 +1443,6 @@ fun DrawScope.drawSleighTab(
                 }
             }
             bird(coloured)
-            scenery(coloured)
         }
     }
 
@@ -1489,7 +1501,7 @@ private fun DrawScope.bush(x: Float, base: Float, size: Float, coloured: Boolean
         circle(x, base - size * 0.5f, size * 0.42f)
     }
     if (!coloured) {
-        drawPath(body, plain.copy(alpha = alpha * 0.35f), blendMode = BlendMode.DstOver)
+        drawPath(body, plain.copy(alpha = alpha * 0.35f))
         return
     }
     val snow = Path().apply {
@@ -1497,8 +1509,8 @@ private fun DrawScope.bush(x: Float, base: Float, size: Float, coloured: Boolean
         oval(x - size * 0.4f, base - size * 0.62f, size * 0.24f, size * 0.1f)
         oval(x + size * 0.36f, base - size * 0.58f, size * 0.22f, size * 0.1f)
     }
-    drawPath(snow, SnowWhite.copy(alpha = alpha), blendMode = BlendMode.DstOver)
-    drawPath(body, Fir.shade(0.15f).copy(alpha = alpha), blendMode = BlendMode.DstOver)
+    drawPath(body, Fir.shade(0.15f).copy(alpha = alpha))
+    drawPath(snow, SnowWhite.copy(alpha = alpha))
 }
 
 /** A bare winter tree: a trunk forking into branches, snow along them in colour. */
@@ -1521,7 +1533,7 @@ private fun DrawScope.bareTree(x: Float, base: Float, size: Float, coloured: Boo
     }
     val stroke = Stroke(width = w * 2f, cap = StrokeCap.Round, join = StrokeJoin.Round)
     if (!coloured) {
-        drawPath(limbs, plain.copy(alpha = alpha * 0.35f), style = stroke, blendMode = BlendMode.DstOver)
+        drawPath(limbs, plain.copy(alpha = alpha * 0.35f), style = stroke)
         return
     }
     val snow = Path().apply {
@@ -1532,8 +1544,17 @@ private fun DrawScope.bareTree(x: Float, base: Float, size: Float, coloured: Boo
         moveTo(x + size * 0.24f, base - size * 0.6f)
         lineTo(x + size * 0.08f, base - size * 0.48f)
     }
-    drawPath(snow, SnowWhite.copy(alpha = alpha), style = Stroke(width = w * 1.4f, cap = StrokeCap.Round), blendMode = BlendMode.DstOver)
-    drawPath(limbs, FirTrunk.copy(alpha = alpha), style = stroke, blendMode = BlendMode.DstOver)
+    drawPath(limbs, FirTrunk.copy(alpha = alpha), style = stroke)
+    drawPath(snow, SnowWhite.copy(alpha = alpha), style = Stroke(width = w * 1.4f, cap = StrokeCap.Round))
+}
+
+/** The parts of a tab of the train, to draw apart (the figures under a legibility border). */
+object SleighLayers {
+    /** The trees and the wind going by, the ropes and the bar between the figures. */
+    const val BACKDROP = 1
+    /** The figures, the bird, the snow thrown up. */
+    const val FIGURE = 2
+    const val ALL = 3
 }
 
 /** How large the bullfinch is against the grid of the figures. */
@@ -1554,7 +1575,7 @@ private fun DrawScope.tree(x: Float, base: Float, size: Float, coloured: Boolean
         }
     }
     if (!coloured) {
-        drawPath(body, plain.copy(alpha = alpha * (if (far) 0.25f else 0.35f)), blendMode = BlendMode.DstOver)
+        drawPath(body, plain.copy(alpha = alpha * (if (far) 0.25f else 0.35f)))
         return
     }
     val snow = Path().apply {
@@ -1570,8 +1591,7 @@ private fun DrawScope.tree(x: Float, base: Float, size: Float, coloured: Boolean
             close()
         }
     }
-    // Drawn behind: the snow first, then the tree under it.
-    drawPath(snow, SnowWhite.copy(alpha = alpha), blendMode = BlendMode.DstOver)
-    drawPath(body, (if (far) Fir.tint(0.25f) else Fir).copy(alpha = alpha), blendMode = BlendMode.DstOver)
-    drawRect(FirTrunk.copy(alpha = alpha), Offset(x - size * 0.05f, base - size * 0.14f), androidx.compose.ui.geometry.Size(size * 0.1f, size * 0.14f), blendMode = BlendMode.DstOver)
+    drawRect(FirTrunk.copy(alpha = alpha), Offset(x - size * 0.05f, base - size * 0.14f), androidx.compose.ui.geometry.Size(size * 0.1f, size * 0.14f))
+    drawPath(body, (if (far) Fir.tint(0.25f) else Fir).copy(alpha = alpha))
+    drawPath(snow, SnowWhite.copy(alpha = alpha))
 }

@@ -46,18 +46,23 @@ fun AppRoot(settingsStore: SettingsStore) {
     val update by com.wdtt.client.lite.AppUpdate.available.collectAsState()
     androidx.compose.runtime.LaunchedEffect(Unit) { com.wdtt.client.lite.AppUpdate.checkIfDue(context) }
     val lite = androidx.compose.runtime.remember { com.wdtt.client.lite.LiteSettings(context) }
-    val glassOn by lite.liquidGlass.collectAsState(false)
+    // Until the settings are read here, as they were read at the start (see StartupSettings).
+    val startup = com.wdtt.client.lite.StartupSettings
+    val glassSaved by lite.liquidGlass.collectAsState(null)
+    val glassOn = glassSaved ?: startup.liquidGlass ?: false
     val glassLayer = androidx.compose.ui.graphics.rememberGraphicsLayer()
     val backdrop = androidx.compose.runtime.remember(glassLayer) { com.wdtt.client.ui.components.surface.GlassBackdrop(glassLayer) }
         .takeIf { glassOn && com.wdtt.client.ui.components.surface.LiquidGlass.supported }
     val hapticsOn by lite.haptics.collectAsState(true)
     val magnetOn by lite.magnet.collectAsState(true)
     val appHaptics = com.wdtt.client.ui.motion.rememberAppHaptics(hapticsOn)
-    val glassTransparency by lite.glassTransparency.collectAsState(com.wdtt.client.lite.LiteSettings.DEFAULT_GLASS_TRANSPARENCY)
+    val transparencySaved by lite.glassTransparency.collectAsState(null)
+    val glassTransparency = transparencySaved ?: startup.glassTransparency ?: com.wdtt.client.lite.LiteSettings.DEFAULT_GLASS_TRANSPARENCY
     backdrop?.transparency = glassTransparency
     // The glass rim takes the colour of the power level, like the connect button;
     // only the maximum level keeps the rainbow.
-    val power by lite.powerLevel.collectAsState(com.wdtt.client.lite.PowerLevel.Default)
+    val powerSaved by lite.powerLevel.collectAsState(null)
+    val power = powerSaved ?: startup.powerLevel ?: com.wdtt.client.lite.PowerLevel.Default
     val rimTarget = com.wdtt.client.ui.home.levelColors(
         if (power == com.wdtt.client.lite.PowerLevel.Maximum) com.wdtt.client.lite.PowerLevel.Balanced else power,
     ).accent
@@ -78,7 +83,8 @@ fun AppRoot(settingsStore: SettingsStore) {
         androidx.compose.material3.LocalContentColor provides androidx.compose.material3.MaterialTheme.colorScheme.onBackground,
     ) {
     // The physical screen (rounded corners, navigation): the tab bar fits itself to it.
-    val screenFitOn by lite.screenFit.collectAsState(true)
+    val screenFitSaved by lite.screenFit.collectAsState(null)
+    val screenFitOn = screenFitSaved ?: startup.screenFit ?: true
     val measuredShape = com.wdtt.client.ui.components.layout.rememberScreenShape()
     // Setting off: as if the corners were unknown, everything keeps its usual shape.
     val screenShape = if (screenFitOn) measuredShape else com.wdtt.client.ui.components.layout.ScreenShape.Unknown
@@ -113,7 +119,7 @@ fun AppRoot(settingsStore: SettingsStore) {
             }
         }
         }
-        val level by lite.powerLevel.collectAsState(com.wdtt.client.lite.PowerLevel.Default)
+        val level = power
         val levelColors = com.wdtt.client.ui.home.levelColors(level)
         ArdttNavigationBar(
             items = items,

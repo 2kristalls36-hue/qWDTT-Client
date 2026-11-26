@@ -18,6 +18,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
+import com.wdtt.client.lite.StartupSettings
+import kotlinx.coroutines.launch
 import com.wdtt.client.ui.AppRoot
 import com.wdtt.client.ui.theme.ArdttTheme
 
@@ -107,9 +110,24 @@ class MainActivity : ComponentActivity() {
         checkAndRequestNotifications()
         handleIncomingIntent(intent)
 
+        // The first frame waits for the saved theme, power level and glass (at most a second;
+        // the window's own background shows meanwhile): the app opens as it was left, without
+        // showing the defaults first and jumping to the saved values.
+        lifecycleScope.launch { StartupSettings.load(applicationContext) }
+        val started = android.os.SystemClock.uptimeMillis()
+        val content = findViewById<android.view.View>(android.R.id.content)
+        content.viewTreeObserver.addOnPreDrawListener(object : android.view.ViewTreeObserver.OnPreDrawListener {
+            override fun onPreDraw(): Boolean {
+                val go = StartupSettings.ready || android.os.SystemClock.uptimeMillis() - started > 1000
+                if (go) content.viewTreeObserver.removeOnPreDrawListener(this)
+                return go
+            }
+        })
+
         setContent {
             val settingsStore = remember { SettingsStore(this) }
-            val themeMode by settingsStore.themeMode.collectAsStateWithLifecycle(initialValue = "system")
+            val savedTheme by settingsStore.themeMode.collectAsStateWithLifecycle(initialValue = null)
+            val themeMode = savedTheme ?: StartupSettings.themeMode ?: "system"
             ArdttTheme(themeMode = themeMode) {
                 AppRoot(settingsStore = settingsStore)
             }

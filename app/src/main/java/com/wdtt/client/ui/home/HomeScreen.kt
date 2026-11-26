@@ -118,9 +118,11 @@ fun HomeScreen(settingsStore: SettingsStore, onOpenProfiles: () -> Unit) {
         else -> TunnelUiState.Off
     }
 
-    // Null until the saved level is read: the card and the button appear with the right
-    // colors at once instead of sliding over from the default level.
-    val levelLoaded by lite.powerLevel.collectAsStateWithLifecycle(null)
+    // The saved level; until it is read here, as it was read when the app started (the
+    // first frame waits for that): the card and the button appear with the right level and
+    // colours at once instead of sliding over from the default one.
+    val levelRead by lite.powerLevel.collectAsStateWithLifecycle(null)
+    val levelLoaded = levelRead ?: com.wdtt.client.lite.StartupSettings.powerLevel
     val level = levelLoaded ?: PowerLevel.Default
     // Slider thumb position, shared by the power card and the connect button.
     val powerPos = remember(levelLoaded != null) { androidx.compose.animation.core.Animatable(level.ordinal / 2f) }

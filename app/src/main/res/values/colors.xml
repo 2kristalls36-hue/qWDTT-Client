@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#1E1E1E</color>
+    <!-- The app's background (ArdttColors), shown before the first frame. -->
+    <color name="window_background">#F3F8FF</color>
 </resources>

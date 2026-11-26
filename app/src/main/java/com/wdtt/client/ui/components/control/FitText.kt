@@ -3,6 +3,11 @@ package com.wdtt.client.ui.components.control
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -20,8 +25,28 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.isSpecified
 
 /**
+ * Labels that keep one size: in a row of chips, when one label has to shrink to fit, the
+ * others shrink with it, so the row does not show the same kind of label in two sizes.
+ */
+class FitGroup {
+    internal val needs = mutableStateMapOf<Any, Float>()
+    internal val settled = mutableStateMapOf<Any, Boolean>()
+    internal val scale: Float get() = needs.values.minOrNull() ?: 1f
+    internal val allSettled: Boolean get() = settled.values.all { it }
+}
+
+internal val LocalFitGroup = compositionLocalOf<FitGroup?> { null }
+
+/** The [FitText] labels inside [content] keep one size. */
+@Composable
+fun FitTogether(content: @Composable () -> Unit) {
+    CompositionLocalProvider(LocalFitGroup provides remember { FitGroup() }, content = content)
+}
+
+/**
  * Text for controls of fixed width: with a large system font a label that does not fit
  * is scaled down a little (to [minScale] at most) instead of being cut or broken mid-word.
+ * Inside [FitTogether] the labels shrink together.
  */
 @Composable
 fun FitText(
@@ -35,19 +60,40 @@ fun FitText(
     minScale: Float = 0.62f,
 ) {
     val base: TextUnit = style.fontSize.takeIf { it.isSpecified } ?: LocalTextStyle.current.fontSize
+    // How far this label itself has to shrink; in a group the smallest of them is shown.
     var scale by remember(text, base) { mutableFloatStateOf(1f) }
     var ready by remember(text, base) { mutableStateOf(false) }
+    val group = LocalFitGroup.current
+    val key = remember { Any() }
+    if (group != null) {
+        SideEffect {
+            group.needs[key] = scale
+            group.settled[key] = ready
+        }
+        DisposableEffect(group) {
+            onDispose {
+                group.needs.remove(key)
+                group.settled.remove(key)
+            }
+        }
+    }
+    val shown = if (group != null) minOf(scale, group.scale) else scale
     Text(
         text,
-        modifier = modifier.drawWithContent { if (ready) drawContent() },
-        style = style.copy(fontSize = base * scale),
+        modifier = modifier.drawWithContent { if (group?.allSettled ?: ready) drawContent() },
+        style = style.copy(fontSize = base * shown),
         color = color,
         fontWeight = fontWeight,
         maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,
         textAlign = textAlign,
         onTextLayout = { layout ->
-            if (doesNotFit(layout, text) && scale > minScale) scale -= 0.05f else ready = true
+            if (doesNotFit(layout, text) && shown > minScale) {
+                scale = shown - 0.05f
+                ready = false
+            } else {
+                ready = true
+            }
         },
     )
 }

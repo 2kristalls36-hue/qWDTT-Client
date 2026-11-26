@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -56,10 +57,15 @@ fun GlassHeaderPage(
     var headerPx by remember { mutableStateOf(0) }
     val top = with(LocalDensity.current) { headerPx.toDp() }
     val plate by animateFloatAsState(if (scrolled) 1f else 0f, tween(260), label = "plate")
+    // Scrolled: the content fades out under the status bar, so the lines passing up there do
+    // not show above the header. The glass plate still refracts it whole.
+    val statusTop = WindowInsets.statusBars.getTop(LocalDensity.current).toFloat()
+    val fadeEnd = with(LocalDensity.current) { 14.dp.toPx() }
     Box(Modifier.fillMaxSize()) {
         Box(
             Modifier
                 .fillMaxSize()
+                .then(if (plate > 0.01f) Modifier.fadeTop(statusTop, statusTop + fadeEnd, plate) else Modifier)
                 .glassBackdropSource(backdrop, fill = MaterialTheme.colorScheme.background),
         ) { content(top) }
 
@@ -110,3 +116,24 @@ private fun BoxScope.HeaderPlate(backdrop: GlassBackdrop?, alpha: Float) {
         )
     }
 }
+
+/** Fades what is drawn out towards the top: hidden by [strength] above [from], whole below [to]. */
+private fun Modifier.fadeTop(from: Float, to: Float, strength: Float): Modifier = this
+    .graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
+    .drawWithContent {
+        drawContent()
+        if (to <= 0f) return@drawWithContent
+        val faint = androidx.compose.ui.graphics.Color.Black.copy(alpha = 1f - strength)
+        val whole = androidx.compose.ui.graphics.Color.Black
+        drawRect(
+            androidx.compose.ui.graphics.Brush.verticalGradient(
+                0f to faint,
+                (from / to).coerceIn(0f, 1f) to faint,
+                1f to whole,
+                startY = 0f,
+                endY = to,
+            ),
+            size = androidx.compose.ui.geometry.Size(size.width, to),
+            blendMode = androidx.compose.ui.graphics.BlendMode.DstIn,
+        )
+    }

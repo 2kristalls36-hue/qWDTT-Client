@@ -73,6 +73,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.roundToInt
 import androidx.compose.ui.text.TextStyle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.wdtt.client.MainActivity
@@ -174,15 +175,13 @@ fun HomeScreen(settingsStore: SettingsStore, onOpenProfiles: () -> Unit) {
         if (state == TunnelUiState.On && profileId.isNotBlank()) TunnelActions.refreshSubscription(context, profileId)
     }
 
-    Column(
+    HomeColumn(
         Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .windowInsetsPadding(WindowInsets.statusBars)
             .padding(horizontal = 16.dp)
             .padding(top = 20.dp, bottom = ArdttBottomChrome.navigationReserve() + 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
         Row(Modifier.fillMaxWidth().widthIn(max = 460.dp), verticalAlignment = Alignment.CenterVertically) {
             BrandTitle(
@@ -202,52 +201,50 @@ fun HomeScreen(settingsStore: SettingsStore, onOpenProfiles: () -> Unit) {
             )
         }
 
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            ConnectButton(
-                state = state,
-                blend = powerPos.value,
-                stages = stageView,
-                onClick = {
-                    haptics.perform(com.wdtt.client.ui.motion.Haptic.Click)
-                    when (state) {
-                        TunnelUiState.Off -> {
-                            val activity = context as? MainActivity ?: return@ConnectButton
-                            TunnelActions.connect(activity) { problem ->
-                                when (problem) {
-                                    TunnelActions.Problem.NoProfile -> {
-                                        Toast.makeText(context, "Профиль не выбран.", Toast.LENGTH_SHORT).show()
-                                        onOpenProfiles()
-                                    }
-                                    TunnelActions.Problem.NoCallLink -> {
-                                        Toast.makeText(context, "Для подключения нужна ссылка на звонок VK.", Toast.LENGTH_LONG).show()
-                                        sheetOpen = true
-                                    }
+        ConnectButton(
+            state = state,
+            blend = powerPos.value,
+            stages = stageView,
+            onClick = {
+                haptics.perform(com.wdtt.client.ui.motion.Haptic.Click)
+                when (state) {
+                    TunnelUiState.Off -> {
+                        val activity = context as? MainActivity ?: return@ConnectButton
+                        TunnelActions.connect(activity) { problem ->
+                            when (problem) {
+                                TunnelActions.Problem.NoProfile -> {
+                                    Toast.makeText(context, "Профиль не выбран.", Toast.LENGTH_SHORT).show()
+                                    onOpenProfiles()
+                                }
+                                TunnelActions.Problem.NoCallLink -> {
+                                    Toast.makeText(context, "Для подключения нужна ссылка на звонок VK.", Toast.LENGTH_LONG).show()
+                                    sheetOpen = true
                                 }
                             }
                         }
-                        else -> TunnelActions.disconnect(context)
                     }
-                },
-            )
-            val notice by TunnelManager.stopNotice.collectAsStateWithLifecycle()
-            StatusLine(
-                state, level, stageView,
-                notice = notice.takeIf { state == TunnelUiState.Off }
-                    ?: trustedPause?.let { "Пауза: доверенная сеть «$it»." }
-                    ?: VK_WAIT_NOTICE.takeIf { vkWait && state == TunnelUiState.Connecting },
-            )
-            StatsRow(
-                visible = state == TunnelUiState.On,
-                sinceMs = since,
-                traffic = Traffic(downMb, upMb, downActive, upActive),
-                arrowColor = lerp(
-                    lerp(levelColors(PowerLevel.Stable).accent, levelColors(PowerLevel.Balanced).accent, (powerPos.value * 2f).coerceIn(0f, 1f)),
-                    levelColors(PowerLevel.Maximum).neon[1],
-                    ((powerPos.value - 0.5f) * 2f).coerceIn(0f, 1f),
-                ),
-                ping = ping,
-            )
-        }
+                    else -> TunnelActions.disconnect(context)
+                }
+            },
+        )
+        val notice by TunnelManager.stopNotice.collectAsStateWithLifecycle()
+        StatusLine(
+            state, level, stageView,
+            notice = notice.takeIf { state == TunnelUiState.Off }
+                ?: trustedPause?.let { "Пауза: доверенная сеть «$it»." }
+                ?: VK_WAIT_NOTICE.takeIf { vkWait && state == TunnelUiState.Connecting },
+        )
+        StatsRow(
+            visible = state == TunnelUiState.On,
+            sinceMs = since,
+            traffic = Traffic(downMb, upMb, downActive, upActive),
+            arrowColor = lerp(
+                lerp(levelColors(PowerLevel.Stable).accent, levelColors(PowerLevel.Balanced).accent, (powerPos.value * 2f).coerceIn(0f, 1f)),
+                levelColors(PowerLevel.Maximum).neon[1],
+                ((powerPos.value - 0.5f) * 2f).coerceIn(0f, 1f),
+            ),
+            ping = ping,
+        )
 
         PowerCard(
             level = level,
@@ -362,8 +359,10 @@ private fun StatusLine(state: TunnelUiState, level: PowerLevel, stage: com.wdtt.
     }
     // Shown while connecting: which stage out of how many.
     val counter = stage?.takeIf { !it.failed && it.index < it.total }?.let { "${it.index + 1} из ${it.total}" }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Box(Modifier.size(8.dp).background(ledColor, CircleShape))
+    // The LED by the first line when the text runs to more.
+    val line = with(androidx.compose.ui.platform.LocalDensity.current) { MaterialTheme.typography.bodySmall.lineHeight.toDp() }
+    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(Modifier.padding(top = ((line - 8.dp) / 2).coerceAtLeast(0.dp)).size(8.dp).background(ledColor, CircleShape))
         androidx.compose.animation.AnimatedContent(
             targetState = text,
             transitionSpec = {
@@ -588,6 +587,57 @@ private fun tileValueStyle() = TextStyle(
 
 /** How much the power card is drawn up into the gap above it. */
 private val PowerCardLift = 16.dp
+
+/** The connect button is made no smaller than this on a short screen. */
+private const val ButtonMinScale = 0.75f
+
+/**
+ * The main screen top to bottom: the header, the connect button, the status line, the
+ * statistics, the power card. On a short screen (or with a large font) the button is drawn
+ * smaller, as much as it takes for the power card to fit above the tab bar (down to
+ * [ButtonMinScale]; beyond that the screen scrolls). The status line takes the place of one
+ * line: a longer one (a notice, a failed stage) runs over the place of the statistics, which
+ * are hidden then, so the card does not move and the button does not change its size.
+ * Everything is worked out in one layout pass, from the height the screen leaves without
+ * scrolling (the minimum height the scroll passes on).
+ */
+@Composable
+private fun HomeColumn(modifier: Modifier, content: @Composable () -> Unit) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val line = MaterialTheme.typography.bodySmall.lineHeight
+    androidx.compose.ui.layout.Layout(content, modifier) { measurables, constraints ->
+        val loose = constraints.copy(minWidth = 0, minHeight = 0, maxHeight = androidx.compose.ui.unit.Constraints.Infinity)
+        val (header, button, status, stats, card) = measurables.map { it.measure(loose) }
+        val gap = 24.dp.roundToPx()
+        val small = 14.dp.roundToPx()
+        val oneLine = with(density) { line.toPx() }
+        // One line of status; more runs over the statistics.
+        val statusPlace = if (status.height < oneLine * 1.5f) status.height else kotlin.math.ceil(oneLine).toInt()
+        val rest = header.height + gap + small + statusPlace + small + stats.height + gap + card.height
+        val room = constraints.minHeight
+        val scale = if (room <= 0) 1f else ((room - rest).toFloat() / button.height).coerceIn(ButtonMinScale, 1f)
+        val buttonPlace = (button.height * scale).roundToInt()
+        val width = constraints.maxWidth
+        val height = maxOf(rest + buttonPlace, constraints.minHeight)
+        layout(width, height) {
+            fun androidx.compose.ui.layout.Placeable.centre() = (width - this.width) / 2
+            var y = 0
+            header.place(header.centre(), y)
+            y += header.height + gap
+            // Scaled about its centre, its top where the place for it begins.
+            button.placeWithLayer(button.centre(), y - (button.height - buttonPlace) / 2) {
+                scaleX = scale
+                scaleY = scale
+            }
+            y += buttonPlace + small
+            status.place(status.centre(), y)
+            y += statusPlace + small
+            stats.place(stats.centre(), y)
+            y += stats.height + gap
+            card.place(card.centre(), y)
+        }
+    }
+}
 
 /** Under the button while the engine waits out a VK limit and retries by itself. */
 internal const val VK_WAIT_NOTICE = "VK временно ограничил запросы.\nПриложение повторит подключение автоматически."

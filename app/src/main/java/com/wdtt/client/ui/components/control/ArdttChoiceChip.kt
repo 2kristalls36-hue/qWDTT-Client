@@ -81,6 +81,8 @@ fun <T> ArdttChoiceChipRow(
             .selectableGroup(),
         horizontalArrangement = Arrangement.spacedBy(ArdttLayout.ControlSpacing),
     ) {
+        // The labels of the row keep one size.
+        FitTogether {
         choices.forEach { choice ->
             ArdttChoiceChip(
                 label = choice.label,
@@ -96,6 +98,7 @@ fun <T> ArdttChoiceChipRow(
                 height = chipHeight,
                 count = choice.count,
             )
+        }
         }
     }
 }

@@ -10,43 +10,36 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * A snow globe the shape of the tab bar: liquid, and snow that sinks through it and lies
- * wherever gravity takes it. Lengths are in bar heights (the bar is [aspect] long and 1
- * high, y down); times in seconds.
+ * A snow globe the shape of the tab bar: liquid with snow hanging in it, and a thin crust of
+ * snow stuck to the glass. Lengths are in bar heights (the bar is [aspect] long and 1 high,
+ * y down); times in seconds.
  *
  * Every flake lives all the time — none is ever removed or made — so nothing vanishes or
  * appears from nowhere:
- * - In the liquid a flake is carried by the flow and sinks slowly along gravity, swaying
- *   as it falls; a shake throws it about (heavier than the liquid, it lags behind). About
- *   one in four is a crystal: it falls like a little disc, slower, gliding one way and the
- *   other as it tips over, and turns slowly.
- * - Coming to rest on the glass or on the snow, it becomes a grain of the heap: a little
- *   round grain that the others press on and rub against (position-based dynamics). So
- *   the heap piles up wherever gravity takes it — in a rounded end held sideways, on the
- *   top wall upside down — and when it moves, it moves as a mass: the grains push on one
- *   another, a slope slides down and heaps up at the bottom.
- * - A grain that has come to rest sleeps: it stays exactly where it is, costs nothing and
- *   holds up the ones on it. It wakes only when it no longer holds where it lies (see
- *   [recheck]): the phone turned so that the snow under it is steeper than its own angle
- *   of hold (loose grains about 21°, firm ones up to 40°), or the glass under it steeper
- *   than the snow holds on, or what held it up gone or moving off, or another grain run
- *   into it. So the snow gives way only past a certain tilt, and then bit by bit, the loose
- *   grains first; on the move it runs on down to a gentler slope than it holds at rest.
- *   A still globe is quite still.
- * - Snow on the glass turned up clings to it until gravity pulls harder than its grip,
- *   then comes off grain by grain from the surface, in lumps when pulled hard; the grains
- *   next to the glass hold on best.
- * - The liquid lifts the grains on top where it runs fast over them; a shake sloshes the
- *   liquid against the glass into big eddies and tears the heap up into a blizzard.
+ * - Most of the snow hangs in the liquid for good (it is as heavy as the liquid, near
+ *   enough): it fills the whole glass evenly, each flake keeping a little apart from the
+ *   others, and drifts very slowly with the faint currents and the way the phone leans:
+ *   tilted, the snow flows over to the lower side, a little thicker there, leaving no gaps.
+ *   About one in three of the hanging flakes is a crystal that tips and turns slowly.
+ * - The droplet drags the liquid as it moves and the snow swirls after it; a quick move of
+ *   the phone sloshes the liquid against the glass and whirls the snow up, until it calms
+ *   down and hangs again. Then only the slow drift is left, and [lively] says so.
+ * - The crust: heavier crumbs stuck to the glass at the bottom, a grain or two deep. They
+ *   are little round grains that press on and rub against one another (position-based
+ *   dynamics). A resting grain sleeps — stays exactly where it is — and wakes only when it
+ *   no longer holds (see [recheck]): the phone turned so far that the snow or the glass
+ *   under it is steeper than it holds, what held it gone, another grain running into it.
+ *   So the crust clings, slides down the glass only when the phone is turned far, comes off
+ *   the glass turned up grain by grain, and settles on the glass again wherever it falls.
+ *   Running liquid and a shake lift it into the liquid; it sinks back slowly.
  * - The liquid is a coarse grid (stable fluids: forces, advection, pressure projection,
- *   damping); a moving droplet drags it along and it whirls round the droplet's ends.
- * - When nothing moves, [step] says so and the caller stops calling it.
+ *   damping).
  */
 class SnowGlobePhysics(
     val aspect: Float,
     /** Corner radius of the bar, in bar heights (0.5 — a pill). */
     val corner: Float = 0.5f,
-    val flakes: Int = 1400,
+    val flakes: Int = 900,
     seed: Int = 7,
 ) {
     // ---- Liquid ----
@@ -78,6 +71,31 @@ class SnowGlobePhysics(
      */
     val weight = FloatArray(flakes)
     private val phase = FloatArray(flakes)
+    /**
+     * Hanging in the liquid for good (as heavy as the liquid, near enough): most of the
+     * snow. The rest is the crust, heavier crumbs that settle on the glass.
+     */
+    val suspended = BooleanArray(flakes)
+    /** How many flakes make the crust on the glass (the first ones). */
+    val crustCount: Int
+    /** The push a hanging flake gets from its neighbours, so the snow keeps its spacing. */
+    private val spreadX = FloatArray(flakes)
+    private val spreadY = FloatArray(flakes)
+    /** Spacing of the hanging snow, and a grid for finding the hanging neighbours. */
+    private val spacing: Float
+    private val scols: Int
+    private val srows: Int
+    private val sStart: IntArray
+    private val sItems = IntArray(flakes)
+    private val sOf = IntArray(flakes)
+
+    /**
+     * Something stirs: the liquid runs, the phone is shaken, a grain of the crust moves or
+     * falls. Otherwise only the hanging snow drifts, so slowly that half the frames will do.
+     */
+    var lively = true
+        private set
+
     /**
      * A slow wandering of each flake in the liquid (the faint currents that never quite
      * die in a globe): it spreads whatever pattern a shake left, so the snow settles as an
@@ -193,8 +211,15 @@ class SnowGlobePhysics(
     private fun len(a: Float, b: Float) = sqrt(a * a + b * b)
 
     init {
-        // All the snow, packed as grains pack, fills [FULL_DEPTH] of the bar.
-        grain = sqrt(FULL_DEPTH * aspect * 0.82f / (flakes * Math.PI.toFloat() * 1.0133f))
+        crustCount = (flakes * CRUST_SHARE).toInt()
+        // The crust, packed as grains pack, lies [CRUST_DEPTH] deep over the flat bottom.
+        grain = sqrt(CRUST_DEPTH * aspect * 0.82f / (max(1, crustCount) * Math.PI.toFloat() * 1.0133f))
+        // The hanging snow spreads evenly through the glass.
+        val room = aspect - (4f - Math.PI.toFloat()) * corner * corner
+        spacing = sqrt(room / max(1, flakes - crustCount)) * SPREAD_REACH
+        scols = max(1, (aspect / spacing).toInt() + 1)
+        srows = max(1, (1f / spacing).toInt() + 1)
+        sStart = IntArray(scols * srows + 1)
         bucket = 2.6f * grain
         bcols = max(1, (aspect / bucket).toInt() + 1)
         brows = max(1, (1f / bucket).toInt() + 1)
@@ -208,8 +233,9 @@ class SnowGlobePhysics(
             // The class: mostly the lighter ones; bigger flakes lean to the heavier.
             val r = (rnd() * 0.75f + size[i] * 0.25f)
             weight[i] = WEIGHTS[(r * r * WEIGHTS.size).toInt().coerceIn(0, WEIGHTS.size - 1)]
-            // About one in four is a crystal: light, and on the bigger side.
-            if (rnd() < CRYSTALS) {
+            suspended[i] = i >= crustCount
+            // About one in three of the hanging ones is a crystal: on the bigger side.
+            if (suspended[i] && rnd() < CRYSTALS) {
                 crystal[i] = true
                 weight[i] = WEIGHTS[if (rnd() < 0.6f) 0 else 1]
                 size[i] = 0.45f + 0.55f * size[i]
@@ -277,6 +303,45 @@ class SnowGlobePhysics(
         gravityY = 1f
     }
 
+    /**
+     * The hanging snow spread evenly through the glass (on a loose grid, each flake a little
+     * off its place), above the crust.
+     */
+    private fun hangEvenly() {
+        val a = spacing / SPREAD_REACH
+        val rowStep = a * 0.866f
+        val px = ArrayList<Float>()
+        val py = ArrayList<Float>()
+        var row = 0
+        var yy = a * 0.5f
+        while (yy < 1f - CRUST_DEPTH - a * 0.3f) {
+            var xx = (if (row % 2 == 0) 0.5f else 1f) * a
+            while (xx < aspect) {
+                if (wall(xx, yy, glassNormal) < -0.02f) {
+                    px += xx
+                    py += yy
+                }
+                xx += a
+            }
+            yy += rowStep
+            row++
+        }
+        val n = px.size
+        val slots = IntArray(n) { it }
+        for (k in n - 1 downTo 1) {
+            val j = (rnd() * (k + 1)).toInt().coerceAtMost(k)
+            val t = slots[k]; slots[k] = slots[j]; slots[j] = t
+        }
+        var k = 0
+        for (i in crustCount until flakes) {
+            val slot = slots[k % max(1, n)]
+            k++
+            x[i] = px[slot] + (rnd() - 0.5f) * a * 0.6f
+            y[i] = py[slot] + (rnd() - 0.5f) * a * 0.6f
+            keepInside(i, 0f)
+        }
+    }
+
     /** The globe just shaken: every flake somewhere in the liquid, nothing lying. */
     fun scatter() {
         clear()
@@ -313,21 +378,22 @@ class SnowGlobePhysics(
         val wave1 = hash01(43, flakes) * 6.28f
         val wave2 = hash01(47, flakes) * 6.28f
         val key = FloatArray(px.size) { k ->
-            py[k] + grain * (1.3f * sin(px[k] * 3.7f + wave1) + 0.7f * sin(px[k] * 7.1f + wave2)) * 1.2f + rnd() * grain * 0.3f
+            py[k] + grain * (1.3f * sin(px[k] * 3.7f + wave1) + 0.7f * sin(px[k] * 7.1f + wave2)) * 0.4f + rnd() * grain * 0.3f
         }
         val order = px.indices.sortedByDescending { key[it] }
-        val grains = IntArray(flakes) { it }
-        for (k in flakes - 1 downTo 1) {
+        val grains = IntArray(crustCount) { it }
+        for (k in crustCount - 1 downTo 1) {
             val j = (rnd() * (k + 1)).toInt().coerceAtMost(k)
             val t = grains[k]; grains[k] = grains[j]; grains[j] = t
         }
-        for (k in 0 until min(flakes, order.size)) {
+        for (k in 0 until min(crustCount, order.size)) {
             val i = grains[k]
             x[i] = px[order[k]] + (rnd() - 0.5f) * grain * 0.1f
             y[i] = py[order[k]]
             lying[i] = true
             floating--
         }
+        hangEvenly()
         // Push the grains apart where they overlap, without setting them moving; then let
         // them settle into each other, out of sight; then the heap rests.
         settling = true
@@ -427,6 +493,7 @@ class SnowGlobePhysics(
         var changed = false
         if (lift(h, shake, fastest)) changed = true
         if (peel(h)) changed = true
+        spread()
         val sub = h / SUBSTEPS
         repeat(SUBSTEPS) { substep(sub, shakeX, shakeY) }
         buildBuckets()
@@ -445,6 +512,9 @@ class SnowGlobePhysics(
         surfaceClock++
         if (changed || heapChanged || (awake > 0 && surfaceClock % 4 == 0)) findSurface()
         heapChanged = false
+        var falling = false
+        for (i in 0 until crustCount) if (!lying[i]) { falling = true; break }
+        lively = falling || awake > 0 || fastest > 0.02f || changed || shake > 1.5f
         return floating > 0 || awake > 0 || fastest > 0.004f || changed || shake > 1.5f
     }
 
@@ -466,7 +536,7 @@ class SnowGlobePhysics(
      * the heap's mechanics move it. It holds unless:
      * - nothing is under it any more, or what it rests on is moving off;
      * - it lies on the surface and the surface there is steeper than its own angle of
-     *   hold (loose grains about 21°, firm ones up to 40°);
+     *   hold (loose grains about 40°, firm ones up to 60°: the crust is sticky);
      * - it lies on the glass and the glass is tilted further than the snow holds on it:
      *   then the snow slides down along the glass as a mass.
      * On the glass turned up it clings instead (it comes off by [peel]).
@@ -610,7 +680,7 @@ class SnowGlobePhysics(
     private fun travelling(j: Int) =
         !asleep[j] && lying[j] && len(vx[j], vy[j]) > MOVING && len(x[j] - trailX[j], y[j] - trailY[j]) > 0.25f * grain
 
-    /** The steepest slope grain [i] holds on, radians: loose about 21°, firm up to 40°. */
+    /** The steepest slope grain [i] holds on, radians: loose about 40°, firm up to 60°. */
     private fun holdAt(i: Int) = HOLD_MIN + HOLD_SPAN * cohesion[i]
 
     /** The steepest slope a grain on the move comes to rest on, radians: 16° to 28°. */
@@ -797,7 +867,7 @@ class SnowGlobePhysics(
      */
     private fun letGoAt(i: Int): Float {
         val gap = -wall(x[i], y[i], glassNormal) - radius[i]
-        val deep = (gap / (2f * grain * 0.87f) / FULL_LAYERS).coerceIn(0f, 1f)
+        val deep = (gap / CRUST_DEPTH).coerceIn(0f, 1f)
         return LET_GO_MIN + LET_GO_SPAN * (1f - deep) + (cohesion[i] - 0.5f) * 0.15f
     }
 
@@ -868,6 +938,68 @@ class SnowGlobePhysics(
         return any
     }
 
+    /**
+     * The hanging snow keeps its spacing: each hanging flake is pushed gently away from the
+     * hanging ones nearer than [spacing], and from the glass, so it fills the glass with no
+     * gaps; gravity only presses it a little thicker to the lower side.
+     */
+    private fun spread() {
+        sStart.fill(0)
+        for (i in 0 until flakes) {
+            spreadX[i] = 0f
+            spreadY[i] = 0f
+            if (!suspended[i] || lying[i]) {
+                sOf[i] = -1
+                continue
+            }
+            val ci = (x[i] / spacing).toInt().coerceIn(0, scols - 1)
+            val cj = (y[i] / spacing).toInt().coerceIn(0, srows - 1)
+            sOf[i] = cj * scols + ci
+            sStart[sOf[i] + 1]++
+        }
+        for (b in 1..scols * srows) sStart[b] += sStart[b - 1]
+        for (i in 0 until flakes) if (sOf[i] >= 0) sItems[sStart[sOf[i]]++] = i
+        for (b in scols * srows downTo 1) sStart[b] = sStart[b - 1]
+        sStart[0] = 0
+        val reach2 = spacing * spacing
+        for (i in 0 until flakes) {
+            val c = sOf[i]
+            if (c < 0) continue
+            val ci = c % scols
+            val cj = c / scols
+            var fx = 0f
+            var fy = 0f
+            for (dj in -1..1) for (di in -1..1) {
+                val ii = ci + di
+                val jj = cj + dj
+                if (ii < 0 || jj < 0 || ii >= scols || jj >= srows) continue
+                val b = jj * scols + ii
+                for (k in sStart[b] until sStart[b + 1]) {
+                    val j = sItems[k]
+                    if (j == i) continue
+                    val dx = x[i] - x[j]
+                    val dy = y[i] - y[j]
+                    val d2 = dx * dx + dy * dy
+                    if (d2 >= reach2 || d2 < 1e-10f) continue
+                    val d = sqrt(d2)
+                    val f = 1f - d / spacing
+                    fx += dx / d * f * f
+                    fy += dy / d * f * f
+                }
+            }
+            // And off the glass, the same way.
+            val wd = -wall(x[i], y[i], glassNormal)
+            val half = spacing * 0.5f
+            if (wd < half) {
+                val f = 1f - wd / half
+                fx -= glassNormal[0] * f * f * 2f
+                fy -= glassNormal[1] * f * f * 2f
+            }
+            spreadX[i] = fx * SPREAD
+            spreadY[i] = fy * SPREAD
+        }
+    }
+
     private fun buildBuckets() {
         bucketStart.fill(0)
         for (i in 0 until flakes) {
@@ -934,7 +1066,7 @@ class SnowGlobePhysics(
                 vy[i] = (y[i] - y0[i]) / h
                 keepInside(i, 1.25f)
                 val down = vx[i] * gravityX + vy[i] * gravityY
-                if (supported[i] && down > -0.02f && len(vx[i], vy[i]) < LAND_SPEED) {
+                if (!suspended[i] && supported[i] && down > -0.02f && len(vx[i], vy[i]) < LAND_SPEED) {
                     // Came to rest on the snow or on the glass below: a grain of the heap.
                     heapChanged = true
                     lying[i] = true
@@ -974,7 +1106,7 @@ class SnowGlobePhysics(
         val fv = sample(v, x[i], y[i])
         // Slow sinking, by weight; the light ones follow the liquid closely.
         val w = weight[i]
-        val sink = (0.025f + 0.11f * w) * WEIGHT
+        val sink = if (suspended[i]) HANG_SINK * (0.6f + 0.8f * w) else (0.025f + 0.11f * w) * WEIGHT
         val tau = 0.1f + 0.25f * w
         phase[i] += h * (3.2f + 2.4f * s)
         val sway = sin(phase[i]) * sink * 0.8f
@@ -985,8 +1117,8 @@ class SnowGlobePhysics(
         val kick = DRIFT_SPEED * sqrt(2f * keep) * 3.46f
         driftX[i] += -driftX[i] * keep + (rnd() - 0.5f) * kick
         driftY[i] += -driftY[i] * keep + (rnd() - 0.5f) * kick
-        var gx = tx + driftX[i]
-        var gy = ty + driftY[i]
+        var gx = tx + driftX[i] + spreadX[i]
+        var gy = ty + driftY[i] + spreadY[i]
         if (crystal[i]) {
             // A tipped disc slides sideways as it sinks (it sinks most easily edge first),
             // so a crystal glides one way, tips over and glides back, like a falling leaf;
@@ -995,8 +1127,8 @@ class SnowGlobePhysics(
             tip[i] += tipRate[i] * h
             spin[i] += spinRate[i] * h
             val glide = sink * GLIDE * sin(2f * tip[i])
-            gx = fu + sink * 0.7f * gravityX - glide * gravityY + driftX[i]
-            gy = fv + sink * 0.7f * gravityY + glide * gravityX + driftY[i]
+            gx = fu + sink * 0.7f * gravityX - glide * gravityY + driftX[i] + spreadX[i]
+            gy = fv + sink * 0.7f * gravityY + glide * gravityX + driftY[i] + spreadY[i]
         }
         val k = min(1f, h / tau)
         vx[i] += (gx - vx[i]) * k
@@ -1401,19 +1533,26 @@ class SnowGlobePhysics(
     internal fun liquidAt(px: Float, py: Float): Float = len(sample(u, px, py), sample(v, px, py))
 
     companion object {
-        /** Depth of all the snow when it lies evenly over the flat bottom, bar heights. */
-        const val FULL_DEPTH = 0.16f
-        private const val FULL_LAYERS = 7.9f
-        /** The steepest surface a resting grain holds on: the loosest (21°)... */
-        private val HOLD_MIN = Math.toRadians(21.0).toFloat()
-        /** ...and this much more for the firmest (to 40°). */
-        private val HOLD_SPAN = Math.toRadians(19.0).toFloat()
-        /** The steepest slope a grain on the move stops on: the loosest (16°)... */
-        private val REST_MIN = Math.toRadians(16.0).toFloat()
+        /** Depth of the crust where it lies evenly over the flat bottom, bar heights. */
+        const val CRUST_DEPTH = 0.06f
+        /** The share of the snow that makes the crust; the rest hangs in the liquid. */
+        private const val CRUST_SHARE = 0.4f
+        /** How fast the hanging snow sinks: hardly at all, it only leans with the tilt. */
+        private const val HANG_SINK = 0.003f
+        /** How hard hanging flakes keep apart, bar heights a second... */
+        private const val SPREAD = 0.06f
+        /** ...within this many times their mean spacing. */
+        private const val SPREAD_REACH = 1.15f
+        /** The steepest surface the crust holds on: the loosest grain (40°)... */
+        private val HOLD_MIN = Math.toRadians(40.0).toFloat()
+        /** ...and this much more for the firmest (to 60°): snow stuck to the glass is sticky. */
+        private val HOLD_SPAN = Math.toRadians(20.0).toFloat()
+        /** The steepest slope a grain on the move stops on: the loosest (20°)... */
+        private val REST_MIN = Math.toRadians(20.0).toFloat()
         /** ...and this much more for the firmest (to 28°). */
         private val REST_SPAN = Math.toRadians(12.0).toFloat()
-        /** The steepest glass the snow holds on (40° to 60°). */
-        private val GLASS_HOLD_MIN = Math.toRadians(40.0).toFloat()
+        /** The steepest glass the crust holds on (50° to 70°). */
+        private val GLASS_HOLD_MIN = Math.toRadians(50.0).toFloat()
         private val GLASS_HOLD_SPAN = Math.toRadians(20.0).toFloat()
         /**
          * How heavy the snow is in the liquid, against what it was first made with: the
@@ -1478,8 +1617,8 @@ class SnowGlobePhysics(
         private const val DRIFT_SPEED = 0.015f
         /** ...and how long they keep their way, seconds. */
         private const val DRIFT_TIME = 2f
-        /** The share of crystals among the flakes. */
-        private const val CRYSTALS = 0.25f
+        /** The share of crystals among the hanging flakes. */
+        private const val CRYSTALS = 0.3f
         /** How far a tipped crystal glides sideways for each unit it sinks. */
         private const val GLIDE = 0.9f
         /** The weight classes, light to heavy. */

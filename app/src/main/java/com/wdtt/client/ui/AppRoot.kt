@@ -88,7 +88,14 @@ fun AppRoot(settingsStore: SettingsStore) {
     // Setting off: as if the corners were unknown, everything keeps its usual shape.
     val screenShape = if (screenFitOn) measuredShape else com.wdtt.client.ui.components.layout.ScreenShape.Unknown
     // New Year: wakes up only from 31 December to 2 January.
-    val festive = com.wdtt.client.ui.festive.rememberFestive(power)
+    // Santa's train goes while the connection is on or being made, not while it is paused.
+    val tunnelOn by com.wdtt.client.TunnelManager.running.collectAsState()
+    val tunnelConnecting by com.wdtt.client.TunnelManager.isConnecting.collectAsState()
+    val tunnelReconnecting by com.wdtt.client.TunnelManager.isReconnecting.collectAsState()
+    val tunnelPaused by com.wdtt.client.TunnelManager.trustedPause.collectAsState()
+    val travelling = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    travelling.value = tunnelPaused == null && (tunnelOn || tunnelConnecting || tunnelReconnecting)
+    val festive = com.wdtt.client.ui.festive.rememberFestive(power, travelling)
     androidx.compose.runtime.CompositionLocalProvider(
         com.wdtt.client.ui.festive.LocalFestive provides festive,
         com.wdtt.client.ui.components.layout.LocalScreenShape provides screenShape,

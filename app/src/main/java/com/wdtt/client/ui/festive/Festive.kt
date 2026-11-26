@@ -60,9 +60,11 @@ class FestiveState(
     val moving: Boolean,
     /** Seconds since the decoration started; read only while drawing. */
     val time: () -> Float,
+    /** The connection is on or being made (Santa's train goes). */
+    val travelling: () -> Boolean = { false },
 ) {
     companion object {
-        val Off = FestiveState(false, 0, PowerLevel.Default, false) { 0f }
+        val Off = FestiveState(false, 0, PowerLevel.Default, false, { 0f })
     }
 }
 
@@ -76,7 +78,7 @@ internal var festiveDateOverride: LocalDate? = null
  * one frame clock for all the decoration (nothing ticks outside the festive days).
  */
 @Composable
-fun rememberFestive(level: PowerLevel): FestiveState {
+fun rememberFestive(level: PowerLevel, travelling: State<Boolean>): FestiveState {
     val context = LocalContext.current
     var today by remember { mutableStateOf(festiveDateOverride ?: LocalDate.now()) }
     LaunchedEffect(Unit) {
@@ -99,7 +101,7 @@ fun rememberFestive(level: PowerLevel): FestiveState {
     }
     val time: State<Float> = clock
     return remember(active, today, level, moving) {
-        FestiveState(active, FestiveCalendar.year(today), level, moving) { time.value }
+        FestiveState(active, FestiveCalendar.year(today), level, moving, { time.value }, { travelling.value })
     }
 }
 

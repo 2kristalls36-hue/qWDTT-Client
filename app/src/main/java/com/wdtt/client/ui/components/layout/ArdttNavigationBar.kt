@@ -395,6 +395,11 @@ fun ArdttNavigationBar(
     val committedNow by rememberUpdatedState(committedIndex)
     val glassBar = LocalGlassBackdrop.current != null && LiquidGlass.supported
     val glassNow by rememberUpdatedState(glassBar)
+    // New Year, in the glass bar only: the tabs are Santa's train (see SleighTrain).
+    val festiveNow = com.wdtt.client.ui.festive.LocalFestive.current
+    val sleigh = if (festiveNow.active && glassBar && count == SleighTrain.count) {
+        com.wdtt.client.ui.festive.rememberSleighMotion(festiveNow)
+    } else null
     // Where the finger took the droplet. A drag moves it by the finger's travel from there,
     // so taking it off-centre does not make it (and the screens with it) jump to the finger.
     val grab = remember { NavGrab() }
@@ -543,6 +548,7 @@ fun ArdttNavigationBar(
                         else if (index == tintIndex) 1f else 0f,
                     selectedColor = selectedColor,
                     unselectedColor = unselectedColor,
+                    sleigh = sleigh,
                     onSelect = {
                         navTabPendingRoute(selectedRoute, item.route)?.let { pendingRoute = it }
                         selectTab.value(item.route)
@@ -981,6 +987,8 @@ private fun NavBarTab(
     unselectedColor: Color,
     onSelect: () -> Unit,
     modifier: Modifier = Modifier,
+    /** New Year: the tab is a figure of Santa's train, posed by this. */
+    sleigh: com.wdtt.client.ui.festive.SleighMotion? = null,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val haptics = com.wdtt.client.ui.motion.LocalAppHaptics.current
@@ -1001,7 +1009,7 @@ private fun NavBarTab(
     val iconPose = tabIconPose(iconMotion, iconProgress.value)
     // New Year: the tabs are Santa's train (see SleighTrain), joined across the gaps, in
     // their own colours under the droplet instead of the accent colour.
-    val train = com.wdtt.client.ui.festive.LocalFestive.current.active && count == SleighTrain.count
+    val train = sleigh != null
     // Over clear glass the page shows right behind the tab: a halo follows the outline of
     // the icon and the label, and the faded grey of the other tabs turns full-strength, so
     // they stand apart from the text of the page.
@@ -1051,9 +1059,11 @@ private fun NavBarTab(
             )
             .semantics { this.selected = selected }
             .drawBehind {
-                if (train) {
+                if (sleigh != null) {
+                    // Drawn again whenever this figure moves.
+                    sleigh.frames[index].intValue
                     val (l, r) = dropletRangeInTab(droplet(), index, count, size.width, NavBarDefaults.TrackPadding.toPx())
-                    drawSleighTab(index, size.width, size.height, SleighTrain.height.toPx(), paint.color, l, r)
+                    drawSleighTab(index, size.width, size.height, SleighTrain.height.toPx(), paint.color, l, r, sleigh.pose)
                 }
             },
         verticalArrangement = Arrangement.Center,

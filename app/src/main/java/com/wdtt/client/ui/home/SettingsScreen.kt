@@ -214,6 +214,7 @@ fun SettingsScreen() {
                 Section("Подписка") {
                     SwitchLine("Предупреждать об окончании", warnEnabled) { scope.launch { lite.saveWarnEnabled(it) } }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        com.wdtt.client.ui.components.control.FitTogether {
                         LiteSettings.WARN_DAY_CHOICES.forEach { d ->
                             ArdttChoiceChip(
                                 label = SubscriptionText.days(d.toLong()),
@@ -222,6 +223,7 @@ fun SettingsScreen() {
                                 onClick = { scope.launch { lite.saveWarnDays(d) } },
                                 modifier = Modifier.weight(1f),
                             )
+                        }
                         }
                     }
                     Hint(SubscriptionText.warnSentence(warnEnabled, warnDays))
@@ -298,8 +300,8 @@ fun SettingsScreen() {
                     Hint(
                         when {
                             !glassSupported -> "Эффект доступен на Android 13 и новее."
-                            glass -> "Панель навигации отображается в виде стекла."
-                            else -> "Панель навигации отображается в стандартном виде."
+                            glass -> "Панель вкладок отображается в виде стекла."
+                            else -> "Панель вкладок отображается в стандартном виде."
                         }
                     )
                     val magnet by lite.magnet.collectAsStateWithLifecycle(true)

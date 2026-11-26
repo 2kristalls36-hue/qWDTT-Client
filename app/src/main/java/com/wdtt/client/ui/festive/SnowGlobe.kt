@@ -49,8 +49,8 @@ private class GlobeHolder {
 
 /**
  * The snow globe inside the glass tab bar, behind the tabs and under the droplet lens
- * (see [SnowGlobePhysics]): snow hanging all through the liquid, drifting very slowly the
- * way the phone leans, and a thin crust of it on the glass. The droplet stirs the liquid
+ * (see [SnowGlobePhysics]): snow hanging all through the liquid, drifting very slowly,
+ * and a thin crust of it on the glass at the bottom. The droplet stirs the liquid
  * as it moves and the snow swirls after it; a quick move of the phone whirls it all up
  * until it calms down again.
  * It is seen through the bar's curved glass (see [GlassWarp]): near the edges the snow is
@@ -101,7 +101,7 @@ fun SnowGlobe(dropletPos: () -> Float, tabs: Int, corner: Float, modifier: Modif
                     skipped += dt
                     continue
                 }
-                val active = sim.step((dt + skipped).coerceAtMost(1f / 30f), dx, half, dv, motion.tiltX, motion.tiltY, motion.shakeX, motion.shakeY)
+                val active = sim.step((dt + skipped).coerceAtMost(1f / 30f), dx, half, dv, motion.shakeX, motion.shakeY)
                 skipped = 0f
                 frame++
                 calm = if (active || abs(dv) > 1e-3f) 0 else calm + 1
@@ -254,7 +254,7 @@ private val SnowShade = Color(0xFFE1E9F5)
 /**
  * Feeds [motion] from the accelerometer while the app is in front (see [MotionFilter]:
  * the hand's tremor and a turn of the phone are not taken for a shake). [onMove] is called
- * for a shake or a change of tilt, to wake the globe.
+ * for a shake, to wake the globe.
  */
 @Composable
 private fun MotionSensor(motion: MotionFilter, onMove: () -> Unit) {

@@ -13,26 +13,22 @@ import javax.imageio.ImageIO
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
-import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * A round snow globe to train the snow on, held as a person holds a phone: tilted back,
- * trembling and wandering by a degree or two, now and then turned, shaken or put down.
- * The accelerometer readings pass through [MotionFilter] as in the app. Measures what
- * the eye notices — lying grains twitching, grains moving while the globe is held still,
- * also held on its side — and renders films (build/outputs/roundglobe, build/outputs/barglobe).
+ * The snow globe held as a person holds a phone: tilted back, trembling and wandering by a
+ * degree or two, now and then shaken, the droplet moved. The accelerometer readings pass
+ * through [MotionFilter] as in the app. Measures what the eye notices — lying grains
+ * twitching, grains moving while the globe is held still — and renders a film
+ * (build/outputs/barglobe).
  */
-class RoundGlobeTraining {
-    /** A hand holding the phone: the angle it means to hold, plus tremor and wander. */
+class SnowGlobeTraining {
+    /** A hand holding the phone: tremor and wander. */
     private class Hand(seed: Long) {
         private val rnd = java.util.Random(seed)
-        /** Degrees, the turn the hand means; the phone follows it over about half a second. */
-        var aim = 0.0
-        private var held = 0.0
-        var lean = 35.0 // degrees, tilted back from upright
+        private val lean = 35.0 // degrees, tilted back from upright
         var shakeX = 0.0
         var shakeY = 0.0
         private var wander = 0.0
@@ -41,12 +37,11 @@ class RoundGlobeTraining {
         /** Raw accelerometer after [dt] seconds: (ax, ay, az) in device axes. */
         fun read(dt: Double): FloatArray {
             t += dt
-            held += (aim - held) * (1 - exp(-dt / 0.18))
             // The wander: a slow random drift of about 1.5°.
             wander += (-wander / 1.5) * dt + rnd.nextGaussian() * 1.5 * sqrt(2 * dt / 1.5)
             // The tremor: a fraction of a degree, 8 to 12 times a second.
             val tremor = 0.25 * sin(2 * PI * 9.3 * t) + 0.15 * sin(2 * PI * 11.7 * t + 1.0)
-            val a = Math.toRadians(held + wander + tremor)
+            val a = Math.toRadians(wander + tremor)
             val b = Math.toRadians(lean)
             val g = 9.81
             // Hand tremor in acceleration: about 0.2 m/s².
@@ -80,7 +75,7 @@ class RoundGlobeTraining {
                 val r = hand.read(0.02)
                 filter.feed(r[0], r[1], r[2], 0.02f)
             }
-            val active = sim.step(dt, droplet, half, dv, filter.tiltX, filter.tiltY, filter.shakeX, filter.shakeY)
+            val active = sim.step(dt, droplet, half, dv, filter.shakeX, filter.shakeY)
             measure()
             return active
         }
@@ -141,67 +136,26 @@ class RoundGlobeTraining {
         assertTrue("the drift grows smoothly: ${run.twitch}", run.twitch < 0.05f)
     }
 
-    /** The phone turned on its side and held there, as in the video: the heap settles. */
-    @Test fun heldSidewaysTheSnowSettlesAndStaysStill() {
-        for (degrees in listOf(-80.0, -95.0, -110.0, 75.0)) {
-            val run = Run(SnowGlobePhysics(5.5f), 13)
-            run.sim.settleAll()
-            run.hand.aim = degrees
-            // Light snow slides over within half a minute; what it threw up sinks for a
-            // while longer.
-            repeat(60 * 90) { run.step() }
-            val sinking = run.sim.floating
-            val startX = run.sim.x.copyOf()
-            val startY = run.sim.y.copyOf()
-            run.resetMeasures()
-            repeat(60 * 6) { run.step() }
-            val landed = sinking - run.sim.floating
-            // Heap grains that went anywhere (a grain's breadth or more).
-            val went = (0 until run.sim.flakes).count {
-                run.sim.lying[it] && Math.hypot((run.sim.x[it] - startX[it]).toDouble(), (run.sim.y[it] - startY[it]).toDouble()) > 2 * run.sim.grain
-            } - landed.coerceAtLeast(0)
-            println("held at $degrees°: heap grains that went somewhere $went (landed $landed), worst twitch ${run.twitch}, ${run.sim.describe()}")
-            // The heap is still; at most the odd flake still sinking lands and knocks a grain
-            // on (turned past a quarter, more snow is still on its way down).
-            assertTrue("held at $degrees°, heap grains moved: $went", went <= 2 + landed / 2)
-            assertTrue("held at $degrees°, a grain jumps: ${run.twitch}", run.twitch < 0.02f)
-        }
-    }
-
     @Test fun film() {
-        renderFilm(SnowGlobePhysics(1f, flakes = 900), "build/outputs/roundglobe", 300, 300)
         renderFilm(SnowGlobePhysics(5.5f), "build/outputs/barglobe", 120, 660)
     }
 
-    /**
-     * Held in the hand: still, then turned to 15° and 35°, back, a droplet sweep (bar
-     * only), a shake, upside down, upright, on its side, upright.
-     */
+    /** Held in the hand: still, a droplet sweep, a shake, the snow settling again. */
     private fun renderFilm(sim: SnowGlobePhysics, path: String, hPx: Int, wPx: Int) {
         val dir = File(path).apply { mkdirs(); listFiles()?.forEach { it.delete() } }
         val run = Run(sim, 21)
         sim.settleAll()
         var frame = 0
         var lastX = 0.5f / 4 * sim.aspect
-        for (s in 0 until 60 * 84) {
+        for (s in 0 until 60 * 40) {
             val t = s * run.dt
-            run.hand.aim = when {
-                t < 2f -> 0.0
-                t < 7f -> 15.0
-                t < 14f -> 35.0
-                t < 36f -> 0.0
-                t < 52f -> 180.0
-                t < 58f -> 0.0
-                t < 76f -> -95.0
-                else -> 0.0
-            }
-            val shaking = t in 20f..20.6f
+            val shaking = t in 8f..8.6f
             run.hand.shakeX = if (shaking) (if (((t * 10).toInt()) % 2 == 0) 16.0 else -16.0) else 0.0
             run.hand.shakeY = if (shaking) (if (((t * 10).toInt()) % 2 == 0) 10.0 else -10.0) else 0.0
             val bar = sim.aspect > 2f
             val pos = when {
-                !bar || t < 16f -> 0f
-                t < 16.6f -> (t - 16f) / 0.6f * 3f
+                !bar || t < 3f -> 0f
+                t < 3.6f -> (t - 3f) / 0.6f * 3f
                 else -> 3f
             }
             val dx = (pos + 0.5f) / 4f * sim.aspect
@@ -266,16 +220,10 @@ class RoundGlobeTraining {
             g.draw(glass)
             g.color = Color(0xC7, 0xD0, 0xE6)
             val label = when {
-                t < 2f -> "held still"
-                t < 7f -> "turned 15°"
-                t < 14f -> "turned 35°"
-                t < 16f -> "held upright"
-                t < 20f -> if (bar) "droplet sweep" else "held upright"
-                t < 36f -> if (t < 20.6f) "shake" else "blizzard settles"
-                t < 52f -> "upside down"
-                t < 58f -> "upright"
-                t < 76f -> "held on its side"
-                else -> "upright"
+                t < 3f -> "held still"
+                t < 8f -> if (bar) "droplet sweep" else "held still"
+                t < 8.6f -> "shake"
+                else -> "blizzard settles"
             }
             g.drawString("t=%.1fs  %s".format(t, label), 0, -10)
             g.dispose()

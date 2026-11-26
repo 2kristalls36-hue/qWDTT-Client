@@ -4,7 +4,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.PI
-import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
@@ -23,8 +22,6 @@ class MotionFilterTest {
         )
     }
 
-    private fun angle(f: MotionFilter) = Math.toDegrees(atan2(f.tiltX, f.tiltY).toDouble())
-
     @Test fun theHandsTremorMovesNothing() {
         val f = MotionFilter()
         val rnd = java.util.Random(3)
@@ -37,7 +34,6 @@ class MotionFilterTest {
         }
         assertEquals("woken by the tremor", 0, woke)
         assertEquals(0f, f.shakeX, 0f)
-        assertEquals(0.0, angle(f), 1.0)
     }
 
     @Test fun aTurnIsNotTakenForAShake() {
@@ -51,7 +47,6 @@ class MotionFilterTest {
             if (hypot(f.shakeX, f.shakeY) > 0f) shook++
         }
         assertEquals("a turn read as a shake", 0, shook)
-        assertEquals(40.0, angle(f), 3.0)
     }
 
     @Test fun aShakeIsAShake() {

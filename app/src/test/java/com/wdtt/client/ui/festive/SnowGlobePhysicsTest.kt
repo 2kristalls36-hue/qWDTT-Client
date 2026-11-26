@@ -8,11 +8,8 @@ import kotlin.math.hypot
 class SnowGlobePhysicsTest {
     private val dt = 1f / 60f
 
-    private fun run(sim: SnowGlobePhysics, seconds: Float, degrees: Double = 0.0, shakeX: Float = 0f, shakeY: Float = 0f) {
-        val a = Math.toRadians(degrees)
-        repeat((seconds * 60).toInt()) {
-            sim.step(dt, tiltX = Math.sin(a).toFloat(), tiltY = Math.cos(a).toFloat(), shakeX = shakeX, shakeY = shakeY)
-        }
+    private fun run(sim: SnowGlobePhysics, seconds: Float, shakeX: Float = 0f, shakeY: Float = 0f) {
+        repeat((seconds * 60).toInt()) { sim.step(dt, shakeX = shakeX, shakeY = shakeY) }
     }
 
     /** Hanging flakes in each of [cols] x 2 parts of the glass's straight middle. */
@@ -52,20 +49,6 @@ class SnowGlobePhysicsTest {
         println("upright: ${counts.joinToString()}")
         assertTrue("no part of the glass is bare: ${counts.joinToString()}", counts.min() > 0.5 * mean)
         assertEquals("the hanging snow never settles", sim.flakes - sim.crustCount, (0 until sim.flakes).count { sim.suspended[it] && !sim.lying[it] })
-    }
-
-    @Test fun aTiltLetsTheSnowDriftOverButLeavesNoGaps() {
-        val sim = SnowGlobePhysics(5.5f)
-        sim.settleAll()
-        run(sim, 5f)
-        fun centre() = (0 until sim.flakes).filter { sim.suspended[it] }.map { sim.x[it] }.average()
-        val before = centre()
-        run(sim, 30f, degrees = 30.0)
-        val after = centre()
-        val counts = spread(sim)
-        println("30°: centre $before -> $after, ${counts.joinToString()}")
-        assertTrue("it drifts the way the phone leans: $before -> $after", after - before > 0.05)
-        assertTrue("still no bare part: ${counts.joinToString()}", counts.min() > 0.3 * counts.average())
     }
 
     @Test fun aQuickMoveWhirlsItUpAndItCalmsDownAgain() {
@@ -115,8 +98,7 @@ class SnowGlobePhysicsTest {
             val v = if ((i / 120) % 2 == 0) 4f else -4f
             x = (x + v * dt).coerceIn(0.5f, 5f)
             val shake = if (i % 400 in 0..25) 14f else 0f
-            val turn = (i / 300) * 1.3
-            sim.step(dt, x, 0.7f, v, Math.sin(turn).toFloat(), Math.cos(turn).toFloat(), shake, -shake)
+            sim.step(dt, x, 0.7f, v, shake, -shake)
             if (i % 100 == 0) assertTrue("step $i: ${sim.describe()}", sim.consistent())
         }
         for (i in 0 until sim.flakes) {
@@ -129,9 +111,7 @@ class SnowGlobePhysicsTest {
         val sim = SnowGlobePhysics(5.5f)
         sim.settleAll()
         val moves = sim.moves
-        run(sim, 10f)
-        // Held at a slight tilt too: it clings.
-        run(sim, 10f, degrees = 12.0)
+        run(sim, 20f)
         // Only the odd loose grain at the edge of the top row settles a step lower.
         assertTrue("the crust stays put: ${sim.moves - moves}", sim.moves - moves <= 30)
         assertEquals("all of it on the glass", sim.crustCount, (0 until sim.crustCount).count { sim.lying[it] && sim.y[it] > 0.85f })
@@ -147,29 +127,20 @@ class SnowGlobePhysicsTest {
         assertTrue("shaken: lively", sim.lively)
     }
 
-    @Test fun upsideDownTheCrustComesOffAndSettlesOnTheOtherWall() {
+    @Test fun aShakeLiftsTheCrustAndItSettlesOnTheBottomAgain() {
         val sim = SnowGlobePhysics(5.5f)
         sim.settleAll()
-        run(sim, 120f, degrees = 180.0)
-        val up = (0 until sim.crustCount).count { sim.lying[it] && sim.y[it] < 0.5f }
-        println("crust on the top wall: $up of ${sim.crustCount}, ${sim.describe()}")
-        assertTrue("on the top wall now: $up", up > 0.9f * sim.crustCount)
-        // The hanging snow went with it a little, but still fills the glass.
-        val counts = spread(sim)
-        assertTrue("no bare part: ${counts.joinToString()}", counts.min() > 0.3 * counts.average())
-    }
-
-    @Test fun turnedFarTheCrustSlidesDownTheGlass() {
-        val sim = SnowGlobePhysics(5.5f)
-        sim.settleAll()
-        fun crustX() = (0 until sim.crustCount).map { sim.x[it] }.average()
-        val before = crustX()
-        run(sim, 60f, degrees = -80.0)
-        val after = crustX()
-        println("crust on its side: $before -> $after, ${sim.describe()}")
-        assertTrue("slid to the lower end: $after", after < 1.5)
+        run(sim, 1f)
+        repeat(36) { sim.step(dt, shakeX = if ((it / 6) % 2 == 0) 16f else -16f, shakeY = if ((it / 6) % 2 == 0) 10f else -10f) }
+        val lifted = (0 until sim.crustCount).count { !sim.lying[it] }
+        run(sim, 150f)
+        val back = (0 until sim.crustCount).count { sim.lying[it] && sim.y[it] > 0.75f }
+        println("shaken: lifted $lifted, back on the bottom $back of ${sim.crustCount}, ${sim.describe()}")
+        assertTrue("the shake lifted some of the crust: $lifted", lifted > 0.05f * sim.crustCount)
+        assertTrue("it settled on the bottom again: $back", back > 0.95f * sim.crustCount)
+        assertTrue(sim.consistent())
         val moves = sim.moves
-        run(sim, 5f, degrees = -80.0)
+        run(sim, 5f)
         assertTrue("and rests there: ${sim.moves - moves}", sim.moves - moves <= 3)
     }
 }

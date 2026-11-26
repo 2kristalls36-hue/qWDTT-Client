@@ -117,7 +117,7 @@ fun BrandCandyClient(year: Int, modifier: Modifier = Modifier) {
 /** Tube width of the candy, logo units: thicker than the script, like a real cane. */
 private const val CANDY_TUBE = 1.75f
 /** Distance between the red bands along the tube, and the length of one band. */
-private const val CANDY_PERIOD = 3.1f
+private const val CANDY_PERIOD = 6.2f
 private const val CANDY_BAND = 1.4f
 
 /** Paints of the candy cane, layer by layer (all in logo units). */

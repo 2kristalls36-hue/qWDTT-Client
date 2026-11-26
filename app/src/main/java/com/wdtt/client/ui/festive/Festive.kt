@@ -31,8 +31,12 @@ object FestiveCalendar {
     fun isActive(date: LocalDate): Boolean =
         (date.monthValue == 12 && date.dayOfMonth == 31) || (date.monthValue == 1 && date.dayOfMonth <= 2)
 
-    /** The year being met: on 31 December it is the next one. */
-    fun year(date: LocalDate): Int = if (date.monthValue == 12) date.year + 1 else date.year
+    /**
+     * The New Year being met, or just met: on 31 December the next year, on 1 and 2 January
+     * this one; on any other day (a preview build) the coming one.
+     */
+    fun year(date: LocalDate): Int =
+        if (date.monthValue == 1 && date.dayOfMonth <= 2) date.year else date.year + 1
 
     /** The next midnight when the decoration starts (31 December) or ends (3 January). */
     fun nextChange(now: LocalDateTime): LocalDateTime {

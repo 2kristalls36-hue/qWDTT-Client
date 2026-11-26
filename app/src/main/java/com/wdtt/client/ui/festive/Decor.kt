@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -40,7 +41,12 @@ private fun darkGround(): Boolean = MaterialTheme.colorScheme.background.luminan
 @Composable
 private fun glassMode(): Boolean = LocalGlassBackdrop.current != null && LiquidGlass.supported
 
-/** Small snowflakes falling over the whole screen; touches pass through. */
+/**
+ * Snowflakes falling over the whole screen; touches pass through. Each is a six-armed
+ * crystal of one of a few kinds, turning slowly as it falls and tipping over now and then
+ * (seen edge-on it narrows); the nearer ones larger, faster and swaying more, the far ones
+ * small and faint.
+ */
 @Composable
 fun SnowfallOverlay(modifier: Modifier = Modifier) {
     val f = LocalFestive.current
@@ -49,21 +55,89 @@ fun SnowfallOverlay(modifier: Modifier = Modifier) {
     Canvas(modifier) {
         val t = f.time()
         val dp = density
-        val span = size.height + 20f * dp
+        val span = size.height + 40f * dp
         for (i in 0 until FLAKES) {
             val near = hash01(11, i)
             // Bigger flakes are nearer: they fall faster and sway more.
-            val radius = (1.0f + 1.8f * near) * dp
-            val speed = (14f + 30f * near) * dp
-            val sway = (4f + 12f * near) * dp
-            val y = ((hash01(23, i) * span + t * speed) % span) - 10f * dp
+            val radius = (2.2f + 6.5f * near * near) * dp
+            val speed = (12f + 34f * near) * dp
+            val sway = (4f + 14f * near) * dp
+            val y = ((hash01(23, i) * span + t * speed) % span) - 20f * dp
             val x = hash01(29, i) * size.width + sin(t * (0.15f + 0.3f * hash01(17, i)) * 2f * PI.toFloat() + hash01(19, i) * 6.28f) * sway
-            drawCircle(color, radius, Offset(x, y), alpha = 0.4f + 0.45f * hash01(31, i))
+            val spin = (hash01(37, i) * 360f + t * (hash01(41, i) - 0.5f) * 70f)
+            val tip = cos(t * (0.2f + 0.5f * hash01(43, i)) + hash01(47, i) * 6.28f)
+            val squash = 0.3f + 0.7f * kotlin.math.abs(tip)
+            val alpha = (0.45f + 0.45f * near) * (0.75f + 0.25f * hash01(31, i))
+            val kind = SNOWFLAKES[(hash01(53, i) * SNOWFLAKES.size).toInt().coerceIn(0, SNOWFLAKES.size - 1)]
+            // A soft glow round it, then the crystal itself.
+            drawCircle(color, radius * 0.8f, Offset(x, y), alpha = 0.1f * alpha)
+            val width = max(0.9f * dp, radius * 0.13f)
+            withTransform({
+                translate(x, y)
+                rotate(spin, Offset.Zero)
+                scale(radius, radius * squash, Offset.Zero)
+            }) {
+                drawPath(kind, color, alpha = alpha, style = Stroke(width = width / radius, cap = StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+            }
         }
     }
 }
 
-private const val FLAKES = 44
+private const val FLAKES = 40
+
+/**
+ * The kinds of snowflake, a unit across from the middle: six arms each, and on them
+ * branches (a stellar dendrite, a fern), a small plate in the middle, forked tips, a ring.
+ */
+private val SNOWFLAKES: List<Path> by lazy {
+    fun crystal(arm: Path.(Float) -> Unit, middle: Path.() -> Unit = {}) = Path().apply {
+        for (k in 0 until 6) {
+            val a = k * PI.toFloat() / 3f
+            val sub = Path().apply { arm(a) }
+            addPath(sub)
+        }
+        middle()
+    }
+    fun Path.ray(a: Float, from: Float, to: Float) {
+        moveTo(cos(a) * from, sin(a) * from)
+        lineTo(cos(a) * to, sin(a) * to)
+    }
+    fun Path.branch(a: Float, at: Float, length: Float) {
+        val bx = cos(a) * at
+        val by = sin(a) * at
+        for (side in listOf(-1f, 1f)) {
+            val b = a + side * PI.toFloat() / 3f
+            moveTo(bx, by)
+            lineTo(bx + cos(b) * length, by + sin(b) * length)
+        }
+    }
+    listOf(
+        // A stellar dendrite: two pairs of branches on each arm.
+        crystal({ a -> ray(a, 0f, 1f); branch(a, 0.42f, 0.3f); branch(a, 0.7f, 0.2f) }),
+        // A fern: three pairs of short branches.
+        crystal({ a -> ray(a, 0f, 1f); branch(a, 0.32f, 0.18f); branch(a, 0.55f, 0.2f); branch(a, 0.77f, 0.14f) }),
+        // A plate in the middle, arms with forked tips.
+        crystal({ a -> ray(a, 0.28f, 1f); branch(a, 0.8f, 0.2f) }) {
+            for (k in 0..6) {
+                val a = k * PI.toFloat() / 3f + PI.toFloat() / 6f
+                val x = cos(a) * 0.3f
+                val y = sin(a) * 0.3f
+                if (k == 0) moveTo(x, y) else lineTo(x, y)
+            }
+        },
+        // A simple star.
+        crystal({ a -> ray(a, 0f, 1f); branch(a, 0.62f, 0.26f) }),
+        // Arms through a ring, a branch pair outside it.
+        crystal({ a -> ray(a, 0f, 1f); branch(a, 0.72f, 0.22f) }) {
+            for (k in 0..6) {
+                val a = k * PI.toFloat() / 3f
+                val x = cos(a) * 0.45f
+                val y = sin(a) * 0.45f
+                if (k == 0) moveTo(x, y) else lineTo(x, y)
+            }
+        },
+    )
+}
 
 /**
  * Snow lying on the top edge of a control, following its rounded corners. Put it before

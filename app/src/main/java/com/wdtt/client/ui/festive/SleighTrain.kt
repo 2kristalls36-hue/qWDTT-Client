@@ -63,6 +63,18 @@ object SleighTrain {
     /** The figure's height in a tab [width] wide, given the tallest it may be. */
     fun figureHeight(width: Float, tallest: Float): Float = minOf(tallest, width * FILL * TALL / WIDE)
 
+    /**
+     * Where the figures stand, pixels from the top of a bar [barWidth] by [barHeight] with
+     * the tabs [padX], [padY] inside it: the snow there comes up to the runners and hooves,
+     * a little over their bottoms.
+     */
+    fun groundIn(barWidth: Float, barHeight: Float, padX: Float, padY: Float, tallest: Float): Float {
+        val slot = (barWidth - 2f * padX) / count
+        val tabHeight = barHeight - 2f * padY
+        val tall = figureHeight(slot, tallest)
+        return padY + (tabHeight - tall) / 2f + tall * (GROUND - 0.35f) / TALL
+    }
+
     internal const val COUPLING_Y = 19.6f
     internal const val REINS_Y = 12f
     /** Where the bullfinch sits on the trailer (its feet on the lantern's arm), grid units. */

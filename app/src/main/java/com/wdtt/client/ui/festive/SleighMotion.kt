@@ -25,8 +25,9 @@ import kotlin.math.sin
  * and only the figure under the droplet comes alive now and then, quietly: the bullfinch on
  * the lantern looks round, flicks its tail, hops round, pecks, fluffs up; Santa sets his cap
  * straight, stretches, chuckles, looks back at the presents; a reindeer shifts a stiff leg,
- * flicks an ear or the tail, lowers its head, and the lead one looks down at its own red
- * nose, which glows brighter. It blinks. In between nothing moves, and nothing needs drawing
+ * flicks an ear or the tail, lowers its head; the one without the red nose wags its tail
+ * at the droplet coming over it, and the lead one looks down at its own red nose, which
+ * glows brighter. It blinks. In between nothing moves, and nothing needs drawing
  * ([busy], [secondsToNext]).
  *
  * When the connection starts the train sets off a second later: Santa gives the word with
@@ -155,8 +156,15 @@ class SleighMotion(seed: Int = 1) {
         val tab = tabUnder(lens)
         if (tab != lensTab) {
             lensTab = tab
-            // Just come under the droplet: it stirs before long.
-            if (tab >= 0 && kind[tab] < 0) next[tab] = min(next[tab], time + 0.7f + rnd() * 1.2f)
+            if (tab == 2 && kind[2] < 0 && idle) {
+                // The reindeer wags its tail at the droplet coming over it.
+                kind[2] = DEER_WAG
+                start[2] = time
+                length[2] = LENGTHS[DEER_WAG]
+            } else if (tab >= 0 && kind[tab] < 0) {
+                // Just come under the droplet: it stirs before long.
+                next[tab] = min(next[tab], time + 0.7f + rnd() * 1.2f)
+            }
         }
         if (travel != travelling) {
             travelling = travel
@@ -265,6 +273,7 @@ class SleighMotion(seed: Int = 1) {
                 }
                 else -> when {
                     a == 3 && r < 0.35f -> DEER_NOSE
+                    a == 2 && r < 0.2f -> DEER_WAG
                     r < 0.6f -> DEER_LEG
                     r < 0.75f -> DEER_EAR
                     r < 0.87f -> DEER_TAIL
@@ -390,6 +399,13 @@ class SleighMotion(seed: Int = 1) {
                 }
                 DEER_EAR -> p.add(actor, J.EAR, turn = -22f * (bump(q, 0f, 0.4f) + bump(q, 0.5f, 0.9f)))
                 DEER_TAIL -> p.add(actor, J.TAIL, turn = -30f * bell(q))
+                DEER_WAG -> {
+                    // A happy wag: the tail up, flicking quickly, the rump wiggling a little.
+                    val on = hold(q, 0.12f, 0.25f)
+                    p.add(actor, J.TAIL, turn = (-20f - 22f * sin(q * 9f * PI.toFloat())) * on)
+                    p.add(actor, J.ROOT, turn = 0.6f * sin(q * 9f * PI.toFloat()) * on)
+                    p.add(actor, J.EAR, turn = 8f * on)
+                }
                 DEER_HEAD -> {
                     p.add(actor, J.NECK, turn = 9f * hold(q, 0.25f, 0.3f))
                     p.add(actor, J.PUPIL, dy = 0.06f * hold(q, 0.25f, 0.3f))
@@ -681,7 +697,8 @@ class SleighMotion(seed: Int = 1) {
         const val DEER_TAIL = 11
         const val DEER_HEAD = 12
         const val DEER_NOSE = 13
-        val LENGTHS = floatArrayOf(1.6f, 0.8f, 0.5f, 0.9f, 0.9f, 2.2f, 1.3f, 1.1f, 1.8f, 1.1f, 0.6f, 0.6f, 1.6f, 2.8f)
+        const val DEER_WAG = 14
+        val LENGTHS = floatArrayOf(1.6f, 0.8f, 0.5f, 0.9f, 0.9f, 2.2f, 1.3f, 1.1f, 1.8f, 1.1f, 0.6f, 0.6f, 1.6f, 2.8f, 1.5f)
 
         fun frac(x: Float) = x - floor(x)
 

@@ -20,9 +20,7 @@ import kotlin.math.sqrt
 /**
  * The snow globe held as a person holds a phone: tilted back, trembling and wandering by a
  * degree or two, now and then shaken, the droplet moved. The accelerometer readings pass
- * through [MotionFilter] as in the app. Measures what the eye notices — lying grains
- * twitching, grains moving while the globe is held still — and renders a film
- * (build/outputs/barglobe).
+ * through [MotionFilter] as in the app. Renders a film (build/outputs/barglobe).
  */
 class SnowGlobeTraining {
     /** A hand holding the phone: tremor and wander. */
@@ -60,12 +58,6 @@ class SnowGlobeTraining {
         val filter = MotionFilter()
         private var sensorClock = 0.0
         val dt = 1f / 60f
-        /** The lying grains as drawn, last frame, for measuring their twitching. */
-        private var last: FloatArray? = null
-        private var lastLying: BooleanArray? = null
-        var twitch = 0f
-        var twitchSum = 0.0
-        var frames = 0
 
         fun step(droplet: Float = -1f, half: Float = 0f, dv: Float = 0f): Boolean {
             // Sensor at 50 Hz, display at 60 Hz.
@@ -75,69 +67,26 @@ class SnowGlobeTraining {
                 val r = hand.read(0.02)
                 filter.feed(r[0], r[1], r[2], 0.02f)
             }
-            val active = sim.step(dt, droplet, half, dv, filter.shakeX, filter.shakeY)
-            measure()
-            return active
-        }
-
-        private fun measure() {
-            // What the eye sees of the heap: where each lying grain is drawn.
-            val now = FloatArray(sim.flakes * 2) { if (it % 2 == 0) sim.x[it / 2] else sim.y[it / 2] }
-            val lay = BooleanArray(sim.flakes) { sim.lying[it] }
-            val prev = last
-            val was = lastLying
-            if (prev != null && was != null) {
-                var most = 0f
-                val h = heap
-                for (i in 0 until sim.flakes) {
-                    if (!lay[i] || !was[i] || (h != null && !h[i])) continue
-                    most = max(most, abs(now[2 * i] - prev[2 * i]) + abs(now[2 * i + 1] - prev[2 * i + 1]))
-                }
-                twitch = max(twitch, most)
-                twitchSum += most
-                frames++
-            }
-            last = now
-            lastLying = lay
-        }
-
-        /** Grains lying when the measuring began: the heap as it was (late landings aside). */
-        private var heap: BooleanArray? = null
-
-        fun resetMeasures(heapOnly: Boolean = true) {
-            twitch = 0f; twitchSum = 0.0; frames = 0
-            heap = if (heapOnly) BooleanArray(sim.flakes) { sim.lying[it] } else null
+            return sim.step(dt, droplet, half, dv, filter.shakeX, filter.shakeY)
         }
     }
 
-    @Test fun heldStillTheSnowStaysStill() {
-        for (aspect in listOf(1f, 5.5f)) {
-            val run = Run(SnowGlobePhysics(aspect), 11)
-            run.sim.settleAll()
-            repeat(60 * 3) { run.step() } // in the hand for a moment first
-            val before = run.sim.moves
-            run.resetMeasures()
-            repeat(60 * 15) { run.step() }
-            val moved = run.sim.moves - before
-            println("aspect $aspect: held 15 s — grains moved $moved, worst twitch ${run.twitch}, mean ${run.twitchSum / run.frames}")
-            assertTrue("held still, grains moved: $moved", moved == 0L)
-            assertTrue("held still, surface twitches: ${run.twitch}", run.twitch < 1e-4f)
+    /** The hand's tremor is no shake: the snow only drifts. */
+    @Test fun heldStillTheSnowOnlyDrifts() {
+        val run = Run(SnowGlobePhysics(5.5f), 11)
+        run.sim.settleAll()
+        var lively = 0
+        repeat(60 * 15) {
+            run.step()
+            if (run.sim.lively) lively++
         }
-    }
-
-    @Test fun settlingSnowGrowsTheDriftSmoothly() {
-        val run = Run(SnowGlobePhysics(5.5f), 12)
-        run.sim.scatter()
-        run.resetMeasures(heapOnly = false)
-        repeat(60 * 20) { run.step() }
-        // While the snow falls the drift grows, but each frame only a hair.
-        println("settling: worst twitch ${run.twitch}, mean ${run.twitchSum / run.frames}")
-        // Each grain glides into place; none jumps.
-        assertTrue("the drift grows smoothly: ${run.twitch}", run.twitch < 0.05f)
+        println("held 15 s: lively $lively frames")
+        assertTrue("held still, stirred: $lively", lively < 60)
     }
 
     @Test fun film() {
-        renderFilm(SnowGlobePhysics(5.5f), "build/outputs/barglobe", 120, 660)
+        // The drift up to where Santa's train rides on it, as in the app.
+        renderFilm(SnowGlobePhysics(5.5f, level = 0.74f), "build/outputs/barglobe", 120, 660)
     }
 
     /** Held in the hand: still, a droplet sweep, a shake, the snow settling again. */
@@ -180,6 +129,7 @@ class SnowGlobeTraining {
                 g.fill(RoundRectangle2D.Float(dx * k - dw, k * 0.08f, dw * 2, k * 0.84f, k * 0.8f, k * 0.8f))
             }
             g.color = Color(0xE1, 0xE9, 0xF5)
+            g.fill(java.awt.geom.Rectangle2D.Float(0f, (sim.driftTop + sim.grain) * k, wPx.toFloat(), k))
             for (i in 0 until sim.flakes) if (sim.lying[i]) {
                 val r = sim.radius[i] * 1.55f * k
                 g.fill(Ellipse2D.Float(sim.x[i] * k - r, sim.y[i] * k - r, r * 2, r * 2))

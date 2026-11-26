@@ -104,6 +104,15 @@ class SleighMotionTest {
         assertTrue("the bird is back", m.perched)
     }
 
+    @Test fun theReindeerWagsItsTailAtTheDroplet() {
+        val m = SleighMotion(seed = 8)
+        run(m, 2f, travel = false, lens = 0f)
+        var wag = 0f
+        run(m, 1.5f, travel = false, lens = 2f) { wag = maxOf(wag, kotlin.math.abs(m.pose.joints[2][J.TAIL * 5])) }
+        println("tail wag up to $wag°")
+        assertTrue("it wags: $wag", wag > 20f)
+    }
+
     @Test fun aBlipOfConnectionDoesNotStartIt() {
         val m = SleighMotion(seed = 4)
         run(m, 2f, travel = false)

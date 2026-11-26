@@ -1,7 +1,6 @@
 package com.wdtt.client.ui.festive
 
 import kotlin.math.abs
-import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
@@ -9,36 +8,45 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * A snow globe the shape of the tab bar: liquid with snow hanging in it, and a thin crust of
- * snow stuck to the glass. Lengths are in bar heights (the bar is [aspect] long and 1 high,
- * y down); times in seconds.
+ * A snow globe the shape of the tab bar: liquid with snow hanging in it, and an even drift
+ * of snow lying along the bottom. Lengths are in bar heights (the bar is [aspect] long and
+ * 1 high, y down); times in seconds.
  *
- * Every flake lives all the time — none is ever removed or made — so nothing vanishes or
- * appears from nowhere:
- * - Most of the snow hangs in the liquid for good (it is as heavy as the liquid, near
- *   enough): it fills the whole glass evenly, each flake keeping a little apart from the
- *   others, and drifts very slowly with the faint currents, leaving no gaps.
- *   About one in three of the hanging flakes is a crystal that tips and turns slowly.
+ * - The drift: little round grains packed level along the bottom, [CRUST_DEPTH] deep (a
+ *   level bowl in the rounded ends). It lies there for good: nothing stirs it.
+ * - The rest of the snow hangs in the liquid (as heavy as the liquid, near enough): it fills
+ *   the glass over the drift evenly, each flake keeping a little apart from the others, and
+ *   drifts very slowly with the faint currents. About one in three of the hanging flakes is
+ *   a crystal that tips and turns slowly.
  * - The droplet drags the liquid as it moves and the snow swirls after it; a quick move of
  *   the phone sloshes the liquid against the glass and whirls the snow up, until it calms
- *   down and hangs again. Then only the slow drift is left, and [lively] says so.
- * - The crust: heavier crumbs stuck to the glass at the bottom, a grain or two deep. They
- *   are little round grains that press on and rub against one another (position-based
- *   dynamics). A resting grain sleeps — stays exactly where it is — and wakes only when it
- *   no longer holds (see [recheck]): what held it gone, another grain running into it.
- *   Running liquid and a shake lift it into the liquid; it sinks back slowly and settles
- *   on the bottom again wherever it falls.
- * - Things always fall down the screen: the way the phone is held plays no part.
+ *   down. Wherever the snow has bunched up it is pushed out towards where it is thin, so
+ *   within seconds it fills the glass evenly again. Then only the slow drift is left, and
+ *   [lively] says so.
  * - The liquid is a coarse grid (stable fluids: forces, advection, pressure projection,
  *   damping).
+ * Every flake lives all the time: none is ever removed or made.
  */
 class SnowGlobePhysics(
     val aspect: Float,
     /** Corner radius of the bar, in bar heights (0.5 — a pill). */
     val corner: Float = 0.5f,
-    val flakes: Int = 900,
+    /** Where the top of the drift is, in bar heights from the top (what rides on it). */
+    level: Float = 1f - CRUST_DEPTH,
+    /** How many flakes hang in the liquid. */
+    hanging: Int = 460,
     seed: Int = 7,
 ) {
+    /** Where the top of the drift is (it is level). */
+    val driftTop = level.coerceIn(0.4f, 1f - 2.5f * GRAIN)
+    /** Radius of a grain of the drift's top, bar heights. */
+    val grain = GRAIN
+    /** The places of the grains along the top of the drift, x and y in turn. */
+    private val bed = layBed(aspect, corner, driftTop)
+    /** How many grains make the top of the drift (the first flakes). */
+    val crustCount = bed.size / 2
+    val flakes = crustCount + hanging
+
     // ---- Liquid ----
     private val nx = 44
     private val ny = 8
@@ -57,25 +65,21 @@ class SnowGlobePhysics(
     val y = FloatArray(flakes)
     private val vx = FloatArray(flakes)
     private val vy = FloatArray(flakes)
-    /** Where a flake was at the start of the substep. */
-    private val x0 = FloatArray(flakes)
-    private val y0 = FloatArray(flakes)
     /** Size of a flake, 0..1. */
     val size = FloatArray(flakes)
-    /**
-     * Weight of a flake, one of [WEIGHTS]: light fluff drifts down slowly and is easily
-     * carried, heavier crumbs sink and roll faster. More light ones than heavy.
-     */
+    /** Weight of a flake, one of [WEIGHTS]: the light ones follow the liquid closely. */
     val weight = FloatArray(flakes)
     private val phase = FloatArray(flakes)
-    /**
-     * Hanging in the liquid for good (as heavy as the liquid, near enough): most of the
-     * snow. The rest is the crust, heavier crumbs that settle on the glass.
-     */
+    /** Hanging in the liquid (all but the drift). */
     val suspended = BooleanArray(flakes)
-    /** How many flakes make the crust on the glass (the first ones). */
-    val crustCount: Int
-    /** The push a hanging flake gets from its neighbours, so the snow keeps its spacing. */
+    /** In the drift's top (the first [crustCount] flakes). */
+    val lying = BooleanArray(flakes)
+    /** Radius of each grain of the drift. */
+    val radius = FloatArray(flakes)
+    /** A grain on the very top of the drift (drawn brighter). */
+    private val top = BooleanArray(flakes)
+
+    /** The push a hanging flake gets from its neighbours and from where the snow is thick. */
     private val spreadX = FloatArray(flakes)
     private val spreadY = FloatArray(flakes)
     /** Spacing of the hanging snow, and a grid for finding the hanging neighbours. */
@@ -85,24 +89,32 @@ class SnowGlobePhysics(
     private val sStart: IntArray
     private val sItems = IntArray(flakes)
     private val sOf = IntArray(flakes)
+    /** A coarse grid of how thick the hanging snow is, against how thick it is when even. */
+    private val dcols: Int
+    private val drows: Int
+    private val dw: Float
+    private val dh: Float
+    private val thick: FloatArray
+    private val room: FloatArray
+    private val slopeX: FloatArray
+    private val slopeY: FloatArray
 
     /**
-     * Something stirs: the liquid runs, the phone is shaken, a grain of the crust moves or
-     * falls. Otherwise only the hanging snow drifts, so slowly that half the frames will do.
+     * Something stirs: the liquid runs, the phone is shaken, the snow spreads out again.
+     * Otherwise only the hanging snow drifts, so slowly that half the frames will do.
      */
     var lively = true
         private set
 
     /**
      * A slow wandering of each flake in the liquid (the faint currents that never quite
-     * die in a globe): it spreads whatever pattern a shake left, so the snow settles as an
-     * even cloud instead of sinking as a frozen shape.
+     * die in a globe), so the snow drifts on as an even cloud instead of standing still.
      */
     private val driftX = FloatArray(flakes)
     private val driftY = FloatArray(flakes)
     /**
-     * A snowflake proper (a flat six-armed crystal), not a crumb: it falls like a little
-     * disc, slower, gliding to one side and the other as it tips over, and turns slowly.
+     * A snowflake proper (a flat six-armed crystal), not a crumb: it sinks like a little
+     * disc, gliding to one side and the other as it tips over, and turns slowly.
      */
     val crystal = BooleanArray(flakes)
     /** How far a crystal is tipped from lying flat across its fall, radians. */
@@ -111,70 +123,6 @@ class SnowGlobePhysics(
     /** How far a crystal has turned in the plane of the screen, radians. */
     val spin = FloatArray(flakes)
     private val spinRate = FloatArray(flakes)
-    /**
-     * How firmly a grain holds on to the snow round it, 0..1: its friction and the steepest
-     * slope it stays on.
-     */
-    private val cohesion = FloatArray(flakes)
-    private val friction = FloatArray(flakes)
-    /** Mean radius of a grain in the heap, bar heights. */
-    val grain: Float
-    /** Radius of each grain in the heap. */
-    val radius = FloatArray(flakes)
-
-    /** In the heap (else in the liquid). */
-    val lying = BooleanArray(flakes)
-    /** A grain at rest, held where it is (see the class comment). */
-    private val asleep = BooleanArray(flakes)
-    /** Where a moving grain was when its current quiet spell began, and for how long. */
-    private val still = FloatArray(flakes)
-    private val stillX = FloatArray(flakes)
-    private val stillY = FloatArray(flakes)
-    /** Where a grain has been of late (smoothed): far from it, it is really on its way. */
-    private val trailX = FloatArray(flakes)
-    private val trailY = FloatArray(flakes)
-    private val air = FloatArray(flakes)
-    private val contacts = IntArray(flakes)
-    private val supported = BooleanArray(flakes)
-    /** Where a grain went to sleep last, and whether its moving off has been passed on. */
-    private val anchorX = FloatArray(flakes)
-    private val anchorY = FloatArray(flakes)
-    private val told = BooleanArray(flakes)
-    /** Times a grain has tried to break out of a steep place without getting anywhere. */
-    private val tries = IntArray(flakes)
-    /** On the surface of the heap, and which way the surface faces there. */
-    private val surface = BooleanArray(flakes)
-    private val outX = FloatArray(flakes)
-    private val outY = FloatArray(flakes)
-    /** Height above the bottom, in grains; the moving flakes in order of it, lowest first. */
-    private val height = FloatArray(flakes)
-    private val avgX = FloatArray(flakes)
-    private val avgY = FloatArray(flakes)
-    private val order = IntArray(flakes)
-    private val rank = IntArray(flakes)
-    private var moving = 0
-    private val heightBins = IntArray(HEIGHT_BINS + 1)
-    /** The flakes near each moving one (from the lower of each pair), found once a substep. */
-    private var pairJ = IntArray(flakes * 8)
-    private val pairStart = IntArray(flakes + 1)
-    private val binOf = IntArray(flakes)
-
-    // ---- A grid of buckets for finding neighbours ----
-    private val bucket: Float
-    private val bcols: Int
-    private val brows: Int
-    private val bucketStart: IntArray
-    private val bucketItems = IntArray(flakes)
-    private val bucketOf = IntArray(flakes)
-
-
-    /** Grains that moved off where they lay so far (a still globe moves none). */
-    var moves = 0L
-        private set
-
-    /** Flakes not lying now (in the liquid). */
-    var floating = 0
-        private set
 
     private var noise = seed * 7919
 
@@ -185,40 +133,48 @@ class SnowGlobePhysics(
 
     private val glassNormal = FloatArray(2)
 
-    /** Settling at start: no grain leaves the heap. */
-    private var settling = false
-    /** Undoing old overlaps (positions only, see [substep]). */
-    private var stabilizing = false
-    /** A flake landed or a grain left the heap since the surface was last found. */
-    private var heapChanged = false
-    private var surfaceClock = 0
-
     private fun len(a: Float, b: Float) = sqrt(a * a + b * b)
 
     init {
-        crustCount = (flakes * CRUST_SHARE).toInt()
-        // The crust, packed as grains pack, lies [CRUST_DEPTH] deep over the flat bottom.
-        grain = sqrt(CRUST_DEPTH * aspect * 0.82f / (max(1, crustCount) * Math.PI.toFloat() * 1.0133f))
-        // The hanging snow spreads evenly through the glass.
-        val room = aspect - (4f - Math.PI.toFloat()) * corner * corner
-        spacing = sqrt(room / max(1, flakes - crustCount)) * SPREAD_REACH
+        // The hanging snow spreads evenly through the glass over the drift.
+        var inside = 0
+        for (m in 0 until 60) for (n in 0 until 300) {
+            val px = (n + 0.5f) / 300f * aspect
+            val py = (m + 0.5f) / 60f * driftTop
+            if (wall(px, py, glassNormal) < 0f) inside++
+        }
+        val area = inside / (60f * 300f) * aspect * driftTop
+        spacing = sqrt(area / max(1, flakes - crustCount)) * SPREAD_REACH
         scols = max(1, (aspect / spacing).toInt() + 1)
         srows = max(1, (1f / spacing).toInt() + 1)
         sStart = IntArray(scols * srows + 1)
-        bucket = 2.6f * grain
-        bcols = max(1, (aspect / bucket).toInt() + 1)
-        brows = max(1, (1f / bucket).toInt() + 1)
-        bucketStart = IntArray(bcols * brows + 1)
+        drows = 4
+        dh = driftTop / drows
+        dcols = max(1, (aspect / dh).toInt())
+        dw = aspect / dcols
+        thick = FloatArray(dcols * drows)
+        room = FloatArray(dcols * drows)
+        slopeX = FloatArray(dcols * drows)
+        slopeY = FloatArray(dcols * drows)
+        // How much of each cell of the coarse grid is room for the hanging snow.
+        for (cj in 0 until drows) for (ci in 0 until dcols) {
+            var inside = 0
+            for (m in 0 until 8) for (n in 0 until 8) {
+                val px = (ci + (n + 0.5f) / 8f) * dw
+                val py = (cj + (m + 0.5f) / 8f) * dh
+                if (wall(px, py, glassNormal) < 0f) inside++
+            }
+            room[cj * dcols + ci] = inside / 64f
+        }
         for (i in 0 until flakes) {
             size[i] = rnd()
             phase[i] = rnd() * 6.28f
-            cohesion[i] = rnd()
-            friction[i] = ROLL_FRICTION * (0.7f + 0.6f * cohesion[i])
             radius[i] = grain * (0.8f + 0.4f * rnd())
             // The class: mostly the lighter ones; bigger flakes lean to the heavier.
             val r = (rnd() * 0.75f + size[i] * 0.25f)
             weight[i] = WEIGHTS[(r * r * WEIGHTS.size).toInt().coerceIn(0, WEIGHTS.size - 1)]
             suspended[i] = i >= crustCount
+            lying[i] = i < crustCount
             // About one in three of the hanging ones is a crystal: on the bigger side.
             if (suspended[i] && rnd() < CRYSTALS) {
                 crystal[i] = true
@@ -230,7 +186,8 @@ class SnowGlobePhysics(
                 spinRate[i] = (rnd() - 0.5f) * 2.2f
             }
         }
-        floating = flakes
+        layDrift()
+        hangEvenly()
     }
 
     // ---------------------------------------------------------------- shape of the glass
@@ -267,27 +224,38 @@ class SnowGlobePhysics(
         return d
     }
 
-    /** Whether lying grain [i] is on the surface of the heap (for drawing). */
-    fun exposed(i: Int): Boolean = lying[i] && surface[i]
+    /** Whether grain [i] is on the top of the drift (for drawing). */
+    fun exposed(i: Int): Boolean = lying[i] && top[i]
 
     // ---------------------------------------------------------------- set-ups
 
-    private fun clear() {
-        floating = flakes
-        for (i in 0 until flakes) {
-            lying[i] = false
-            asleep[i] = false
-            surface[i] = false
-            still[i] = 0f
-            air[i] = 0f
-            vx[i] = 0f
-            vy[i] = 0f
+    /**
+     * The top of the drift: two rows of grains as grains pack, level, out to the glass (in
+     * the rounded ends, a level bowl); the body of the drift under them is drawn solid.
+     */
+    private fun layDrift() {
+        for (k in 0 until crustCount) {
+            x[k] = bed[2 * k] + (rnd() - 0.5f) * grain * 0.15f
+            y[k] = bed[2 * k + 1] + (rnd() - 0.5f) * grain * 0.1f
+        }
+        // The grains with none over them are on the top.
+        for (i in 0 until crustCount) {
+            var covered = false
+            for (j in 0 until crustCount) {
+                if (j == i) continue
+                val dy = y[i] - y[j]
+                if (dy > grain && dy < 2.6f * grain && abs(x[j] - x[i]) < 1.6f * grain) {
+                    covered = true
+                    break
+                }
+            }
+            top[i] = !covered
         }
     }
 
     /**
-     * The hanging snow spread evenly through the glass (on a loose grid, each flake a little
-     * off its place), above the crust.
+     * The hanging snow spread evenly through the glass over the drift (on a loose grid, each
+     * flake a little off its place), still.
      */
     private fun hangEvenly() {
         val a = spacing / SPREAD_REACH
@@ -296,7 +264,7 @@ class SnowGlobePhysics(
         val py = ArrayList<Float>()
         var row = 0
         var yy = a * 0.5f
-        while (yy < 1f - CRUST_DEPTH - a * 0.3f) {
+        while (yy < driftTop - a * 0.3f) {
             var xx = (if (row % 2 == 0) 0.5f else 1f) * a
             while (xx < aspect) {
                 if (wall(xx, yy, glassNormal) < -0.02f) {
@@ -320,108 +288,18 @@ class SnowGlobePhysics(
             k++
             x[i] = px[slot] + (rnd() - 0.5f) * a * 0.6f
             y[i] = py[slot] + (rnd() - 0.5f) * a * 0.6f
+            vx[i] = 0f
+            vy[i] = 0f
             keepInside(i, 0f)
         }
     }
 
-    /** The globe just shaken: every flake somewhere in the liquid, nothing lying. */
-    fun scatter() {
-        clear()
-        for (i in 0 until flakes) {
-            x[i] = corner * 0.4f + rnd() * (aspect - corner * 0.8f)
-            y[i] = 0.06f + rnd() * 0.82f
-        }
-    }
-
-    /** Everything lying on the bottom, as when the globe has stood still for a while. */
+    /** As when the globe has stood still for a while: the snow hanging evenly, all calm. */
     fun settleAll() {
-        clear()
-        // Places in rows, as grains pack, the lowest first, so the snow lies level, also in
-        // the rounded ends (in a round globe, a level bowl of snow); its surface gently
-        // rolling, as snow lies.
-        val a = 2.02f * grain
-        val rowStep = a * 0.866f
-        val px = ArrayList<Float>()
-        val py = ArrayList<Float>()
-        var row = 0
-        while (true) {
-            val yy = 1f - grain * 1.05f - row * rowStep
-            if (yy < grain) break
-            var xx = (if (row % 2 == 0) 0.5f else 1f) * a
-            while (xx < aspect) {
-                if (wall(xx, yy, glassNormal) < -grain * 1.05f) {
-                    px += xx
-                    py += yy
-                }
-                xx += a
-            }
-            row++
-        }
-        val wave1 = hash01(43, flakes) * 6.28f
-        val wave2 = hash01(47, flakes) * 6.28f
-        val key = FloatArray(px.size) { k ->
-            py[k] + grain * (1.3f * sin(px[k] * 3.7f + wave1) + 0.7f * sin(px[k] * 7.1f + wave2)) * 0.4f + rnd() * grain * 0.3f
-        }
-        val order = px.indices.sortedByDescending { key[it] }
-        val grains = IntArray(crustCount) { it }
-        for (k in crustCount - 1 downTo 1) {
-            val j = (rnd() * (k + 1)).toInt().coerceAtMost(k)
-            val t = grains[k]; grains[k] = grains[j]; grains[j] = t
-        }
-        for (k in 0 until min(crustCount, order.size)) {
-            val i = grains[k]
-            x[i] = px[order[k]] + (rnd() - 0.5f) * grain * 0.1f
-            y[i] = py[order[k]]
-            lying[i] = true
-            floating--
-        }
+        u.fill(0f)
+        v.fill(0f)
         hangEvenly()
-        // Push the grains apart where they overlap, without setting them moving; then let
-        // them settle into each other, out of sight; then the heap rests.
-        settling = true
-        for (i in 0 until flakes) height[i] = -y[i] / (2f * grain)
-        buildBuckets()
-        sortByHeight()
-        findPairs(0f)
-        repeat(RELAX_PASSES) {
-            for (i in 0 until flakes) {
-                x0[i] = x[i]
-                y0[i] = y[i]
-            }
-            solve()
-        }
-        for (i in 0 until flakes) {
-            vx[i] = 0f
-            vy[i] = 0f
-        }
-        for (k in 0 until SETTLE_SUBSTEPS) substep(1f / 120f, 0f, 0f)
-        for (i in 0 until flakes) {
-            vx[i] = 0f
-            vy[i] = 0f
-            if (!lying[i]) continue
-            asleep[i] = true
-            still[i] = 0f
-            anchorX[i] = x[i]
-            anchorY[i] = y[i]
-        }
-        // Whatever would not hold slips now, out of sight, until all of it holds.
-        for (round in 0 until 6) {
-            for (i in 0 until flakes) recheck(i)
-            if ((0 until flakes).none { lying[it] && !asleep[it] }) break
-            for (k in 0 until 60) {
-                substep(1f / 120f, 0f, 0f)
-                if (k % 2 == 1) rest(1f / 60f)
-            }
-            for (i in 0 until flakes) if (lying[i] && !asleep[i]) {
-                asleep[i] = true
-                vx[i] = 0f
-                vy[i] = 0f
-                anchorX[i] = x[i]
-                anchorY[i] = y[i]
-            }
-        }
-        settling = false
-        findSurface()
+        lively = true
     }
 
     // ---------------------------------------------------------------- one step
@@ -429,7 +307,8 @@ class SnowGlobePhysics(
     /**
      * Advances by [dt]. [dropletX], [dropletHalf] and [dropletV] describe the droplet
      * (centre, half width, speed along the bar); [shakeX], [shakeY] the phone's own
-     * acceleration on the screen (m/s²). Returns whether anything still moves.
+     * acceleration on the screen (m/s²). Returns whether anything still moves (the hanging
+     * snow always drifts).
      */
     fun step(
         dt: Float,
@@ -451,193 +330,22 @@ class SnowGlobePhysics(
             v[k] *= damp
             fastest = max(fastest, abs(u[k]) + abs(v[k]))
         }
-        var changed = false
-        if (lift(h, shake, fastest)) changed = true
         spread()
+        val bunched = even()
         val sub = h / SUBSTEPS
-        repeat(SUBSTEPS) { substep(sub, shakeX, shakeY) }
-        buildBuckets()
-        calm()
-        var awake = 0
-        for (i in 0 until flakes) {
-            if (!lying[i] || asleep[i]) continue
-            awake++
-            // The trail follows it over about a third of a second.
-            trailX[i] += (x[i] - trailX[i]) * TRAIL
-            trailY[i] += (y[i] - trailY[i]) * TRAIL
-            // Those resting on a grain that moves off look again.
-            if (travelling(i)) wakeAround(i)
-        }
-        rest(h)
-        surfaceClock++
-        if (changed || heapChanged || (awake > 0 && surfaceClock % 4 == 0)) findSurface()
-        heapChanged = false
-        var falling = false
-        for (i in 0 until crustCount) if (!lying[i]) { falling = true; break }
-        lively = falling || awake > 0 || fastest > 0.02f || changed || shake > 1.5f
-        return floating > 0 || awake > 0 || fastest > 0.004f || changed || shake > 1.5f
-    }
-
-    /**
-     * Resting grain [i] sees whether it still holds where it lies; if not, it wakes and
-     * the heap's mechanics move it. It holds unless:
-     * - nothing is under it any more, or what it rests on is moving off;
-     * - it lies on the glass where the glass rises (the rounded ends) steeper than the snow
-     *   holds on it, with no grain under it.
-     */
-    private fun recheck(i: Int) {
-        if (!lying[i] || !asleep[i]) return
-        var held = false
-        var heldByGrain = false
-        var shaken = false
-        val bi = bucketOf[i] % bcols
-        val bj = bucketOf[i] / bcols
-        for (dj in -1..1) for (di in -1..1) {
-            val ci = bi + di
-            val cj = bj + dj
-            if (ci < 0 || cj < 0 || ci >= bcols || cj >= brows) continue
-            val b = cj * bcols + ci
-            for (k in bucketStart[b] until bucketStart[b + 1]) {
-                val j = bucketItems[k]
-                if (j == i || !lying[j]) continue
-                val dx = x[j] - x[i]
-                val dy = y[j] - y[i]
-                val d = len(dx, dy)
-                if (d > (radius[i] + radius[j]) * 1.15f || d < 1e-6f) continue
-                if (dy > 0.42f * d) {
-                    held = true
-                    heldByGrain = true
-                }
-                // What it rests or leans on moves off (not one rolling over it).
-                if (dy > -0.3f * d && travelling(j)) shaken = true
+        var quickest = 0f
+        repeat(SUBSTEPS) {
+            for (i in crustCount until flakes) {
+                flake(i, sub, shakeX, shakeY, shake)
+                x[i] += vx[i] * sub
+                y[i] += vy[i] * sub
+                keepInside(i, 1.25f)
             }
         }
-        var onGlass = false
-        var floor = 1f
-        if (wall(x[i], y[i], glassNormal) + radius[i] * 1.15f > 0f) {
-            onGlass = true
-            floor = glassNormal[1]
-            if (floor > 0.42f) held = true
-        }
-        val gives = !held || shaken || (onGlass && !heldByGrain && floor < cos(glassHoldAt(i)))
-        if (gives) wake(i)
-    }
-
-    private var breakX = 0f
-    private var breakY = 0f
-
-    /**
-     * Whether grain [i] lies on the surface where it is steeper than its angle of hold;
-     * if so, [breakX], [breakY] is the way down the slope.
-     */
-    private fun tooSteep(i: Int): Boolean {
-        var sx = 0f
-        var sy = 0f
-        var n = 0
-        val bi = bucketOf[i] % bcols
-        val bj = bucketOf[i] / bcols
-        for (dj in -1..1) for (di in -1..1) {
-            val ci = bi + di
-            val cj = bj + dj
-            if (ci < 0 || cj < 0 || ci >= bcols || cj >= brows) continue
-            val b = cj * bcols + ci
-            for (k in bucketStart[b] until bucketStart[b + 1]) {
-                val j = bucketItems[k]
-                if (j == i || !lying[j]) continue
-                val dx = x[j] - x[i]
-                val dy = y[j] - y[i]
-                val d = len(dx, dy)
-                if (d > (radius[i] + radius[j]) * 1.15f || d < 1e-6f) continue
-                sx += dx / d
-                sy += dy / d
-                n++
-            }
-        }
-        if (wall(x[i], y[i], glassNormal) + radius[i] * 1.15f > 0f) {
-            sx += glassNormal[0] * 2f
-            sy += glassNormal[1] * 2f
-            n += 2
-        }
-        val l = len(sx, sy)
-        if (!(n < 5 || l > 1.5f) || l < 1e-4f) return false
-        // A grain on the move stops only on a gentler slope than a settled one holds.
-        if (sy / l >= cos(restAt(i))) return false
-        // Down along the surface: straight down less its part across the surface.
-        val ox = -sx / l
-        val oy = -sy / l
-        val tx = -oy * ox
-        val ty = 1f - oy * oy
-        val tl = len(tx, ty)
-        if (tl < 1e-4f) return false
-        breakX = tx / tl
-        breakY = ty / tl
+        for (i in crustCount until flakes) quickest = max(quickest, len(vx[i], vy[i]))
+        lively = fastest > 0.02f || shake > 1.5f || bunched > BUNCHED || quickest > 0.08f
         return true
     }
-
-    /**
-     * Grain [j] is really on its way somewhere (not just trembling in a pressed heap):
-     * moving, and well off where it has been of late.
-     */
-    private fun travelling(j: Int) =
-        !asleep[j] && lying[j] && len(vx[j], vy[j]) > MOVING && len(x[j] - trailX[j], y[j] - trailY[j]) > 0.25f * grain
-
-    /** The steepest slope a grain on the move comes to rest on, radians: 16° to 28°. */
-    private fun restAt(i: Int) = REST_MIN + REST_SPAN * cohesion[i]
-
-    /** The steepest glass the snow holds on at grain [i], radians. */
-    private fun glassHoldAt(i: Int) = GLASS_HOLD_MIN + GLASS_HOLD_SPAN * cohesion[i]
-
-    private fun wake(i: Int) {
-        if (!asleep[i]) return
-        asleep[i] = false
-        still[i] = 0f
-        stillX[i] = x[i]
-        stillY[i] = y[i]
-        trailX[i] = x[i]
-        trailY[i] = y[i]
-        told[i] = false
-        x0[i] = x[i]
-        y0[i] = y[i]
-        vx[i] = 0f
-        vy[i] = 0f
-    }
-
-    /** The resting grains round [i] that it may have held up look again. */
-    private fun wakeAround(i: Int) {
-        val bi = bucketOf[i] % bcols
-        val bj = bucketOf[i] / bcols
-        val reach = 2.8f * grain
-        for (dj in -1..1) for (di in -1..1) {
-            val ci = bi + di
-            val cj = bj + dj
-            if (ci < 0 || cj < 0 || ci >= bcols || cj >= brows) continue
-            val b = cj * bcols + ci
-            for (k in bucketStart[b] until bucketStart[b + 1]) {
-                val j = bucketItems[k]
-                if (j == i || !lying[j] || !asleep[j]) continue
-                if (len(x[j] - x[i], y[j] - y[i]) > reach) continue
-                // Only those above or beside it: the ones below never leant on it.
-                if (y[i] - y[j] > -0.6f * grain) recheck(j)
-            }
-        }
-    }
-
-    /** Lying grain [i] gets up into the liquid with velocity ([ux], [uy]). */
-    private fun rise(i: Int, ux: Float, uy: Float) {
-        lying[i] = false
-        asleep[i] = false
-        surface[i] = false
-        heapChanged = true
-        floating++
-        moves++
-        vx[i] = ux
-        vy[i] = uy
-        x0[i] = x[i]
-        y0[i] = y[i]
-        wakeAround(i)
-    }
-
-    // ---------------------------------------------------------------- the liquid
 
     private fun idx(i: Int, j: Int) = j * nx + i
 
@@ -748,43 +456,19 @@ class SnowGlobePhysics(
         }
     }
 
-    // ---------------------------------------------------------------- the heap
-
-    /** Liquid running fast over the heap, or a hard shake, lifts the grains on top. */
-    private fun lift(h: Float, shake: Float, fastest: Float): Boolean {
-        if (shake <= 2.5f && fastest < 0.3f) return false
-        var any = false
-        val shaken = max(0f, shake - 2.5f) * LIFT_SHAKE
-        for (i in 0 until flakes) {
-            if (!lying[i] || !surface[i]) continue
-            val fu = sample(u, x[i], y[i])
-            val fv = sample(v, x[i], y[i])
-            val rate = max(0f, len(fu, fv) - STIR) * LIFT_FLOW + shaken
-            if (rate <= 0f || rnd() >= rate * h) continue
-            // Off into the flow; a shake flings them every which way: a fan up to 70° either
-            // side of straight off the heap, lighter grains further.
-            val light = 1.3f - 0.6f * weight[i]
-            val sp = (0.15f + 0.35f * rnd() + shake * 0.06f * (0.3f + rnd())) * light
-            val turn = (rnd() - 0.5f) * 2.44f
-            val ox = outX[i] * cos(turn) - outY[i] * sin(turn)
-            val oy = outX[i] * sin(turn) + outY[i] * cos(turn)
-            rise(i, fu * 0.8f + ox * sp, fv + oy * sp)
-            any = true
-        }
-        return any
-    }
+    // ---------------------------------------------------------------- the hanging snow
 
     /**
      * The hanging snow keeps its spacing: each hanging flake is pushed gently away from the
-     * hanging ones nearer than [spacing], and from the glass, so it fills the glass with no
-     * gaps; its slow sinking only makes it a little thicker towards the bottom.
+     * hanging ones nearer than [spacing], and from the glass and the drift, so it fills the
+     * glass with no gaps.
      */
     private fun spread() {
         sStart.fill(0)
         for (i in 0 until flakes) {
             spreadX[i] = 0f
             spreadY[i] = 0f
-            if (!suspended[i] || lying[i]) {
+            if (!suspended[i]) {
                 sOf[i] = -1
                 continue
             }
@@ -823,114 +507,97 @@ class SnowGlobePhysics(
                     fy += dy / d * f * f
                 }
             }
-            // And off the glass, the same way.
-            val wd = -wall(x[i], y[i], glassNormal)
+            // And off the glass and the drift, the same way.
             val half = spacing * 0.5f
+            val wd = -wall(x[i], y[i], glassNormal)
             if (wd < half) {
                 val f = 1f - wd / half
                 fx -= glassNormal[0] * f * f * 2f
                 fy -= glassNormal[1] * f * f * 2f
+            }
+            val dd = driftTop - y[i]
+            if (dd < half) {
+                val f = 1f - max(0f, dd) / half
+                fy -= f * f * 2f
             }
             spreadX[i] = fx * SPREAD
             spreadY[i] = fy * SPREAD
         }
     }
 
-    private fun buildBuckets() {
-        bucketStart.fill(0)
-        for (i in 0 until flakes) {
-            val bi = (x[i] / bucket).toInt().coerceIn(0, bcols - 1)
-            val bj = (y[i] / bucket).toInt().coerceIn(0, brows - 1)
-            val b = bj * bcols + bi
-            bucketOf[i] = b
-            bucketStart[b + 1]++
-        }
-        for (b in 1..bcols * brows) bucketStart[b] += bucketStart[b - 1]
-        // Fill (bucketStart moves on while filling; put it back after).
-        for (i in 0 until flakes) bucketItems[bucketStart[bucketOf[i]]++] = i
-        for (b in bcols * brows downTo 1) bucketStart[b] = bucketStart[b - 1]
-        bucketStart[0] = 0
-    }
-
     /**
-     * One substep of [h]: the moving flakes move — in the liquid as flakes, in the heap
-     * falling, held back by the liquid — then nothing overlaps (each pair of grains
-     * pushed apart, the higher one more, so stacks stand) and grains rub (friction).
+     * Where the hanging snow has bunched up (after a shake, say) it is pushed out towards
+     * where it is thin, across the whole glass: how thick it is is taken over a coarse grid,
+     * and each flake is pushed down the slope of that. Returns how far the thickest or the
+     * thinnest part is off even.
      */
-    private fun substep(h: Float, shakeX: Float, shakeY: Float) {
-        val gust = len(shakeX, shakeY)
-        val drag = exp(-h / HEAP_DRAG)
-        // First the overlaps left from before are undone, by moving the grains only: that
-        // gives them no speed, so a pressed heap does not jolt itself into motion.
-        val gs = 2f * grain
-        for (i in 0 until flakes) {
-            height[i] = -y[i] / gs
-            x0[i] = x[i]
-            y0[i] = y[i]
+    private fun even(): Float {
+        thick.fill(0f)
+        val hanging = flakes - crustCount
+        var roomSum = 0f
+        for (r in room) roomSum += r
+        val perCell = hanging / max(1e-3f, roomSum)
+        for (i in crustCount until flakes) {
+            // Shared out over the four nearest cells.
+            val fx = (x[i] / dw - 0.5f).coerceIn(0f, dcols - 1.001f)
+            val fy = (y[i] / dh - 0.5f).coerceIn(0f, drows - 1.001f)
+            val ci = fx.toInt()
+            val cj = fy.toInt()
+            val tx = fx - ci
+            val ty = fy - cj
+            thick[cj * dcols + ci] += (1 - tx) * (1 - ty)
+            thick[cj * dcols + ci + 1] += tx * (1 - ty)
+            thick[(cj + 1) * dcols + ci] += (1 - tx) * ty
+            thick[(cj + 1) * dcols + ci + 1] += tx * ty
         }
-        buildBuckets()
-        sortByHeight()
-        findPairs(h)
-        stabilizing = true
-        repeat(STABILIZE_PASSES) { solve() }
-        stabilizing = false
-        for (i in 0 until flakes) {
-            if (asleep[i]) continue
-            x0[i] = x[i]
-            y0[i] = y[i]
-            if (lying[i]) {
-                vx[i] *= drag
-                vy[i] = (vy[i] + HEAP_GRAVITY * h) * drag
-                val sp = len(vx[i], vy[i])
-                if (sp > MAX_HEAP_SPEED) {
-                    vx[i] *= MAX_HEAP_SPEED / sp
-                    vy[i] *= MAX_HEAP_SPEED / sp
-                }
-            } else {
-                flake(i, h, shakeX, shakeY, gust)
-            }
-            x[i] += vx[i] * h
-            y[i] += vy[i] * h
-            contacts[i] = 0
-            supported[i] = false
+        var off = 0f
+        for (k in thick.indices) {
+            val r = room[k]
+            thick[k] = if (r < 0.25f) Float.NaN else thick[k] / (perCell * r) - 1f
+            if (!thick[k].isNaN()) off = max(off, abs(thick[k]))
         }
-        repeat(ITERATIONS) { solve() }
-        for (i in 0 until flakes) {
-            if (asleep[i]) continue
-            if (!lying[i]) {
-                vx[i] = (x[i] - x0[i]) / h
-                vy[i] = (y[i] - y0[i]) / h
-                keepInside(i, 1.25f)
-                if (!suspended[i] && supported[i] && vy[i] > -0.02f && len(vx[i], vy[i]) < LAND_SPEED) {
-                    // Came to rest on the snow or on the glass below: a grain of the heap.
-                    heapChanged = true
-                    lying[i] = true
-                    floating--
-                    air[i] = 0f
-                    still[i] = 0f
-                    told[i] = true
-                    anchorX[i] = x[i]
-                    anchorY[i] = y[i]
-                }
+        // Its slope in each cell (from the neighbours there are).
+        for (cj in 0 until drows) for (ci in 0 until dcols) {
+            val k = cj * dcols + ci
+            if (thick[k].isNaN()) {
+                slopeX[k] = 0f
+                slopeY[k] = 0f
                 continue
             }
-            vx[i] = (x[i] - x0[i]) / h
-            vy[i] = (y[i] - y0[i]) / h
-            // Never left pressed into the glass; put back without a jolt (no speed from it).
-            stabilizing = true
-            onGlass(i)
-            stabilizing = false
-            if (contacts[i] == 0 && !settling) {
-                // Off the snow altogether (over an edge): it goes on through the liquid.
-                air[i] += h
-                if (air[i] > AIR_TIME) {
-                    lying[i] = false
-                    floating++
-                    moves++
-                }
-            } else {
-                air[i] = 0f
-            }
+            slopeX[k] = across(ci, cj, 1, 0) / dw
+            slopeY[k] = across(ci, cj, 0, 1) / dh
+        }
+        for (i in crustCount until flakes) {
+            val fx = (x[i] / dw - 0.5f).coerceIn(0f, dcols - 1.001f)
+            val fy = (y[i] / dh - 0.5f).coerceIn(0f, drows - 1.001f)
+            val ci = fx.toInt()
+            val cj = fy.toInt()
+            val tx = fx - ci
+            val ty = fy - cj
+            val k = cj * dcols + ci
+            val sx = (slopeX[k] * (1 - tx) + slopeX[k + 1] * tx) * (1 - ty) + (slopeX[k + dcols] * (1 - tx) + slopeX[k + dcols + 1] * tx) * ty
+            val sy = (slopeY[k] * (1 - tx) + slopeY[k + 1] * tx) * (1 - ty) + (slopeY[k + dcols] * (1 - tx) + slopeY[k + dcols + 1] * tx) * ty
+            spreadX[i] -= EVEN * sx
+            spreadY[i] -= EVEN * sy
+        }
+        return off
+    }
+
+    /** The change of thickness across cell ([ci], [cj]) along ([di], [dj]), per cell. */
+    private fun across(ci: Int, cj: Int, di: Int, dj: Int): Float {
+        val here = thick[cj * dcols + ci]
+        fun at(i: Int, j: Int): Float? {
+            if (i < 0 || j < 0 || i >= dcols || j >= drows) return null
+            val t = thick[j * dcols + i]
+            return if (t.isNaN()) null else t
+        }
+        val fwd = at(ci + di, cj + dj)
+        val back = at(ci - di, cj - dj)
+        return when {
+            fwd != null && back != null -> (fwd - back) / 2f
+            fwd != null -> fwd - here
+            back != null -> here - back
+            else -> 0f
         }
     }
 
@@ -939,21 +606,19 @@ class SnowGlobePhysics(
         val s = size[i]
         val fu = sample(u, x[i], y[i])
         val fv = sample(v, x[i], y[i])
-        // Slow sinking, by weight; the light ones follow the liquid closely.
+        // Hardly sinking at all, by weight; the light ones follow the liquid closely.
         val w = weight[i]
-        val sink = if (suspended[i]) HANG_SINK * (0.6f + 0.8f * w) else (0.025f + 0.11f * w) * WEIGHT
+        val sink = HANG_SINK * (0.6f + 0.8f * w)
         val tau = 0.1f + 0.25f * w
         phase[i] += h * (3.2f + 2.4f * s)
         val sway = sin(phase[i]) * sink * 0.8f
-        val tx = fu - sway
-        val ty = fv + sink
         // The faint currents: a random wander with a memory of a couple of seconds.
         val keep = h / DRIFT_TIME
         val kick = DRIFT_SPEED * sqrt(2f * keep) * 3.46f
         driftX[i] += -driftX[i] * keep + (rnd() - 0.5f) * kick
         driftY[i] += -driftY[i] * keep + (rnd() - 0.5f) * kick
-        var gx = tx + driftX[i] + spreadX[i]
-        var gy = ty + driftY[i] + spreadY[i]
+        var gx = fu - sway + driftX[i] + spreadX[i]
+        var gy = fv + sink + driftY[i] + spreadY[i]
         if (crystal[i]) {
             // A tipped disc slides sideways as it sinks (it sinks most easily edge first),
             // so a crystal glides one way, tips over and glides back, like a falling leaf;
@@ -968,8 +633,8 @@ class SnowGlobePhysics(
         val k = min(1f, h / tau)
         vx[i] += (gx - vx[i]) * k
         vy[i] += (gy - vy[i]) * k
-        // Heavier than the liquid, they lag behind the glass when it is shaken, and the
-        // shaken liquid tosses them about.
+        // A little heavier than the liquid, they lag behind the glass when it is shaken, and
+        // the shaken liquid tosses them about.
         vx[i] += -shakeX * 0.12f * h * (0.5f + w)
         vy[i] += -shakeY * 0.12f * h * (0.5f + w)
         if (gust > 2f) {
@@ -981,7 +646,7 @@ class SnowGlobePhysics(
         vy[i] += (rnd() - 0.5f) * 0.25f * h * (1.2f - s)
     }
 
-    /** Keeps flake [i] in the liquid inside the glass, bouncing it off the wall. */
+    /** Keeps flake [i] in the liquid inside the glass and over the drift, bouncing it off. */
     private fun keepInside(i: Int, bounce: Float) {
         val d = wall(x[i], y[i], glassNormal)
         val margin = 0.012f
@@ -993,442 +658,76 @@ class SnowGlobePhysics(
                 vx[i] -= bounce * vn * glassNormal[0]
                 vy[i] -= bounce * vn * glassNormal[1]
             }
-            // On the glass at the bottom: it settles there.
-            if (glassNormal[1] > 0.3f) supported[i] = true
         }
-    }
-
-    /**
-     * Puts the moving flakes in order of height, lowest first: a pass over the contacts in
-     * that order carries each push up through a stack at once, so stacks stand firm.
-     */
-    private fun sortByHeight() {
-        var lo = Float.MAX_VALUE
-        for (i in 0 until flakes) if (!asleep[i]) lo = min(lo, height[i])
-        heightBins.fill(0)
-        moving = 0
-        for (i in 0 until flakes) {
-            rank[i] = -1
-            if (asleep[i]) continue
-            val b = ((height[i] - lo) * 2f).toInt().coerceIn(0, HEIGHT_BINS - 1)
-            binOf[i] = b
-            heightBins[b + 1]++
-            moving++
-        }
-        for (b in 1..HEIGHT_BINS) heightBins[b] += heightBins[b - 1]
-        for (i in 0 until flakes) {
-            if (asleep[i]) continue
-            val k = heightBins[binOf[i]]++
-            order[k] = i
-            rank[i] = k
-        }
-    }
-
-    /**
-     * Finds, for each moving flake in order, the flakes it may touch within the next [h]
-     * (each pair once, from the lower one): the passes over the contacts then go through
-     * these lists instead of searching round every flake each time.
-     */
-    private fun findPairs(h: Float) {
-        var p = 0
-        val margin = 0.25f * grain
-        val pull = HEAP_GRAVITY * h
-        for (k in 0 until moving) {
-            pairStart[k] = p
-            val i = order[k]
-            val li = lying[i]
-            val vi = len(vx[i], vy[i]) + pull
-            val bi = bucketOf[i] % bcols
-            val bj = bucketOf[i] / bcols
-            for (dj in -1..1) for (di in -1..1) {
-                val ci = bi + di
-                val cj = bj + dj
-                if (ci < 0 || cj < 0 || ci >= bcols || cj >= brows) continue
-                val b = cj * bcols + ci
-                for (m in bucketStart[b] until bucketStart[b + 1]) {
-                    val j = bucketItems[m]
-                    if (j == i) continue
-                    val sj = asleep[j]
-                    // Each pair of moving flakes once (from the lower one).
-                    if (!sj && rank[j] in 0 until k) continue
-                    // Two flakes in the liquid pass each other by.
-                    if (!li && !lying[j]) continue
-                    val vj = if (sj) 0f else len(vx[j], vy[j]) + pull
-                    val lim = radius[i] + radius[j] + margin + (vi + vj) * h * 1.5f
-                    val dx = x[i] - x[j]
-                    val dy = y[i] - y[j]
-                    if (dx * dx + dy * dy > lim * lim) continue
-                    if (p == pairJ.size) pairJ = pairJ.copyOf(p * 2)
-                    pairJ[p++] = j
-                }
-            }
-        }
-        pairStart[moving] = p
-    }
-
-    /** One pass over all the contacts of the moving flakes, the lowest first. */
-    private fun solve() {
-        for (k in 0 until moving) {
-            val i = order[k]
-            if (asleep[i]) continue
-            val li = lying[i]
-            if (li) onGlass(i)
-            for (p in pairStart[k] until pairStart[k + 1]) {
-                val j = pairJ[p]
-                if (!li && !lying[j]) continue
-                touch(i, j, asleep[j])
-            }
-        }
-    }
-
-    /** Lying grain [i] against the glass: pushed back in, rubbing on it. */
-    private fun onGlass(i: Int) {
-        val d = wall(x[i], y[i], glassNormal) + radius[i]
-        if (d <= 0f) return
-        val nx0 = glassNormal[0]
-        val ny0 = glassNormal[1]
-        x[i] -= nx0 * d
-        y[i] -= ny0 * d
-        if (stabilizing) return
-        var tx = x[i] - x0[i]
-        var ty = y[i] - y0[i]
-        val dn = tx * nx0 + ty * ny0
-        tx -= dn * nx0
-        ty -= dn * ny0
-        val lt = len(tx, ty)
-        if (lt > 1e-9f) {
-            val m = 0.7f * kotlin.math.tan(glassHoldAt(i))
-            val c = if (lt < m * d) 1f else min(1f, m * 0.8f * d / lt)
-            x[i] -= tx * c
-            y[i] -= ty * c
-        }
-        contacts[i]++
-        if (ny0 > 0.2f) supported[i] = true
-    }
-
-    /** Flakes [i] (moving) and [j] (asleep if [jAsleep]) pushed apart if they overlap. */
-    private fun touch(i: Int, j: Int, jAsleep: Boolean) {
-        val dx = x[i] - x[j]
-        val dy = y[i] - y[j]
-        val rr = radius[i] + radius[j]
-        val d2 = dx * dx + dy * dy
-        if (d2 >= rr * rr) return
-        val d = sqrt(d2).coerceAtLeast(1e-6f)
-        val nx0 = dx / d
-        val ny0 = dy / d
-        val pen = rr - d
-        // Pushed apart evenly (all on the moving one against a sleeping one). Only when
-        // undoing old overlaps the higher one takes more of the push, so stacks stand
-        // firm; that moves no grain's speed, so nothing creeps.
-        val si = when {
-            jAsleep -> 1f
-            stabilizing -> {
-                val t = STACKING * (height[i] - height[j])
-                0.5f + 0.5f * t / (1f + abs(t))
-            }
-            else -> 0.5f
-        }
-        val sj = 1f - si
-        x[i] += nx0 * pen * si
-        y[i] += ny0 * pen * si
-        x[j] -= nx0 * pen * sj
-        y[j] -= ny0 * pen * sj
-        if (stabilizing) return
-        if (lying[i] && lying[j]) {
-            // Friction: the grains do not slip on each other while they press hard enough.
-            var tx = x[i] - x0[i] - (if (jAsleep) 0f else x[j] - x0[j])
-            var ty = y[i] - y0[i] - (if (jAsleep) 0f else y[j] - y0[j])
-            val dn = tx * nx0 + ty * ny0
-            tx -= dn * nx0
-            ty -= dn * ny0
-            val lt = len(tx, ty)
-            if (lt > 1e-9f) {
-                val m = (friction[i] + friction[j]) * 0.5f
-                val c = if (lt < m * pen) 1f else min(1f, m * 0.8f * pen / lt)
-                val fi = c * si
-                val fj = c * sj
-                x[i] -= tx * fi
-                y[i] -= ty * fi
-                x[j] += tx * fj
-                y[j] += ty * fj
-            }
-        }
-        contacts[i]++
-        if (!jAsleep) contacts[j]++
-        // Resting on the other one (it is below).
-        val under = -ny0
-        if (lying[j] && under > 0.2f) supported[i] = true
-        if (lying[i] && !jAsleep && -under > 0.2f) supported[j] = true
-        // A sleeping grain run into hard wakes up and gives way.
-        if (jAsleep && -(vx[i] * nx0 + vy[i] * ny0) > WAKE_SPEED && travelling(i)) wake(j)
-    }
-
-    /** Whether grain [i] rests only on the glass or on sleeping grains (and on something). */
-    private fun onRestingBase(i: Int): Boolean {
-        if (len(vx[i], vy[i]) > MOVING) return false
-        var any = false
-        if (wall(x[i], y[i], glassNormal) + radius[i] * 1.1f > 0f && glassNormal[1] > 0.3f) any = true
-        val bi = bucketOf[i] % bcols
-        val bj = bucketOf[i] / bcols
-        for (dj in -1..1) for (di in -1..1) {
-            val ci = bi + di
-            val cj = bj + dj
-            if (ci < 0 || cj < 0 || ci >= bcols || cj >= brows) continue
-            val b = cj * bcols + ci
-            for (k in bucketStart[b] until bucketStart[b + 1]) {
-                val j = bucketItems[k]
-                if (j == i || !lying[j]) continue
-                val dx = x[j] - x[i]
-                val dy = y[j] - y[i]
-                val d = len(dx, dy)
-                if (d > (radius[i] + radius[j]) * 1.1f) continue
-                if (dy < 0.3f * d) continue
-                if (!asleep[j]) return false
-                any = true
-            }
-        }
-        return any
-    }
-
-    /**
-     * Grains pressed together in the heap move together: each one's speed is drawn towards
-     * the mean of the moving ones touching it. A sliding mass keeps its pace, a grain
-     * rolling over resting snow keeps its own; the jostling inside a pressed heap dies away
-     * instead of feeding on itself.
-     */
-    private fun calm() {
-        for (i in 0 until flakes) {
-            avgX[i] = vx[i]
-            avgY[i] = vy[i]
-            if (!lying[i] || asleep[i]) continue
-            var sx = 0f
-            var sy = 0f
-            var n = 0
-            val bi = bucketOf[i] % bcols
-            val bj = bucketOf[i] / bcols
-            for (dj in -1..1) for (di in -1..1) {
-                val ci = bi + di
-                val cj = bj + dj
-                if (ci < 0 || cj < 0 || ci >= bcols || cj >= brows) continue
-                val b = cj * bcols + ci
-                for (k in bucketStart[b] until bucketStart[b + 1]) {
-                    val j = bucketItems[k]
-                    if (j == i || !lying[j] || asleep[j]) continue
-                    if (len(x[j] - x[i], y[j] - y[i]) > (radius[i] + radius[j]) * 1.1f) continue
-                    sx += vx[j]
-                    sy += vy[j]
-                    n++
-                }
-            }
-            if (n == 0) continue
-            avgX[i] = vx[i] + (sx / n - vx[i]) * CALM
-            avgY[i] = vy[i] + (sy / n - vy[i]) * CALM
-        }
-        for (i in 0 until flakes) {
-            if (!lying[i] || asleep[i]) continue
-            vx[i] = avgX[i]
-            vy[i] = avgY[i]
-        }
-    }
-
-    /** Grains that have stopped go to sleep; a grain that moved off wakes those it held up. */
-    private fun rest(h: Float) {
-        for (i in 0 until flakes) {
-            if (!lying[i] || asleep[i]) continue
-            if (!told[i] && len(x[i] - anchorX[i], y[i] - anchorY[i]) > 0.3f * grain) {
-                told[i] = true
-                wakeAround(i)
-            }
-            // Asleep once it has stayed within a sliver of one place for a while (in a deep
-            // heap the grains tremble a little round where they lie; that is rest too).
-            // Resting only on sleeping grains or on the glass, sooner: so rest grows up
-            // from the bottom of a heap, and a deep heap comes to rest as a whole.
-            still[i] += h
-            val base = onRestingBase(i)
-            if (still[i] < (if (base) SLEEP_TIME * 0.5f else SLEEP_TIME)) continue
-            val drift = if (base) SLEEP_DRIFT * 2f else SLEEP_DRIFT
-            if (contacts[i] == 0 || len(x[i] - stillX[i], y[i] - stillY[i]) > drift * grain) {
-                still[i] = 0f
-                stillX[i] = x[i]
-                stillY[i] = y[i]
-                continue
-            }
-            // Caught on a slope steeper than it holds (fallen onto a heap's flank, say): it
-            // does not stay there but breaks out and rolls on down.
-            if (!settling && tries[i] < MAX_TRIES && tooSteep(i)) {
-                tries[i]++
-                still[i] = 0f
-                stillX[i] = x[i]
-                stillY[i] = y[i]
-                vx[i] = breakX * BREAK_OUT
-                vy[i] = breakY * BREAK_OUT
-                continue
-            }
-            asleep[i] = true
-            tries[i] = 0
-            vx[i] = 0f
-            vy[i] = 0f
-            if (len(x[i] - anchorX[i], y[i] - anchorY[i]) > 0.5f * grain) moves++
-            anchorX[i] = x[i]
-            anchorY[i] = y[i]
-        }
-    }
-
-    /** Which lying grains are on the surface, and which way it faces there. */
-    private fun findSurface() {
-        for (i in 0 until flakes) {
-            if (!lying[i]) {
-                surface[i] = false
-                continue
-            }
-            var sx = 0f
-            var sy = 0f
-            var n = 0
-            val bi = bucketOf[i] % bcols
-            val bj = bucketOf[i] / bcols
-            for (dj in -1..1) for (di in -1..1) {
-                val ci = bi + di
-                val cj = bj + dj
-                if (ci < 0 || cj < 0 || ci >= bcols || cj >= brows) continue
-                val b = cj * bcols + ci
-                for (k in bucketStart[b] until bucketStart[b + 1]) {
-                    val j = bucketItems[k]
-                    if (j == i || !lying[j]) continue
-                    val dx = x[j] - x[i]
-                    val dy = y[j] - y[i]
-                    val d = len(dx, dy)
-                    if (d > (radius[i] + radius[j]) * 1.3f || d < 1e-6f) continue
-                    sx += dx / d
-                    sy += dy / d
-                    n++
-                }
-            }
-            // The glass counts as snow round it.
-            val gd = wall(x[i], y[i], glassNormal) + radius[i] * 1.3f
-            if (gd > 0f) {
-                sx += glassNormal[0] * 2f
-                sy += glassNormal[1] * 2f
-                n += 2
-            }
-            val len = len(sx, sy)
-            if (len > 1e-4f) {
-                outX[i] = -sx / len
-                outY[i] = -sy / len
-            } else {
-                outX[i] = 0f
-                outY[i] = -1f
-            }
-            surface[i] = n < 5 || len > 1.5f
+        val floor = driftTop - margin
+        if (y[i] > floor && bottomAt(x[i]) > driftTop) {
+            y[i] = floor
+            if (vy[i] > 0f) vy[i] *= -bounce * 0.5f
         }
     }
 
     // ---------------------------------------------------------------- for tests
 
-    /** Every flake counted once and inside the glass. */
+    /** Every flake counted once, inside the glass, the hanging ones over the drift. */
     internal fun consistent(): Boolean {
-        if ((0 until flakes).count { !lying[it] } != floating) return false
+        if ((0 until flakes).count { lying[it] } != crustCount) return false
         for (i in 0 until flakes) {
             if (x[i].isNaN() || y[i].isNaN()) return false
             if (wall(x[i], y[i], glassNormal) > 0.01f) return false
+            if (suspended[i] && y[i] > driftTop + 0.001f && bottomAt(x[i]) > driftTop) return false
         }
         return true
     }
 
-    /** Mean x of the lying snow. */
-    internal fun meanLyingX(): Float {
-        var s = 0f
-        var n = 0
-        for (i in 0 until flakes) if (lying[i]) { s += x[i]; n++ }
-        return if (n == 0) 0f else s / n
-    }
-
-    /** Grains lying in the top half of the glass. */
-    internal fun lyingInTopHalf(): Int = (0 until flakes).count { lying[it] && y[it] < 0.5f }
-
-    /** Grains lying in the bottom half of the glass. */
-    internal fun lyingInBottomHalf(): Int = (0 until flakes).count { lying[it] && y[it] >= 0.5f }
-
-    /** Height of the snow lying on the bottom at [px]. */
+    /** Height of the drift at [px]. */
     internal fun columnDepth(px: Float): Float {
         var top = bottomAt(px)
-        for (i in 0 until flakes) if (lying[i] && abs(x[i] - px) < grain * 1.5f) top = min(top, y[i] - radius[i])
+        for (i in 0 until crustCount) if (abs(x[i] - px) < grain * 1.5f) top = min(top, y[i] - radius[i])
         return bottomAt(px) - top
     }
-
-    internal fun awakeNow() = (0 until flakes).count { lying[it] && !asleep[it] }
-
-    /** For test messages. */
-    internal fun describe(): String =
-        "floating $floating lying ${(0 until flakes).count { lying[it] }} awake ${awakeNow()}"
 
     /** Fluid speed under a point, for tests. */
     internal fun liquidAt(px: Float, py: Float): Float = len(sample(u, px, py), sample(v, px, py))
 
     companion object {
-        /** Depth of the crust where it lies evenly over the flat bottom, bar heights. */
-        const val CRUST_DEPTH = 0.06f
-        /** The share of the snow that makes the crust; the rest hangs in the liquid. */
-        private const val CRUST_SHARE = 0.4f
+        /** Depth of the drift over the flat bottom unless told otherwise, bar heights. */
+        const val CRUST_DEPTH = 0.1f
+        /** Radius of the grains along the top of the drift, bar heights. */
+        private const val GRAIN = 0.02f
+
+        /** Two rows of grains along the top of a drift at [level], within the glass. */
+        private fun layBed(aspect: Float, corner: Float, level: Float): FloatArray {
+            val a = 2.02f * GRAIN
+            val rowStep = a * 0.866f
+            val out = ArrayList<Float>()
+            for (row in 0..1) {
+                val yy = level + GRAIN + row * rowStep
+                var xx = (if (row % 2 == 0) 0.5f else 1f) * a
+                while (xx < aspect) {
+                    // Inside the glass, a grain clear of it.
+                    val qx = abs(xx - aspect / 2f) - (aspect / 2f - corner)
+                    val qy = abs(yy - 0.5f) - (0.5f - corner)
+                    val d = sqrt(max(qx, 0f) * max(qx, 0f) + max(qy, 0f) * max(qy, 0f)) + min(max(qx, qy), 0f) - corner
+                    if (d < -GRAIN * 1.05f) {
+                        out += xx
+                        out += yy
+                    }
+                    xx += a
+                }
+            }
+            return out.toFloatArray()
+        }
         /** How fast the hanging snow sinks: hardly at all. */
         private const val HANG_SINK = 0.003f
         /** How hard hanging flakes keep apart, bar heights a second... */
-        private const val SPREAD = 0.06f
+        private const val SPREAD = 0.1f
         /** ...within this many times their mean spacing. */
         private const val SPREAD_REACH = 1.15f
-        /** The steepest slope a grain on the move stops on: the loosest (20°)... */
-        private val REST_MIN = Math.toRadians(20.0).toFloat()
-        /** ...and this much more for the firmest (to 28°). */
-        private val REST_SPAN = Math.toRadians(12.0).toFloat()
-        /** The steepest glass the crust holds on (50° to 70°). */
-        private val GLASS_HOLD_MIN = Math.toRadians(50.0).toFloat()
-        private val GLASS_HOLD_SPAN = Math.toRadians(20.0).toFloat()
-        /**
-         * How heavy the snow is in the liquid, against what it was first made with: the
-         * liquid holds up nearly all of its weight, so it sinks, slides and rolls slowly and
-         * is easily stirred up. Everything that comes of its weight scales with this.
-         */
-        private const val WEIGHT = 1f / 3f
-        /** A grain faster than this is moving off (those on it look again). */
-        private const val MOVING = 0.05f * WEIGHT
-        /** How much of the way to a grain its trail comes each step. */
-        private const val TRAIL = 0.05f
-        /** How far each step a grain's speed goes towards that of the grains round it. */
-        private const val CALM = 0.5f
-        /** Friction between grains on the move (they roll, so little), a middling grain. */
-        private const val ROLL_FRICTION = 0.12f
-        /** Gravity on a grain in the heap, bar heights a second², ... */
-        private const val HEAP_GRAVITY = 4f * WEIGHT
-        /** ...the liquid holding it back (time constant, seconds)... */
-        private const val HEAP_DRAG = 0.25f
-        /** ...and its top speed. */
-        private const val MAX_HEAP_SPEED = 1.2f * WEIGHT
-        private const val HEIGHT_BINS = 1024
-        /** How much more the higher of two grains gives way when old overlaps are undone. */
-        private const val STACKING = 3f
-        private const val STABILIZE_PASSES = 2
-        /** The speed a grain breaks out of its place with when the slope gives way. */
-        private val BREAK_OUT = 0.25f * sqrt(WEIGHT)
-        /** A grain held fast where the slope looks too steep stops trying after this. */
-        private const val MAX_TRIES = 3
+        /** How hard bunched-up snow is pushed towards thin snow, bar heights² a second. */
+        private const val EVEN = 0.045f
+        /** Snow this far off even (in thickness) counts as still spreading out. */
+        private const val BUNCHED = 0.6f
         private const val SUBSTEPS = 2
-        private const val ITERATIONS = 3
-        private const val SETTLE_SUBSTEPS = 90
-        private const val RELAX_PASSES = 40
-        /** A grain that stays within this many grains of one place for [SLEEP_TIME] sleeps. */
-        private const val SLEEP_DRIFT = 0.12f
-        private const val SLEEP_TIME = 0.3f
-        /** A sleeping grain run into faster than this wakes. */
-        private const val WAKE_SPEED = 0.2f * WEIGHT
-        /** A grain off the snow this long is in the liquid again, seconds. */
-        private const val AIR_TIME = 1f
-        /** A flake faster than this does not settle yet. */
-        private const val LAND_SPEED = 0.35f
-        /** Liquid running faster than this over the heap starts lifting grains, bar heights/s. */
-        private val STIR = 0.3f * sqrt(WEIGHT)
-        /** How fast running liquid lifts a grain on top, per (bar height/s) over [STIR]. */
-        private const val LIFT_FLOW = 10f
-        /** How fast a shake lifts a grain on top, per m/s² over 2.5. */
-        private const val LIFT_SHAKE = 1.4f
         /** How much of the glass's shaking the liquid lags behind, per m/s². */
         private const val SLOSH = 0.05f
         /** How fast the liquid's own motion dies away, per second. */

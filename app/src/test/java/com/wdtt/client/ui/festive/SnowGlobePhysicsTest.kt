@@ -19,7 +19,7 @@ class SnowGlobePhysicsTest {
         val w = sim.aspect - 2 * sim.corner
         for (i in 0 until sim.flakes) {
             if (!sim.suspended[i] || sim.lying[i]) continue
-            val c = ((sim.x[i] - x0) / w * cols).toInt()
+            val c = kotlin.math.floor((sim.x[i] - x0) / w * cols).toInt()
             if (c < 0 || c >= cols) continue
             val r = if (sim.y[i] < 0.5f) 0 else 1
             counts[r * cols + c]++
@@ -99,7 +99,7 @@ class SnowGlobePhysicsTest {
             x = (x + v * dt).coerceIn(0.5f, 5f)
             val shake = if (i % 400 in 0..25) 14f else 0f
             sim.step(dt, x, 0.7f, v, shake, -shake)
-            if (i % 100 == 0) assertTrue("step $i: ${sim.describe()}", sim.consistent())
+            if (i % 100 == 0) assertTrue("step $i", sim.consistent())
         }
         for (i in 0 until sim.flakes) {
             assertTrue("x of $i: ${sim.x[i]}", sim.x[i] in 0f..sim.aspect)
@@ -107,15 +107,48 @@ class SnowGlobePhysicsTest {
         }
     }
 
-    @Test fun theCrustLiesStillOnTheGlass() {
+    @Test fun theDriftLiesEvenAndNothingStirsIt() {
         val sim = SnowGlobePhysics(5.5f)
         sim.settleAll()
-        val moves = sim.moves
-        run(sim, 20f)
-        // Only the odd loose grain at the edge of the top row settles a step lower.
-        assertTrue("the crust stays put: ${sim.moves - moves}", sim.moves - moves <= 30)
-        assertEquals("all of it on the glass", sim.crustCount, (0 until sim.crustCount).count { sim.lying[it] && sim.y[it] > 0.85f })
-        assertEquals(0, sim.awakeNow())
+        val depths = (0..14).map { sim.columnDepth(1f + it * 0.25f) }
+        println("drift depths: ${depths.joinToString { "%.3f".format(it) }}")
+        assertTrue("even: ${depths.min()}..${depths.max()}", depths.max() - depths.min() < 1.2f * sim.grain)
+        val x0 = sim.x.copyOf()
+        val y0 = sim.y.copyOf()
+        // The droplet swept to and fro, the phone shaken hard now and then.
+        var x = 0.6f
+        repeat(60 * 20) { k ->
+            val v = if ((k / 90) % 2 == 0) 5f else -5f
+            x = (x + v * dt).coerceIn(0.6f, 4.9f)
+            val shake = if (k % 300 < 36) (if ((k / 6) % 2 == 0) 16f else -16f) else 0f
+            sim.step(dt, x, 0.7f, v, shake, shake * 0.6f)
+        }
+        val moved = (0 until sim.crustCount).count { sim.x[it] != x0[it] || sim.y[it] != y0[it] }
+        assertEquals("the drift stays as it lies", 0, moved)
+        assertTrue(sim.consistent())
+    }
+
+    @Test fun aHighDriftKeepsTheHangingSnowOverIt() {
+        val sim = SnowGlobePhysics(5.5f, level = 0.74f)
+        sim.settleAll()
+        repeat(60 * 4) { k ->
+            val shake = if (k % 80 < 30) (if ((k / 6) % 2 == 0) 16f else -16f) else 0f
+            sim.step(dt, shakeX = shake, shakeY = shake * 0.6f)
+        }
+        assertTrue(sim.consistent())
+        run(sim, 8f)
+        assertTrue(sim.consistent())
+        // Over the drift, in 6 x 2 parts of the straight middle.
+        val counts = IntArray(12)
+        val w = sim.aspect - 2 * sim.corner
+        for (i in 0 until sim.flakes) {
+            if (!sim.suspended[i]) continue
+            val c = kotlin.math.floor((sim.x[i] - sim.corner) / w * 6).toInt()
+            if (c < 0 || c >= 6) continue
+            counts[(if (sim.y[i] < sim.driftTop / 2) 0 else 6) + c]++
+        }
+        println("over a high drift: ${counts.joinToString()}")
+        assertTrue("no part of it bare: ${counts.joinToString()}", counts.min() > 0.5 * counts.average())
     }
 
     @Test fun theQuietSnowIsWorkedOutAtHalfTheFrames() {
@@ -127,20 +160,24 @@ class SnowGlobePhysicsTest {
         assertTrue("shaken: lively", sim.lively)
     }
 
-    @Test fun aShakeLiftsTheCrustAndItSettlesOnTheBottomAgain() {
+    @Test fun afterAShakeTheSnowSpreadsOutAgainSoon() {
         val sim = SnowGlobePhysics(5.5f)
         sim.settleAll()
-        run(sim, 1f)
-        repeat(36) { sim.step(dt, shakeX = if ((it / 6) % 2 == 0) 16f else -16f, shakeY = if ((it / 6) % 2 == 0) 10f else -10f) }
-        val lifted = (0 until sim.crustCount).count { !sim.lying[it] }
-        run(sim, 150f)
-        val back = (0 until sim.crustCount).count { sim.lying[it] && sim.y[it] > 0.75f }
-        println("shaken: lifted $lifted, back on the bottom $back of ${sim.crustCount}, ${sim.describe()}")
-        assertTrue("the shake lifted some of the crust: $lifted", lifted > 0.05f * sim.crustCount)
-        assertTrue("it settled on the bottom again: $back", back > 0.95f * sim.crustCount)
-        assertTrue(sim.consistent())
-        val moves = sim.moves
         run(sim, 5f)
-        assertTrue("and rests there: ${sim.moves - moves}", sim.moves - moves <= 3)
+        repeat(36) { sim.step(dt, shakeX = if ((it / 6) % 2 == 0) 16f else -16f, shakeY = if ((it / 6) % 2 == 0) 10f else -10f) }
+        val shaken = spread(sim)
+        var even = -1f
+        for (k in 1..60 * 20) {
+            sim.step(dt)
+            if (even < 0f && k % 30 == 0) {
+                val c = spread(sim)
+                if (c.min() > 0.5 * c.average()) even = k * dt
+            }
+        }
+        val after = spread(sim)
+        println("shaken: ${shaken.joinToString()}; even again after $even s; 20 s on: ${after.joinToString()}")
+        assertTrue("even again within 6 s: $even", even in 0f..6f)
+        assertTrue("and stays so: ${after.joinToString()}", after.min() > 0.5 * after.average())
+        assertTrue(sim.consistent())
     }
 }

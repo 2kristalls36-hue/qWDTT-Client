@@ -611,8 +611,16 @@ fun ArdttNavigationBar(
                             drawContent()
                         },
                 ) {
-                    // New Year: snow inside the glass, stirred by the droplet and a shake.
-                    com.wdtt.client.ui.festive.SnowGlobe({ selPos.value }, count, barRadius / ArdttSize.NavTrack, Modifier.matchParentSize())
+                    // New Year: snow inside the glass, stirred by the droplet and a shake; Santa's
+                    // train rides on the drift along its bottom.
+                    val groundOf: ((Float, Float) -> Float)? = if (sleigh != null) {
+                        val padX = with(densityNow) { NavBarDefaults.TrackPadding.toPx() }
+                        val padY = with(densityNow) { ArdttSpacing.Tiny.toPx() }
+                        val tallest = with(densityNow) { SleighTrain.height.toPx() }
+                        val at: (Float, Float) -> Float = { w, h -> SleighTrain.groundIn(w, h, padX, padY, tallest) }
+                        at
+                    } else null
+                    com.wdtt.client.ui.festive.SnowGlobe({ selPos.value }, count, barRadius / ArdttSize.NavTrack, Modifier.matchParentSize(), groundOf)
                     tabs()
                 }
                 val trackH = ArdttSize.NavTrack

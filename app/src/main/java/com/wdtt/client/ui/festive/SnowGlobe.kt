@@ -45,6 +45,21 @@ import kotlin.math.sqrt
 private class GlobeHolder {
     var sim: SnowGlobePhysics? = null
     var warp: GlassWarp? = null
+    /** The body of the drift as seen (it never moves). */
+    var drift: Path? = null
+}
+
+/** The height in the room seen at [displayY] (pixels from the bar's top) in the middle. */
+private fun roomY(warp: GlassWarp, displayY: Float): Float {
+    val at = FloatArray(4)
+    var lo = warp.roomHeight * 0.3f
+    var hi = warp.roomHeight
+    repeat(40) {
+        val mid = (lo + hi) / 2f
+        warp.map(warp.roomWidth / 2f, mid, at)
+        if (at[1] < displayY) lo = mid else hi = mid
+    }
+    return (lo + hi) / 2f
 }
 
 /**
@@ -58,7 +73,17 @@ private class GlobeHolder {
  * something moves.
  */
 @Composable
-fun SnowGlobe(dropletPos: () -> Float, tabs: Int, corner: Float, modifier: Modifier = Modifier) {
+fun SnowGlobe(
+    dropletPos: () -> Float,
+    tabs: Int,
+    corner: Float,
+    modifier: Modifier = Modifier,
+    /**
+     * Where the drift's top should be seen, pixels from the top of the bar, given its width
+     * and height (Santa's train rides on it); by default a shallow drift.
+     */
+    ground: ((Float, Float) -> Float)? = null,
+) {
     val festive = LocalFestive.current
     if (!festive.active) return
     val holder = remember { GlobeHolder() }
@@ -115,8 +140,11 @@ fun SnowGlobe(dropletPos: () -> Float, tabs: Int, corner: Float, modifier: Modif
                 val h = it.height.toFloat()
                 val warp = GlassWarp(it.width.toFloat(), h, corner.coerceIn(0.05f, 0.5f) * h, GLASS_DEPTH * density, GLASS_BEZEL * density)
                 holder.warp = warp
+                // The drift's top where it is to be seen: back through the glass into the room.
+                val level = ground?.let { g -> roomY(warp, g(it.width.toFloat(), h)) / warp.roomHeight }
+                    ?: (1f - SnowGlobePhysics.CRUST_DEPTH)
                 // The snow already lies on the bottom when the bar appears.
-                holder.sim = SnowGlobePhysics(warp.roomWidth / warp.roomHeight, warp.roomCorner / warp.roomHeight).apply { settleAll() }
+                holder.sim = SnowGlobePhysics(warp.roomWidth / warp.roomHeight, warp.roomCorner / warp.roomHeight, level).apply { settleAll() }
             }
         },
     ) {
@@ -134,10 +162,22 @@ fun SnowGlobe(dropletPos: () -> Float, tabs: Int, corner: Float, modifier: Modif
             // The snow on a layer of its own, so the glass can shine over the snow only.
             drawIntoCanvas { it.saveLayer(Rect(Offset.Zero, size), Paint()) }
 
-            // ---- The heap: every lying grain, a little larger than it is, so together they
-            // make one body of snow with a fluffy edge. The ones inside a touch bluish, the
-            // ones on the surface white on top. Seen through the rim they flatten against
-            // the glass.
+            // ---- The drift: a body of snow along the bottom up to its level, seen through the
+            // glass; along its top the grains, a little larger than they are, make a fluffy
+            // edge, the ones on the very top white. Seen through the rim they flatten
+            // against the glass.
+            val body = holder.drift ?: Path().also { path ->
+                val steps = 64
+                for (n in 0..steps) {
+                    warp.map(sim.aspect * k * n / steps, (sim.driftTop + sim.grain) * k, at)
+                    if (n == 0) path.moveTo(at[0], at[1]) else path.lineTo(at[0], at[1])
+                }
+                path.lineTo(size.width + k, size.height + k)
+                path.lineTo(-k, size.height + k)
+                path.close()
+                holder.drift = path
+            }
+            drawPath(body, SnowShade)
             for (i in 0 until sim.flakes) {
                 if (!sim.lying[i]) continue
                 grain(warp, sim.x[i] * k, sim.y[i] * k, sim.radius[i] * 1.55f * k, SnowShade, 1f, at)

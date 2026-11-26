@@ -634,6 +634,23 @@ private fun sleigh() = figure {
         fill(Belt, Mono.Cut) { rect(10.1f, 12.5f, 7.2f, 0.8f) }
         fill(Gold) { rect(13.05f, 12.3f, 1.2f, 1.2f) }
         fill(Belt, Mono.Cut) { rect(13.4f, 12.65f, 0.5f, 0.5f) }
+        // The arm held out, a fur cuff, a mitten on the reins; drawn before the head, so
+        // it comes out from under the beard.
+        joint(J.ARM, 15.6f, 10.6f) {
+            fill(CoatRed, gap = 0.3f) {
+                moveTo(15f, 9.8f)
+                cubicTo(16.8f, 10f, 18.4f, 10.4f, 19.6f, 10.9f)
+                lineTo(19.7f, 12.3f)
+                cubicTo(18.2f, 12.4f, 16.8f, 12.6f, 15.4f, 12.8f)
+                close()
+            }
+            fill(Fur, gap = 0.15f) { round(19.1f, 10.6f, 1.1f, 1.9f, 0.4f) }
+            fill(Mitten, gap = 0.2f) {
+                circle(20.7f, 11.6f, 0.95f)
+                circle(20.9f, 10.7f, 0.4f)
+            }
+            line(Mitten.tint(0.4f), 0.15f, Mono.Skip) { seg(20f, 11.2f, 21.3f, 11.4f) }
+        }
         // A fur collar showing beside the beard.
         fill(Fur, gap = 0.15f) {
             moveTo(11.4f, 10.6f)
@@ -777,22 +794,6 @@ private fun sleigh() = figure {
                     }
                 }
             }
-        }
-        // The arm held out, a fur cuff, a mitten on the reins.
-        joint(J.ARM, 15.6f, 10.6f) {
-            fill(CoatRed, gap = 0.3f) {
-                moveTo(15f, 9.8f)
-                cubicTo(16.8f, 10f, 18.4f, 10.4f, 19.6f, 10.9f)
-                lineTo(19.7f, 12.3f)
-                cubicTo(18.2f, 12.4f, 16.8f, 12.6f, 15.4f, 12.8f)
-                close()
-            }
-            fill(Fur, gap = 0.15f) { round(19.1f, 10.6f, 1.1f, 1.9f, 0.4f) }
-            fill(Mitten, gap = 0.2f) {
-                circle(20.7f, 11.6f, 0.95f)
-                circle(20.9f, 10.7f, 0.4f)
-            }
-            line(Mitten.tint(0.4f), 0.15f, Mono.Skip) { seg(20f, 11.2f, 21.3f, 11.4f) }
         }
     }
     // The body of the sleigh, low at the seat, its front curling up; a gold edge and swirl.

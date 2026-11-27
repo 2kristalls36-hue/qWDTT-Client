@@ -138,7 +138,7 @@ fun HomeScreen(settingsStore: SettingsStore, onOpenProfiles: () -> Unit) {
     val subView = SubscriptionText.view(sub, warnDays)
 
     var sheetOpen by remember { mutableStateOf(false) }
-    var logsOpen by remember { mutableStateOf(false) }
+    var aboutOpen by remember { mutableStateOf(false) }
 
     // A failed start ends quietly in the engine; show its reason once.
     val fatal by TunnelManager.lastFatalError.collectAsStateWithLifecycle()
@@ -190,7 +190,7 @@ fun HomeScreen(settingsStore: SettingsStore, onOpenProfiles: () -> Unit) {
                     .weight(1f)
                     // A little air between the logo and the screen edge.
                     .padding(start = 6.dp, end = 8.dp)
-                    .pointerInput(Unit) { detectTapGestures(onLongPress = { haptics.perform(com.wdtt.client.ui.motion.Haptic.LongPress); logsOpen = true }) },
+                    .pointerInput(Unit) { detectTapGestures(onLongPress = { haptics.perform(com.wdtt.client.ui.motion.Haptic.LongPress); aboutOpen = true }) },
             )
             ProfileChip(
                 name = profile?.name ?: "Нет профиля",
@@ -264,7 +264,8 @@ fun HomeScreen(settingsStore: SettingsStore, onOpenProfiles: () -> Unit) {
         )
     }
 
-    if (logsOpen) LogsSheet(onDismiss = { logsOpen = false })
+    // A long press on the logo: about the app. The journal is in the settings.
+    if (aboutOpen) AboutDialog(onDismiss = { aboutOpen = false })
 
 
     // The app crashed last time: show what happened so it can be sent to the developer.

@@ -108,6 +108,13 @@ internal object InstalledApps {
         }
     }
 
+    /** Forgets the list read (tests: each starts from nothing). */
+    @androidx.annotation.VisibleForTesting
+    internal fun forget() {
+        state.value = null
+        readAt = 0L
+    }
+
     fun icon(packageName: String): ImageBitmap? = icons.get(packageName)
 
     fun keepIcon(packageName: String, icon: ImageBitmap) {

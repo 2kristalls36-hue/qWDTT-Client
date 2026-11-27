@@ -18,6 +18,8 @@ import org.robolectric.annotation.Config
 class InstalledAppsTest {
     @Test fun theListIsReadOnceAndKept() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        // Kept for the whole process: another test may have read it a moment ago.
+        InstalledApps.forget()
         shadowOf(context.packageManager).installPackage(
             PackageInfo().apply {
                 packageName = "org.example.maps"

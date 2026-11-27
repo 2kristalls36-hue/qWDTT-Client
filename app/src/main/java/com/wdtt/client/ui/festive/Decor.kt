@@ -46,7 +46,8 @@ private fun glassMode(): Boolean = LocalGlassBackdrop.current != null && LiquidG
  * Snowflakes falling over the whole screen; touches pass through. Each is a six-armed
  * crystal of one of a few kinds, turning slowly as it falls and tipping over now and then
  * (seen edge-on it narrows); the nearer ones larger, faster and swaying more, the far ones
- * small and faint.
+ * small and faint. Each fades away as it falls and comes back further down, at its own
+ * pace: about half of them are seen at a time, so the screen stays easy to read.
  */
 @Composable
 fun SnowfallOverlay(modifier: Modifier = Modifier) {
@@ -58,6 +59,8 @@ fun SnowfallOverlay(modifier: Modifier = Modifier) {
         val dp = density
         val span = size.height + 40f * dp
         for (i in 0 until FLAKES) {
+            val shown = snowflakeShown(i, t)
+            if (shown < 0.01f) continue
             val near = hash01(11, i)
             // Bigger flakes are nearer: they fall faster and sway more.
             val radius = (2.2f + 6.5f * near * near) * dp
@@ -68,7 +71,7 @@ fun SnowfallOverlay(modifier: Modifier = Modifier) {
             val spin = (hash01(37, i) * 360f + t * (hash01(41, i) - 0.5f) * 70f)
             val tip = cos(t * (0.2f + 0.5f * hash01(43, i)) + hash01(47, i) * 6.28f)
             val squash = 0.3f + 0.7f * kotlin.math.abs(tip)
-            val alpha = (0.45f + 0.45f * near) * (0.75f + 0.25f * hash01(31, i))
+            val alpha = (0.45f + 0.45f * near) * (0.75f + 0.25f * hash01(31, i)) * shown
             val kind = SNOWFLAKES[(hash01(53, i) * SNOWFLAKES.size).toInt().coerceIn(0, SNOWFLAKES.size - 1)]
             // A soft glow round it, then the crystal itself.
             drawCircle(color, radius * 0.8f, Offset(x, y), alpha = 0.1f * alpha)
@@ -85,6 +88,17 @@ fun SnowfallOverlay(modifier: Modifier = Modifier) {
 }
 
 private const val FLAKES = 40
+
+/**
+ * How much of snowflake [i] is seen at [t] seconds, 0..1: once every 7 to 13 seconds (its
+ * own pace and moment) it fades away, stays unseen a while and fades in again.
+ */
+internal fun snowflakeShown(i: Int, t: Float): Float {
+    val period = 7f + 6f * hash01(59, i)
+    val wave = 0.5f - 0.5f * cos(2f * PI.toFloat() * (t / period + hash01(61, i)))
+    val x = ((wave - 0.4f) / 0.45f).coerceIn(0f, 1f)
+    return x * x * (3f - 2f * x)
+}
 
 /**
  * The kinds of snowflake, a unit across from the middle: six arms each, and on them

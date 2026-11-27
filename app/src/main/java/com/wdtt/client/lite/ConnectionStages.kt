@@ -20,7 +20,7 @@ object ConnectionStages {
     fun title(step: ConnectionStep): String = when (step) {
         ConnectionStep.DNS -> "Проверка сети"
         ConnectionStep.VK -> "Получение доступа к звонку"
-        ConnectionStep.CAPTCHA -> "Ожидание проверки VK"
+        ConnectionStep.CAPTCHA -> "Ожидание подтверждения VK"
         ConnectionStep.WRAP -> "Подготовка соединения"
         ConnectionStep.TURN -> "Подключение через звонок"
         ConnectionStep.DTLS -> "Защита соединения"

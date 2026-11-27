@@ -54,20 +54,30 @@ object ManlCaptchaWebViewManager {
     }
 
     private const val NOTIFICATION_ID = 9001
-    private const val CHANNEL_ID = "captcha_channel"
+    /**
+     * A channel of high importance: the notice comes up over the screen. VK waits for the
+     * confirmation about a minute, and a quiet notice in the shade is easily missed then.
+     */
+    private const val CHANNEL_ID = "vk_confirmation"
+    private const val OLD_CHANNEL_ID = "captcha_channel"
 
     private fun showCaptchaNotification(context: Context, redirectUri: String) {
-        if (MainActivity.isForeground) return // Если юзер уже в приложении — не спамим пушом
+        if (MainActivity.isForeground) return // The window opens by itself in the app.
         if (!NotificationHelper.areNotificationsEnabled(context)) return
 
-        NotificationHelper.ensureAuxChannel(
-            context,
-            CHANNEL_ID,
-            "Уведомления защиты (Капча)",
-            "Запросы капчи VK при подключении",
-        )
-        
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (android.os.Build.VERSION.SDK_INT >= 26) {
+            // The old channel was of default importance, and that cannot be raised.
+            notificationManager.deleteNotificationChannel(OLD_CHANNEL_ID)
+            if (notificationManager.getNotificationChannel(CHANNEL_ID) == null) {
+                notificationManager.createNotificationChannel(
+                    android.app.NotificationChannel(CHANNEL_ID, "Подтверждение VK", NotificationManager.IMPORTANCE_HIGH).apply {
+                        description = "Запросы подтверждения VK при подключении."
+                        lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+                    },
+                )
+            }
+        }
 
         val openIntent = Intent(context, ManlCaptchaActivity::class.java).apply {
             putExtra("redirectUri", redirectUri)
@@ -84,13 +94,17 @@ object ManlCaptchaWebViewManager {
         )
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_dialog_alert)
-            .setContentTitle("Требуется подтверждение капчи")
-            .setContentText("ВК запросил проверку безопасности. Нажмите для решения.")
+            .setSmallIcon(com.wdtt.client.R.drawable.ic_stat_connected)
+            .setContentTitle("Подтверждение VK")
+            .setContentText("Для подключения требуется подтверждение VK.")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setContentIntent(openPendingIntent)
             .setAutoCancel(true)
-            .addAction(0, "Отменить и выключить", cancelPendingIntent)
+            // VK waits about a minute: the notice goes with it.
+            .setTimeoutAfter(CAPTCHA_TIMEOUT_MS)
+            .addAction(0, "Отменить подключение", cancelPendingIntent)
             .build()
 
         notificationManager.notify(NOTIFICATION_ID, notification)

@@ -19,6 +19,8 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asComposeRenderEffect
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.layer.GraphicsLayer
@@ -36,11 +38,19 @@ import androidx.compose.ui.unit.dp
  * colors split slightly there (a rainbow fringe that slowly travels around the edge),
  * and a thin specular rim catches a light that drifts with time.
  *
- * Android 13+ only (RuntimeShader). Callers check [LiquidGlass.supported] and keep
- * the plain translucent shell otherwise.
+ * The lens needs Android 13 (RuntimeShader). Before it (Android 8 to 12, and HarmonyOS,
+ * which runs apps as Android 10 to 12) the panel is a simpler glass drawn without it: what
+ * is behind, magnified a little and frosted where the system can blur (Android 12), under
+ * the veil, the slab's light and shade, the coloured fringe and the rim with its drifting
+ * light. The edge does not bend.
  */
 object LiquidGlass {
-    val supported: Boolean get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+    /** Glass at all: the lens or the simpler glass. */
+    val supported: Boolean get() = true
+    /** The full lens: the edge bends what is behind and splits its colours. */
+    val refracts: Boolean get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+    /** What is behind the glass can be frosted (blurred). */
+    val frosts: Boolean get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 }
 
 /** Where the backdrop layer was recorded, in root coordinates. */
@@ -121,14 +131,25 @@ fun LiquidGlassPanel(
     val radiusPx = with(density) { cornerRadius.toPx() }
     // Read only while drawing the layer: a step redraws the glass without recomposing it.
     val time by rememberGlassTime()
-    val shader = remember { if (LiquidGlass.supported) GlassShader.create() else null }
+    val shader = remember { if (LiquidGlass.refracts) GlassShader.create() else null }
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(cornerRadius)
 
     Box(modifier.onGloballyPositioned { position = it.positionInRoot() }) {
         Box(
             Modifier
                 .matchParentSize()
                 .graphicsLayer {
-                    val s = shader ?: return@graphicsLayer
+                    val s = shader
+                    if (s == null) {
+                        // The simpler glass: frosted where the system can, kept to its shape.
+                        clip = true
+                        this.shape = shape
+                        val blurPx = with(density) { blur.toPx() }
+                        if (LiquidGlass.frosts && blurPx >= 0.5f) {
+                            renderEffect = androidx.compose.ui.graphics.BlurEffect(blurPx, blurPx, androidx.compose.ui.graphics.TileMode.Clamp)
+                        }
+                        return@graphicsLayer
+                    }
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         renderEffect = GlassShader.effect(
                             s, size.width, size.height, radiusPx, density.density, time, tint, dark,
@@ -147,10 +168,88 @@ fun LiquidGlassPanel(
                 .drawBehind {
                     if (underlay != null) drawRect(underlay)
                     val offset = position - backdrop.origin
-                    translate(-offset.x, -offset.y) { drawLayer(backdrop.layer) }
+                    if (shader == null) {
+                        // Without the lens a glass still magnifies a little (the droplet as
+                        // much as it asks for).
+                        val k = 1f + zoom + 0.03f
+                        scale(k, k, pivot = center) {
+                            translate(-offset.x, -offset.y) { drawLayer(backdrop.layer) }
+                        }
+                    } else {
+                        translate(-offset.x, -offset.y) { drawLayer(backdrop.layer) }
+                    }
                 },
         )
+        if (shader == null) {
+            // Over the frost, sharp: the veil, the slab's light and shade, the fringe, the rim.
+            androidx.compose.foundation.Canvas(Modifier.matchParentSize()) {
+                simpleGlass(
+                    radius = with(density) { cornerRadius.toPx() },
+                    dp = density.density,
+                    time = time,
+                    tint = tint,
+                    dark = dark,
+                    bezel = with(density) { bezel.toPx() },
+                    fringeK = fringe,
+                    rim = backdrop.rim,
+                )
+            }
+        }
         content()
+    }
+}
+
+/**
+ * The simpler glass drawn over what is behind it, where there is no lens: the veil (denser
+ * where nothing is frosted, so what is on the glass stays legible), the slab lit along its
+ * upper edge and shaded along the lower one, the coloured fringe inside the rim (the
+ * rainbow travelling round, or the colour of the power level) and the thin bright rim,
+ * brightest where the drifting light falls on it.
+ */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.simpleGlass(
+    radius: Float, dp: Float, time: Float, tint: Color, dark: Boolean, bezel: Float, fringeK: Float, rim: Color?,
+) {
+    val r = radius.coerceAtMost(minOf(size.width, size.height) / 2f)
+    fun outline(inset: Float) = androidx.compose.ui.graphics.Path().apply {
+        addRoundRect(
+            androidx.compose.ui.geometry.RoundRect(
+                inset, inset, size.width - inset, size.height - inset,
+                androidx.compose.ui.geometry.CornerRadius((r - inset).coerceAtLeast(0f)),
+            ),
+        )
+    }
+    val body = outline(0f)
+    clipPath(body) {
+        val veil = if (LiquidGlass.frosts) tint else tint.copy(alpha = (tint.alpha + 0.18f).coerceAtMost(0.95f))
+        drawRect(veil)
+        // The slab: light along the upper edge, a little shade along the lower one.
+        val band = (bezel / size.height).coerceIn(0.05f, 0.45f)
+        drawRect(
+            androidx.compose.ui.graphics.Brush.verticalGradient(
+                0f to Color.White.copy(alpha = if (dark) 0.10f else 0.20f),
+                band to Color.Transparent,
+                1f - band to Color.Transparent,
+                1f to Color.Black.copy(alpha = if (dark) 0.10f else 0.06f),
+            ),
+        )
+        // The fringe, travelling round the rim (the gradient turns, the outline stays).
+        val ang = 360f * time
+        val hues = if (rim != null) listOf(rim, rim.copy(alpha = 0.5f), rim, rim.copy(alpha = 0.5f), rim)
+            else listOf(Color(0xFFFF5A8C), Color(0xFFFFD25A), Color(0xFF5AE0A0), Color(0xFF5AB4FF), Color(0xFFB45AFF), Color(0xFFFF5A8C))
+        val fringe = (if (dark) 0.30f else 0.38f) * fringeK * 0.55f
+        val sweep = turnedSweep(center, ang, hues)
+        val w = (bezel * 0.5f).coerceAtLeast(2f * dp)
+        drawPath(outline(w / 2f), sweep, alpha = fringe * 0.6f, style = androidx.compose.ui.graphics.drawscope.Stroke(w))
+        drawPath(outline(w / 4f), sweep, alpha = fringe, style = androidx.compose.ui.graphics.drawscope.Stroke(w / 2f))
+        // The rim: brightest where the light falls, a weaker glint opposite.
+        val k = if (dark) 0.85f else 1f
+        val light = turnedSweep(
+            center, ang + Math.toDegrees(-2.3).toFloat(),
+            listOf(0.75f, 0.3f, 0.14f, 0.4f, 0.14f, 0.3f, 0.75f).map { Color.White.copy(alpha = it * k) },
+            listOf(0f, 0.15f, 0.35f, 0.5f, 0.65f, 0.85f, 1f),
+        )
+        drawPath(outline(2f * dp), light, alpha = 0.35f, style = androidx.compose.ui.graphics.drawscope.Stroke(4f * dp))
+        drawPath(outline(0.6f * dp), light, style = androidx.compose.ui.graphics.drawscope.Stroke(1.2f * dp))
     }
 }
 
@@ -326,3 +425,12 @@ fun rememberScreenGlass(): GlassBackdrop? {
     local.rim = root.rim
     return local
 }
+
+/** A sweep gradient round [center] turned by [degrees] (only the colours turn, not what is drawn). */
+private fun turnedSweep(center: Offset, degrees: Float, colors: List<Color>, stops: List<Float>? = null) =
+    object : androidx.compose.ui.graphics.ShaderBrush() {
+        override fun createShader(size: androidx.compose.ui.geometry.Size): androidx.compose.ui.graphics.Shader =
+            androidx.compose.ui.graphics.SweepGradientShader(center, colors, stops).also {
+                it.setLocalMatrix(android.graphics.Matrix().apply { setRotate(degrees, center.x, center.y) })
+            }
+    }

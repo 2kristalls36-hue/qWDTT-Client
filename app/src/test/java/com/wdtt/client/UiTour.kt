@@ -152,11 +152,12 @@ class UiTour {
         pressBack(); settle(8) // profile sheet → home
 
 
-        // Hidden log.
-        compose.onNodeWithContentDescription("qWDTT Client").performTouchInput { longClick() }
+        // A long press on the logo: about the app.
+        compose.onAllNodesWithContentDescription("qWDTT Client")[0].performTouchInput { longClick() }
         settle(8)
-        shot(dir, "06_logs")
-        pressBack(); settle(8)
+        shot(dir, "06_about")
+        compose.onNodeWithText("Закрыть").performClick()
+        settle(8)
 
         // Profiles tab, add sheet, import preview.
         compose.onNodeWithText("Профили").performClick()
@@ -198,6 +199,14 @@ class UiTour {
         shot(dir, "11d_settings_interface")
         swipeSheetUp("БЕТА-ФУНКЦИИ", optional = true)
         shot(dir, "11e_settings_beta")
+        // The journal, from the settings: errors first, then everything.
+        compose.onNodeWithText("Журнал подключения").performClick()
+        settle(8)
+        shot(dir, "11f_logs")
+        compose.onNodeWithText("Все события").performClick()
+        settle(6)
+        shot(dir, "11g_logs_all")
+        pressBack(); settle(8)
         compose.onNodeWithText("Главная").performClick()
         settle(8)
         shot(dir, "12_home_again")

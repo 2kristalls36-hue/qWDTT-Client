@@ -265,6 +265,11 @@ internal class Part(
     val group: Int = -1,
     /** In a group, but with light and shade of its own all the same (a reindeer's body). */
     val edges: Boolean = false,
+    /**
+     * The shape its light and shade are taken from, when not its own: where a part is set
+     * into another (a neck into the body) its edge there is not an edge and gets none.
+     */
+    val edgeShape: Path? = null,
 ) {
     /** Its colour by moonlight. */
     val nightColor: Color? by lazy { color?.let { if (lit) it else moon(it) } }
@@ -283,8 +288,10 @@ internal class Part(
         if (stroke > 0f || color == null || mono == Mono.Cut || lit || (group >= 0 && !edges)) return null
         val b = path.getBounds()
         if (b.width < 1.4f && b.height < 1.4f) return null
-        val moved = Path().apply { addPath(path, Offset(dx, dy)) }
-        return Path().apply { op(path, moved, androidx.compose.ui.graphics.PathOperation.Difference) }
+        val base = edgeShape ?: path
+        val moved = Path().apply { addPath(base, Offset(dx, dy)) }
+        val band = Path().apply { op(base, moved, androidx.compose.ui.graphics.PathOperation.Difference) }
+        return if (edgeShape == null) band else Path().apply { op(band, path, androidx.compose.ui.graphics.PathOperation.Intersect) }
     }
 }
 
@@ -386,8 +393,8 @@ private class Figure {
         groupNow = was
     }
 
-    fun fill(color: Color?, mono: Mono = Mono.Fill, gap: Float = 0f, outline: Float = 0f, lit: Boolean = false, edges: Boolean = false, body: Path.() -> Unit) {
-        parts += Part(Path().apply(body), color, mono, 0f, gap, 0f, at, outline, lit, groupNow, edges)
+    fun fill(color: Color?, mono: Mono = Mono.Fill, gap: Float = 0f, outline: Float = 0f, lit: Boolean = false, edges: Boolean = false, edgeShape: (Path.() -> Unit)? = null, body: Path.() -> Unit) {
+        parts += Part(Path().apply(body), color, mono, 0f, gap, 0f, at, outline, lit, groupNow, edges, edgeShape?.let { Path().apply(it) })
     }
 
     fun line(color: Color?, width: Float, mono: Mono = Mono.Fill, gap: Float = 0f, dash: Float = 0f, body: Path.() -> Unit) {
@@ -1059,51 +1066,59 @@ private fun reindeer(leads: Boolean) = figure {
     // all one piece: their outline is drawn first and the body over it, so the legs come out
     // of the body (outlined only outside it) instead of being set under its edge.
     group(102) {
+    // A reindeer's build, not a box: the withers high, a gentle dip in the back, the chest
+    // rounded out in front of the forelegs and deep between them, the belly rising to the
+    // flank, a round rump falling into the buttock.
     fill(Deer, edges = true) {
-        moveTo(9.6f, 9.8f)
-        cubicTo(13f, 9.3f, 18.6f, 8.95f, 22.2f, 9.2f)
-        cubicTo(25.2f, 9.45f, 26.65f, 11.6f, 26.35f, 13.8f)
-        cubicTo(26.05f, 15.9f, 24.35f, 16.85f, 22.2f, 16.65f)
-        cubicTo(18f, 16.15f, 14f, 15.95f, 10.6f, 16f)
-        cubicTo(8f, 16.2f, 6.6f, 14.8f, 6.8f, 12.8f)
-        cubicTo(7f, 11f, 8f, 10.1f, 9.6f, 9.8f)
+        moveTo(10.2f, 9.95f)
+        cubicTo(13.6f, 10.35f, 17.6f, 10.25f, 20.4f, 9.55f)
+        cubicTo(22.6f, 9f, 25.4f, 9.9f, 26.4f, 12.2f)
+        cubicTo(27.1f, 13.9f, 26.6f, 15.9f, 25f, 16.9f)
+        cubicTo(23.9f, 17.5f, 22.3f, 17.4f, 21f, 17f)
+        cubicTo(18.4f, 16.6f, 15.4f, 16.2f, 13.4f, 15.6f)
+        cubicTo(12.4f, 15.9f, 11.6f, 16.5f, 10.3f, 16.5f)
+        cubicTo(8.8f, 16.5f, 7.4f, 15.6f, 7f, 13.9f)
+        cubicTo(6.7f, 12.3f, 7.4f, 10.6f, 8.6f, 10.15f)
+        cubicTo(9.1f, 10f, 9.6f, 9.95f, 10.2f, 9.95f)
         close()
     }
+    // The pale underside from the chest to the flank, a pale patch on the rump.
     fill(DeerLight, Mono.Skip) {
-        moveTo(10f, 15.9f)
-        cubicTo(14f, 15.35f, 18f, 15.4f, 22.2f, 15.95f)
-        cubicTo(24.2f, 16.05f, 25.6f, 15.1f, 26.05f, 13.6f)
-        cubicTo(26.15f, 15.5f, 24.5f, 16.85f, 22.2f, 16.65f)
-        cubicTo(18f, 16.2f, 14f, 16f, 10.6f, 16f)
+        moveTo(13.5f, 15.7f)
+        cubicTo(15.5f, 16.2f, 18.5f, 16.6f, 21f, 17f)
+        cubicTo(22.3f, 17.4f, 23.9f, 17.5f, 25f, 16.9f)
+        cubicTo(26f, 16.3f, 26.6f, 15.3f, 26.8f, 14.2f)
+        cubicTo(26.3f, 15.6f, 25.2f, 16.4f, 23.6f, 16.6f)
+        cubicTo(20.8f, 16.7f, 17f, 15.9f, 13.5f, 15.7f)
         close()
-        oval(8.2f, 11.9f, 1.1f, 1.3f)
+        oval(8.1f, 12.3f, 1.05f, 1.3f)
     }
     line(DeerDeep, 0.35f, Mono.Skip) {
-        moveTo(10.5f, 10f)
-        cubicTo(14f, 9.5f, 18.5f, 9.2f, 21.5f, 9.4f)
+        moveTo(10.5f, 10.15f)
+        cubicTo(14f, 10.45f, 18f, 10.25f, 21f, 9.45f)
     }
     leg(J.HIND_NEAR, J.HOCK_NEAR, J.FETLOCK_HIND_NEAR, 0f, fore = false, coat = Deer, gap = 0.3f, gid = 102)
     leg(J.FORE_NEAR, J.KNEE_NEAR, J.FETLOCK_FORE_NEAR, 0f, fore = true, coat = Deer, gap = 0.3f, gid = 102)
     }
     // The harness: a saddle pad edged in gold with tassels, the girth strap (cut) with a
     // buckle; on the lead's pad a gold star, on the other one a sprig of holly.
-    fill(Harness, Mono.Skip) { round(13.2f, 9.1f, 5.6f, 3.3f, 0.8f) }
-    line(Gold, 0.3f, Mono.Skip) { round(13.35f, 9.25f, 5.3f, 3f, 0.7f) }
+    fill(Harness, Mono.Skip) { round(13.2f, 9.85f, 5.6f, 3.3f, 0.8f) }
+    line(Gold, 0.3f, Mono.Skip) { round(13.35f, 10f, 5.3f, 3f, 0.7f) }
     line(Gold, 0.16f, Mono.Skip) {
-        for (k in 0 until 6) seg(13.7f + k * 0.95f, 12.4f, 13.7f + k * 0.95f, 13f)
+        for (k in 0 until 6) seg(13.7f + k * 0.95f, 13.15f, 13.7f + k * 0.95f, 13.75f)
     }
-    fill(Harness.shade(0.15f), Mono.Cut) { rect(15.6f, 9f, 0.9f, 7.2f) }
-    fill(Gold) { rect(15.5f, 13.3f, 1.1f, 1f) }
+    fill(Harness.shade(0.15f), Mono.Cut) { rect(15.6f, 9.75f, 0.9f, 6.75f) }
+    fill(Gold) { rect(15.5f, 13.95f, 1.1f, 1f) }
     if (leads) {
-        fill(Gold, Mono.Skip) { star(17.65f, 10.7f, 0.75f) }
+        fill(Gold, Mono.Skip) { star(17.65f, 11.45f, 0.75f) }
     } else {
         fill(Holly, Mono.Skip) {
-            oval(17.2f, 10.5f, 0.7f, 0.32f)
-            oval(18.1f, 10.9f, 0.7f, 0.32f)
+            oval(17.2f, 11.25f, 0.7f, 0.32f)
+            oval(18.1f, 11.65f, 0.7f, 0.32f)
         }
         fill(CandyRed, Mono.Skip) {
-            circle(17.6f, 10.95f, 0.22f)
-            circle(17.95f, 10.55f, 0.22f)
+            circle(17.6f, 11.7f, 0.22f)
+            circle(17.95f, 11.3f, 0.22f)
         }
     }
     // The traces from behind along its side up to the collar.
@@ -1114,7 +1129,16 @@ private fun reindeer(leads: Boolean) = figure {
     }
     // The neck and head: they lift, lower and turn together.
     joint(J.NECK, 22.8f, 10f) {
-        fill(Deer) {
+        // Set into the body: no light or shade along its foot.
+        fill(Deer, edgeShape = {
+            moveTo(20.8f, 10.4f)
+            cubicTo(22.4f, 8.4f, 23.8f, 6.4f, 24.8f, 4.8f)
+            lineTo(28.2f, 5.8f)
+            cubicTo(27.6f, 8.2f, 27f, 10.6f, 25.8f, 13f)
+            lineTo(26f, 20f)
+            lineTo(19.5f, 20f)
+            close()
+        }) {
             moveTo(20.8f, 10.4f)
             cubicTo(22.4f, 8.4f, 23.8f, 6.4f, 24.8f, 4.8f)
             lineTo(28.2f, 5.8f)

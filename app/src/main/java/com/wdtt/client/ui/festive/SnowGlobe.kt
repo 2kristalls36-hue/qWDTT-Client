@@ -43,11 +43,34 @@ import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-private class GlobeHolder {
+internal class GlobeHolder {
     var sim: SnowGlobePhysics? = null
     var warp: GlassWarp? = null
     /** The body of the drift as seen (it never moves). */
     var drift: Path? = null
+    /** The bar the globe was made for: made again when it changes. */
+    var width = 0f
+    var height = 0f
+    var corner = 0f
+
+    /**
+     * The room and its snow for a bar [w] × [h] with this [corner]: made again whenever the
+     * bar changes (its width or rounding with the screen fit, the settings read late), so its
+     * walls stay where the glass is. The snow starts lying on the bottom.
+     */
+    fun fit(w: Float, h: Float, corner: Float, density: Float, ground: ((Float, Float) -> Float)?) {
+        if (h <= 0f || (sim != null && w == width && h == height && corner == this.corner)) return
+        val glass = GlassWarp(w, h, corner.coerceIn(0.05f, 0.5f) * h, GLASS_DEPTH * density, GLASS_BEZEL * density)
+        // The drift's top where it is to be seen: back through the glass into the room.
+        val level = ground?.let { g -> roomY(glass, g(w, h)) / glass.roomHeight } ?: (1f - SnowGlobePhysics.CRUST_DEPTH)
+        // The snow already lies on the bottom when the bar appears.
+        sim = SnowGlobePhysics(glass.roomWidth / glass.roomHeight, glass.roomCorner / glass.roomHeight, level).apply { settleAll() }
+        warp = glass
+        drift = null
+        width = w
+        height = h
+        this.corner = corner
+    }
 }
 
 /** The height in the room seen at [displayY] (pixels from the bar's top) in the middle. */
@@ -100,18 +123,15 @@ fun SnowGlobe(
     if (festive.moving) MotionSensor(motion) { wake.trySend(Unit) }
     LaunchedEffect(festive.moving) {
         while (holder.sim == null) withFrameNanos { }
-        val sim = holder.sim!!
         if (!festive.moving) {
-            sim.settleAll()
+            holder.sim!!.settleAll()
             frame++
             return@LaunchedEffect
         }
         launch { snapshotFlow { pos() }.collect { wake.trySend(Unit) } }
-        val warp = holder.warp!!
-        // The droplet in the room's measure: the room reaches past the drawn bar.
-        val half = 0.51f / tabs * warp.width / warp.roomHeight
         var lastX = Float.NaN
         var skipped = 0f
+        var was: SnowGlobePhysics? = null
         while (true) {
             wake.receive()
             var t0 = withFrameNanos { it }
@@ -121,6 +141,15 @@ fun SnowGlobe(
                 val now = withFrameNanos { it }
                 val dt = ((now - t0) / 1e9f).coerceIn(0f, 1f / 30f)
                 t0 = now
+                // The globe of the bar as it is now (made again when the bar changed).
+                val sim = holder.sim!!
+                val warp = holder.warp!!
+                if (sim !== was) {
+                    was = sim
+                    lastX = Float.NaN
+                }
+                // The droplet in the room's measure: the room reaches past the drawn bar.
+                val half = 0.51f / tabs * warp.width / warp.roomHeight
                 val dx = ((pos() + 0.5f) / tabs * warp.width + warp.depth) / warp.roomHeight
                 val dv = if (lastX.isNaN() || dt <= 0f) 0f else (dx - lastX) / dt
                 lastX = dx
@@ -139,20 +168,12 @@ fun SnowGlobe(
             lastX = Float.NaN
         }
     }
+    val groundNow by rememberUpdatedState(ground)
     Canvas(
-        modifier.onSizeChanged {
-            if (holder.sim == null && it.height > 0) {
-                val h = it.height.toFloat()
-                val warp = GlassWarp(it.width.toFloat(), h, corner.coerceIn(0.05f, 0.5f) * h, GLASS_DEPTH * density, GLASS_BEZEL * density)
-                holder.warp = warp
-                // The drift's top where it is to be seen: back through the glass into the room.
-                val level = ground?.let { g -> roomY(warp, g(it.width.toFloat(), h)) / warp.roomHeight }
-                    ?: (1f - SnowGlobePhysics.CRUST_DEPTH)
-                // The snow already lies on the bottom when the bar appears.
-                holder.sim = SnowGlobePhysics(warp.roomWidth / warp.roomHeight, warp.roomCorner / warp.roomHeight, level).apply { settleAll() }
-            }
-        },
+        modifier.onSizeChanged { holder.fit(it.width.toFloat(), it.height.toFloat(), corner, density, groundNow) },
     ) {
+        // The bar's rounding can change without its size (the screen fit).
+        holder.fit(size.width, size.height, corner, density, groundNow)
         val sim = holder.sim ?: return@Canvas
         val warp = holder.warp ?: return@Canvas
         if (frame < 0) return@Canvas // read: redraw on every step

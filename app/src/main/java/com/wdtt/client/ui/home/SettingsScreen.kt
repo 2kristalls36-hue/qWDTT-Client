@@ -302,6 +302,8 @@ fun SettingsScreen() {
                     Hint(
                         when {
                             !glassSupported -> "Эффект доступен на Android 13 и новее."
+                            glass && !com.wdtt.client.ui.components.surface.LiquidGlass.refracts ->
+                                "Панель вкладок отображается в виде стекла.\nНа этом устройстве стекло отображается в упрощённом виде."
                             glass -> "Панель вкладок отображается в виде стекла."
                             else -> "Панель вкладок отображается в стандартном виде."
                         }

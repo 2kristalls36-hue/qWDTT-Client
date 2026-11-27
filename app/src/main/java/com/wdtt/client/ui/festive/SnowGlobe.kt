@@ -139,6 +139,8 @@ fun SnowGlobe(
             var odd = false
             while (calm < 12) {
                 val now = withFrameNanos { it }
+                // At most about 60 steps a second: a 120 Hz screen does not double the work.
+                if (now - t0 < MIN_FRAME_NS) continue
                 val dt = ((now - t0) / 1e9f).coerceIn(0f, 1f / 30f)
                 t0 = now
                 // The globe of the bar as it is now (made again when the bar changed).
@@ -169,6 +171,15 @@ fun SnowGlobe(
         }
     }
     val groundNow by rememberUpdatedState(ground)
+    // The glints on the heap come and go over seconds: their own slow clock, so the globe is
+    // not drawn again on every frame for them (only when its snow moves, and 8 times a second).
+    val glintTime by androidx.compose.runtime.produceState(0f, festive.moving) {
+        if (!festive.moving) return@produceState
+        while (true) {
+            value = android.os.SystemClock.uptimeMillis() % 3_600_000L / 1000f
+            kotlinx.coroutines.delay(125)
+        }
+    }
     Canvas(
         modifier.onSizeChanged { holder.fit(it.width.toFloat(), it.height.toFloat(), corner, density, groundNow) },
     ) {
@@ -179,7 +190,7 @@ fun SnowGlobe(
         if (frame < 0) return@Canvas // read: redraw on every step
         val k = warp.roomHeight // pixels per bar height of the room
         val dp = density
-        val t = festive.time()
+        val t = glintTime
         val at = FloatArray(4)
         val glass = Path().apply {
             addRoundRect(RoundRect(0f, 0f, size.width, size.height, CornerRadius(sim.corner * k - warp.depth)))
@@ -363,3 +374,6 @@ private fun MotionSensor(motion: MotionFilter, onMove: () -> Unit) {
         }
     }
 }
+
+/** The shortest step the snow in the globe and Santa's train are moved by: about 60 a second at most. */
+internal const val MIN_FRAME_NS = 10_000_000L

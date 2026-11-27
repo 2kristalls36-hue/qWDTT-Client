@@ -1976,7 +1976,11 @@ fun DrawScope.drawSleighTab(
         val canvas = drawContext.canvas
         val cast = if (nightNow) nightCast else dayCast
         canvas.saveLayer(Rect(-width, -height, width * 2f, height * 2f), androidx.compose.ui.graphics.Paint().apply { alpha = if (nightNow) 0.42f else 0.3f })
-        for (i in maxOf(0, index - 1)..minOf(index + 1, count - 1)) {
+        // The neighbour whose shadow can reach into this tab: by day the one on the left (the
+        // shadows fall to the right), by night the one on the right.
+        val other = if (nightNow) index + 1 else index - 1
+        for (i in minOf(index, other)..maxOf(index, other)) {
+            if (i < 0 || i >= count) continue
             val figure = SleighTrain.figures[i]
             val at = if (i == index) placed else neighbour.also { it.place(figure, pose.joints[i]) }
             translate(left + (i - index) * width, top) {
@@ -2052,6 +2056,9 @@ fun DrawScope.drawSleighTab(
 
     val reach = height
     when {
+        // All in colour (going): the droplet changes nothing, one pass for the whole tab
+        // instead of one for each side of the droplet and one under it.
+        pose.colour >= 0.999f -> pass(coloured = true)
         colourTo <= 0f || colourFrom >= width -> outside()
         colourFrom <= 0f && colourTo >= width -> pass(coloured = true)
         else -> {

@@ -867,6 +867,8 @@ fun rememberSleighMotion(festive: FestiveState, lens: () -> Float): SleighMotion
         while (true) {
             if (motion.busy || travel() != motion.travellingNow || motion.tabUnder(lens()) != motion.lensTabNow) {
                 val now = withFrameNanos { it }
+                // About 60 frames a second at most: on a 120 Hz screen every other one.
+                if (now - last < MIN_FRAME_NS) continue
                 motion.advance((now - last) / 1e9f, travel(), lens())
                 last = now
             } else {

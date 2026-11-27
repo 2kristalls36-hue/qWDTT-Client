@@ -101,7 +101,15 @@ fun rememberFestive(level: PowerLevel, travelling: State<Boolean>): FestiveState
     LaunchedEffect(active, moving) {
         if (!active || !moving) return@LaunchedEffect
         val start = withFrameNanos { it }
-        while (true) withFrameNanos { clock.floatValue = (it - start) / 1e9f }
+        // About 30 times a second, whatever the screen's rate: the falling snow and the
+        // garland look the same, and on a 120 Hz screen they are drawn a quarter as often.
+        var last = start
+        while (true) withFrameNanos {
+            if (it - last >= FESTIVE_FRAME_NS) {
+                last = it
+                clock.floatValue = (it - start) / 1e9f
+            }
+        }
     }
     val time: State<Float> = clock
     return remember(active, today, level, moving) {
@@ -127,3 +135,6 @@ internal fun hash01(seed: Int, i: Int): Float {
     x = x xor (x ushr 16)
     return (x and 0xFFFFFF) / 16777215f
 }
+
+/** The festive clock's step: about 30 times a second. */
+private const val FESTIVE_FRAME_NS = 30_000_000L

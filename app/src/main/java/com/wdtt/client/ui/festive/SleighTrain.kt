@@ -81,9 +81,12 @@ object SleighTrain {
     internal const val COUPLING_Y = 19.6f
     internal const val REINS_Y = 12f
     /** Where the bullfinch sits on the trailer (its feet on the lantern's arm), grid units. */
-    internal val PERCH = Offset(31.9f, 9.8f)
+    internal val PERCH = Offset(31.75f, 7f)
     /** Where the reins leave Santa's mitten, in the hand's own place. */
     internal val MITTEN = Offset(19.5f, 11.8f)
+    /** Where the rope from behind reaches a reindeer's side, and where it leaves its collar. */
+    internal val TRACE_END = Offset(7.05f, 12.1f)
+    internal val COLLAR = Offset(26.8f, 11f)
     /** Where Santa lays the reins down on the side of the sleigh. */
     internal val REINS_LAID = Offset(19.5f, 12.9f)
     /** The ground under the runners and hooves. */
@@ -540,26 +543,31 @@ private fun trailer() = figure {
     // The coupling bar going on to the sleigh.
     fill(Iron) { rect(29.6f, SleighTrain.COUPLING_Y - 0.45f, 6.4f, 0.9f) }
     fill(Iron.shade(0.3f), Mono.Skip) { circle(31.2f, SleighTrain.COUPLING_Y, 0.25f) }
-    // The lantern on a post at the front, lit; it swings on its hook.
+    // The lantern on a tall post at the front, lit; it swings on its hook. Large: its light
+    // is seen from far off.
     fill(WoodDark) {
-        rect(30.2f, 9.8f, 0.7f, 6.2f)
-        rect(30.2f, 9.8f, 3.2f, 0.55f)
+        rect(30.2f, 7f, 0.75f, 9f)
+        rect(30.2f, 7f, 3.35f, 0.55f)
     }
-    joint(J.LANTERN, 32.8f, 10.3f) {
-        line(Iron, 0.25f) { seg(32.8f, 10.3f, 32.8f, 11f) }
+    fill(WoodDark.shade(0.25f), Mono.Skip) { circle(30.57f, 7.25f, 0.2f) }
+    joint(J.LANTERN, 32.9f, 7.55f) {
+        line(Iron, 0.25f) { seg(32.9f, 7.55f, 32.9f, 8.3f) }
         fill(Iron) {
-            poly(31.9f, 11.75f, 33.7f, 11.75f, 32.8f, 10.85f)
-            rect(32f, 11.6f, 1.6f, 2.3f)
-            rect(31.85f, 13.8f, 1.9f, 0.45f)
+            circle(32.9f, 8.15f, 0.28f)
+            poly(31.55f, 9.45f, 34.25f, 9.45f, 32.9f, 8.25f)
+            rect(31.75f, 9.25f, 2.3f, 3.35f)
+            rect(31.5f, 12.5f, 2.8f, 0.6f)
         }
-        fill(Lamp, Mono.Cut, lit = true) { rect(32.3f, 11.95f, 1f, 1.6f) }
+        fill(Lamp, Mono.Cut, lit = true) { rect(32.2f, 9.7f, 1.4f, 2.5f) }
         fill(Flame, Mono.Skip, lit = true) {
-            moveTo(32.8f, 12.2f)
-            cubicTo(33.2f, 12.7f, 33.15f, 13.3f, 32.8f, 13.4f)
-            cubicTo(32.45f, 13.3f, 32.4f, 12.7f, 32.8f, 12.2f)
+            moveTo(32.9f, 10.1f)
+            cubicTo(33.45f, 10.8f, 33.4f, 11.7f, 32.9f, 11.85f)
+            cubicTo(32.4f, 11.7f, 32.35f, 10.8f, 32.9f, 10.1f)
             close()
         }
-        line(Iron, 0.18f, Mono.Skip) { seg(32.8f, 11.95f, 32.8f, 13.55f) }
+        line(Iron, 0.18f, Mono.Skip) {
+            seg(32.2f, 10.95f, 33.6f, 10.95f)
+        }
     }
     // A candy cane peeking out between the presents.
     val cane: Path.() -> Unit = {
@@ -1152,11 +1160,13 @@ private fun reindeer(leads: Boolean) = figure {
             circle(17.95f, 11.3f, 0.22f)
         }
     }
-    // The traces from behind along its side up to the collar.
-    line(Leather, 0.45f) { seg(0f, SleighTrain.REINS_Y, 7.2f, 12.1f) }
-    line(Leather, 0.4f, Mono.Skip) {
-        seg(7.2f, 12.1f, 15.6f, 11.9f)
-        seg(16.5f, 11.85f, 22.2f, 10.1f)
+    // The traces along its side up to the collar, under the girth strap; the rope coming to
+    // them from behind is drawn across the tabs (see the reins), in the same leather.
+    line(Leather, 0.45f, Mono.Skip, gap = 0.25f) {
+        moveTo(SleighTrain.TRACE_END.x, SleighTrain.TRACE_END.y)
+        cubicTo(10f, 12.15f, 13f, 12.05f, 15.6f, 11.95f)
+        moveTo(16.5f, 11.9f)
+        cubicTo(18.5f, 11.8f, 20.6f, 11.1f, 22.2f, 10.1f)
     }
     // The neck and head: they lift, lower and turn together.
     joint(J.NECK, 22.8f, 10f) {
@@ -1323,10 +1333,7 @@ private fun reindeer(leads: Boolean) = figure {
         seg(24.15f, 10.85f, 24.65f, 10.85f)
         seg(25.55f, 11.5f, 26.05f, 11.5f)
     }
-    if (!leads) {
-        // The traces going on to the lead reindeer.
-        line(Leather, 0.45f) { seg(26.8f, 11f, SleighTrain.WIDE, SleighTrain.REINS_Y) }
-    }
+
 }
 
 /**
@@ -1688,59 +1695,91 @@ fun DrawScope.drawSleighTab(
 
     val from = FloatArray(2)
     val to = FloatArray(2)
-    fun hitch(coloured: Boolean) {
-        for (joint in listOf(index - 1, index)) {
-            if (joint < 0 || joint >= count - 1) continue
-            val y = if (joint == 0) SleighTrain.COUPLING_Y else SleighTrain.REINS_Y
-            anchor(joint, SleighTrain.WIDE, y, from)
-            anchor(joint + 1, 0f, y, to)
-            if (joint == 0) {
-                drawLine(if (coloured) seen(Iron) else plain, Offset(from[0], from[1]), Offset(to[0], to[1]), strokeWidth = 0.9f * unit)
-                continue
+    /** A point of figure [i] in this tab's pixels, on its [joint]. */
+    fun point(i: Int, joint: Int, gx: Float, gy: Float, out: FloatArray) {
+        val at = if (i == index) placed else neighbour.also { it.place(SleighTrain.figures[i], pose.joints[i]) }
+        out[0] = left + (i - index) * width + at.x(joint, gx, gy) * unit
+        out[1] = top + at.y(joint, gx, gy) * unit
+    }
+
+    val laidAt = FloatArray(2)
+    /**
+     * One rope, whole, across the tabs it passes (each tab draws all of it and shows its own
+     * part, so the parts meet without a step): [r] 1 — the reins, from Santa's mitten (or the
+     * side of the sleigh where he laid them) to the first reindeer's side; 2 — the traces from
+     * its collar to the lead one's side. Leather with a darker edge; in the silhouette the
+     * plain colour, cut free of what is under it where [cut].
+     */
+    fun rope(r: Int, coloured: Boolean, cut: Boolean) {
+        if (r == 1) {
+            point(1, J.HAND, SleighTrain.MITTEN.x, SleighTrain.MITTEN.y, from)
+            val laid = pose.reinsLaid
+            if (laid > 0f) {
+                point(1, J.ROOT, SleighTrain.REINS_LAID.x, SleighTrain.REINS_LAID.y, laidAt)
+                from[0] += (laidAt[0] - from[0]) * laid
+                from[1] += (laidAt[1] - from[1]) * laid
             }
-            // A rope sagging between the two figures, less as the train pulls it taut.
-            val gap = to[0] - from[0]
-            val sag = gap * (0.03f + 0.09f * pose.reinSlack)
-            val path = Path()
-            for (k in 0..12) {
-                val t = k / 12f
-                val x = from[0] + (to[0] - from[0]) * t
-                val yy = from[1] + (to[1] - from[1]) * t + 4f * sag * t * (1f - t)
-                if (k == 0) path.moveTo(x, yy) else path.lineTo(x, yy)
-            }
-            drawPath(path, if (coloured) seen(Leather) else plain, style = Stroke(width = 0.45f * unit, cap = StrokeCap.Round))
+            point(2, J.ROOT, SleighTrain.TRACE_END.x, SleighTrain.TRACE_END.y, to)
+        } else {
+            point(2, J.ROOT, SleighTrain.COLLAR.x, SleighTrain.COLLAR.y, from)
+            point(3, J.ROOT, SleighTrain.TRACE_END.x, SleighTrain.TRACE_END.y, to)
+        }
+        // It sags, less as the train pulls it taut.
+        val sag = (to[0] - from[0]) * (0.025f + 0.045f * pose.reinSlack)
+        val path = Path()
+        val steps = 28
+        for (k in 0..steps) {
+            val t = k / steps.toFloat()
+            val x = from[0] + (to[0] - from[0]) * t
+            var y = from[1] + (to[1] - from[1]) * t + 4f * sag * t * (1f - t)
+            // Santa's flick runs along the reins.
+            if (r == 1 && pose.reinFlick != 0f) y += pose.reinFlick * unit * sin(t * 9f - pose.reinPhase) * (1f - t)
+            if (k == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        }
+        val edge = Stroke(0.95f * unit, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        val body = Stroke(0.45f * unit, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        if (coloured) {
+            drawPath(path, seen(Leather).shade(0.45f), style = edge)
+            drawPath(path, seen(Leather), style = body)
+        } else {
+            if (cut) drawPath(path, Color.Black, style = edge, blendMode = BlendMode.Clear)
+            drawPath(path, plain, style = body)
         }
     }
 
+    fun hitch(coloured: Boolean) {
+        // The coupling bar from the trailer to the sleigh.
+        if (index <= 1) {
+            anchor(0, SleighTrain.WIDE, SleighTrain.COUPLING_Y, from)
+            anchor(1, 0f, SleighTrain.COUPLING_Y, to)
+            drawLine(if (coloured) seen(Iron) else plain, Offset(from[0], from[1]), Offset(to[0], to[1]), strokeWidth = 0.9f * unit)
+        }
+        // The ropes passing through this tab, behind the figures: the reins from Santa's hand
+        // to the first reindeer, the traces from it to the lead one.
+        if (index in 1..2) rope(1, coloured, cut = false)
+        if (index in 2..3) rope(2, coloured, cut = false)
+    }
+
     fun reins(coloured: Boolean) {
-        // From Santa's mitten over the front of the sleigh to the first reindeer.
-        // In the mitten, or laid on the side of the sleigh while his hands are busy.
-        val laid = pose.reinsLaid
-        val mx = placed.x(J.HAND, SleighTrain.MITTEN.x, SleighTrain.MITTEN.y) * (1f - laid) +
-            placed.x(J.ROOT, SleighTrain.REINS_LAID.x, SleighTrain.REINS_LAID.y) * laid
-        val my = placed.y(J.HAND, SleighTrain.MITTEN.x, SleighTrain.MITTEN.y) * (1f - laid) +
-            placed.y(J.ROOT, SleighTrain.REINS_LAID.x, SleighTrain.REINS_LAID.y) * laid
-        val ex = placed.x(J.ROOT, SleighTrain.WIDE, SleighTrain.REINS_Y)
-        val ey = placed.y(J.ROOT, SleighTrain.WIDE, SleighTrain.REINS_Y)
-        val sag = 0.25f + 0.9f * pose.reinSlack
-        val path = Path()
-        for (k in 0..16) {
-            val t = k / 16f
-            var x = mx + (ex - mx) * t
-            var y = my + (ey - my) * t + 4f * sag * t * (1f - t)
-            // Santa's flick runs along the reins.
-            if (pose.reinFlick != 0f) y += pose.reinFlick * sin(t * 9f - pose.reinPhase) * (1f - t)
-            if (k == 0) path.moveTo(x, y) else path.lineTo(x, y)
-        }
+        // Over the front of the sleigh, on top of it: the same rope as behind the figures.
+        rope(1, coloured, cut = true)
         // Hung over the side of the sleigh: the loose end hangs down outside it.
-        if (laid > 0f) {
-            path.moveTo(mx, my)
-            path.cubicTo(mx + 0.15f, my + 0.35f, mx - 0.05f, my + 0.75f, mx - 0.3f, my + 1.05f * laid)
+        val laid = pose.reinsLaid
+        if (laid <= 0f) return
+        point(1, J.ROOT, SleighTrain.REINS_LAID.x, SleighTrain.REINS_LAID.y, laidAt)
+        val mx = laidAt[0]
+        val my = laidAt[1]
+        val end = Path().apply {
+            moveTo(mx, my)
+            cubicTo(mx + 0.15f * unit, my + 0.35f * unit, mx - 0.05f * unit, my + 0.75f * unit, mx - 0.3f * unit, my + 1.05f * unit * laid)
         }
-        val color = if (coloured) seen(Leather) else plain
-        if (!coloured) drawPath(path, Color.Black, style = Stroke(0.95f, cap = StrokeCap.Round), blendMode = BlendMode.Clear)
-        else drawPath(path, seen(Leather).shade(0.45f), style = Stroke(0.95f, cap = StrokeCap.Round))
-        drawPath(path, color, style = Stroke(0.45f, cap = StrokeCap.Round))
+        if (coloured) {
+            drawPath(end, seen(Leather).shade(0.45f), style = Stroke(0.95f * unit, cap = StrokeCap.Round))
+            drawPath(end, seen(Leather), style = Stroke(0.45f * unit, cap = StrokeCap.Round))
+        } else {
+            drawPath(end, Color.Black, style = Stroke(0.95f * unit, cap = StrokeCap.Round), blendMode = BlendMode.Clear)
+            drawPath(end, plain, style = Stroke(0.45f * unit, cap = StrokeCap.Round))
+        }
     }
 
     fun dust() {
@@ -1971,7 +2010,7 @@ fun DrawScope.drawSleighTab(
                     if (nightNow && coloured) {
                         // By night the lights glow round them.
                         if (index == 0) {
-                            glow(placed.x(J.LANTERN, 32.8f, 12.75f), placed.y(J.LANTERN, 32.8f, 12.75f), 4.6f, Lamp, 0.5f)
+                            glow(placed.x(J.LANTERN, 32.9f, 10.95f), placed.y(J.LANTERN, 32.9f, 10.95f), 6f, Lamp, 0.5f)
                             for (k in 0 until 8) {
                                 val bx = 3.65f + k * 3.675f
                                 glow(placed.x(J.ROOT, bx, 17.65f), placed.y(J.ROOT, bx, 17.65f), 1.2f, Bulbs[k % Bulbs.size], 0.55f)
@@ -1981,7 +2020,6 @@ fun DrawScope.drawSleighTab(
                             glow(placed.x(J.DEER_HEAD, 32.5f, 5.9f), placed.y(J.DEER_HEAD, 32.5f, 5.9f), 3.4f, CandyRed, 0.45f)
                         }
                     }
-                    if (index == 1) reins(coloured)
                     if (index == 3 && pose.noseGlow > 0f) {
                         // The lead's nose glowing brighter (it is looking at it).
                         val nx = placed.x(J.DEER_HEAD, 32.5f, 5.9f)
@@ -1992,6 +2030,7 @@ fun DrawScope.drawSleighTab(
                     }
                 }
             }
+            if (index == 1) reins(coloured)
             bird(coloured)
         }
     }

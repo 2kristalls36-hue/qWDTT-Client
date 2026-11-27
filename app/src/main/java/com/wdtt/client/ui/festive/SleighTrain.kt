@@ -677,30 +677,38 @@ private fun sleigh() = figure {
                 close()
             }
             joint(J.HAND, 17.6f, 11.7f) {
-                // A big round wall clock, held by its rim, out only while he looks at it:
-                // a brass rim with a ring to hang it by, a cream face with the hours marked,
-                // five to midnight, the glass catching the light. Behind the mitten.
-                joint(J.CLOCK, 19.4f, 10.9f) {
-                    val cx = 19.5f
-                    val cy = 8.75f
-                    line(GoldDeep, 0.22f) { circle(cx, 6.45f, 0.3f) }
-                    fill(Gold, gap = 0.2f) { circle(cx, cy, 2.05f) }
-                    fill(ClockFace, Mono.Cut) { circle(cx, cy, 1.62f) }
+                // A big round wall clock, held by its side, out only while he looks at it;
+                // turned to him, so its face is seen from the side: a narrow cream oval with
+                // the hands (five to midnight) in a brass rim, the depth of the case behind
+                // it, a ring to hang it by. Behind the mitten.
+                joint(J.CLOCK, 19.2f, 11.7f) {
+                    val cx = 18.2f
+                    val cy = 11.7f
+                    // How narrow the round face looks from the side.
+                    val k = 0.42f
+                    line(GoldDeep, 0.2f) { oval(cx + 0.15f, cy - 2.32f, 0.13f, 0.3f) }
+                    fill(GoldDeep, gap = 0.2f) {
+                        oval(cx + 0.5f, cy, 2.05f * k, 2.05f)
+                        rect(cx, cy - 2.05f, 0.5f, 4.1f)
+                    }
+                    fill(Gold, gap = 0.15f) { oval(cx, cy, 2.05f * k, 2.05f) }
+                    fill(ClockFace, Mono.Cut) { oval(cx, cy, 1.62f * k, 1.62f) }
                     fill(ClockInk, Mono.Skip) {
-                        for (k in 0 until 12) {
-                            val a = k * PI.toFloat() / 6f
-                            circle(cx + 1.3f * sin(a), cy - 1.3f * cos(a), if (k % 3 == 0) 0.15f else 0.08f)
+                        for (h in 0 until 12) {
+                            val a = h * PI.toFloat() / 6f
+                            val r = if (h % 3 == 0) 0.13f else 0.07f
+                            oval(cx + 1.3f * k * sin(a), cy - 1.3f * cos(a), r * 0.6f, r)
                         }
                     }
                     // The hour hand just short of twelve, the minute hand at eleven.
                     val hour = (-2.5f) * PI.toFloat() / 180f
                     val minute = (-30f) * PI.toFloat() / 180f
-                    line(ClockInk, 0.24f) { seg(cx, cy, cx + 0.85f * sin(hour), cy - 0.85f * cos(hour)) }
-                    line(ClockInk, 0.15f) { seg(cx, cy, cx + 1.28f * sin(minute), cy - 1.28f * cos(minute)) }
-                    fill(CandyRed, Mono.Own) { circle(cx, cy, 0.17f) }
-                    line(Color.White.copy(alpha = 0.7f), 0.14f, Mono.Skip) {
-                        moveTo(cx - 1.15f, cy - 0.35f)
-                        cubicTo(cx - 1.1f, cy - 0.85f, cx - 0.8f, cy - 1.15f, cx - 0.35f, cy - 1.2f)
+                    line(ClockInk, 0.22f) { seg(cx, cy, cx + 0.85f * k * sin(hour), cy - 0.85f * cos(hour)) }
+                    line(ClockInk, 0.14f) { seg(cx, cy, cx + 1.28f * k * sin(minute), cy - 1.28f * cos(minute)) }
+                    fill(CandyRed, Mono.Own) { oval(cx, cy, 0.1f, 0.16f) }
+                    line(Color.White.copy(alpha = 0.7f), 0.12f, Mono.Skip) {
+                        moveTo(cx - 0.55f, cy - 0.5f)
+                        cubicTo(cx - 0.55f, cy - 1f, cx - 0.4f, cy - 1.3f, cx - 0.2f, cy - 1.45f)
                     }
                 }
                 fill(Fur, gap = 0.15f) { round(17.6f, 10.75f, 1.1f, 1.9f, 0.4f) }

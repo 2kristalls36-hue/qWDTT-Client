@@ -385,34 +385,34 @@ class SleighMotion(seed: Int = 1) {
                     p.add(TrainPose.BIRD, J.BIRD_WING, turn = -12f * b)
                 }
                 SANTA_CLOCK -> {
-                    // Down into the sleigh, up with a big round clock, a long look at it
-                    // (five to midnight), two nods, and back down into the sleigh with it.
-                    val down = 45f
-                    val up = -12f
-                    val arm = when {
-                        q < 0.15f -> down * ease(q / 0.15f)
-                        q < 0.35f -> down + (up - down) * ease((q - 0.15f) / 0.2f)
-                        q < 0.72f -> up
-                        q < 0.88f -> up + (down - up) * ease((q - 0.72f) / 0.16f)
-                        else -> down * (1f - ease((q - 0.88f) / 0.12f))
+                    // Down into the sleigh, up with a big round clock held by its side, turned
+                    // to him: a look at it (five to midnight), two nods, back down with it. The
+                    // clock comes out and goes in below the side of the sleigh, unseen.
+                    val down = 52f
+                    val downReach = 1.48f
+                    val up = -45f
+                    val upReach = 1.14f
+                    val (arm, reach) = when {
+                        q < 0.16f -> ease(q / 0.16f).let { e -> down * e to 1f + (downReach - 1f) * e }
+                        q < 0.36f -> ease((q - 0.16f) / 0.2f).let { e -> down + (up - down) * e to downReach + (upReach - downReach) * e }
+                        q < 0.72f -> up to upReach
+                        q < 0.88f -> ease((q - 0.72f) / 0.16f).let { e -> up + (down - up) * e to upReach + (downReach - upReach) * e }
+                        else -> ease((q - 0.88f) / 0.12f).let { e -> down * (1f - e) to downReach + (1f - downReach) * e }
                     }
                     p.add(1, J.ARM, turn = arm)
-                    val out = when {
-                        q < 0.15f || q > 0.88f -> 0f
-                        q < 0.27f -> ease((q - 0.15f) / 0.12f)
-                        q < 0.78f -> 1f
-                        else -> 1f - ease((q - 0.78f) / 0.1f)
-                    }
-                    if (out > 0f) {
+                    // The sleeve reaches; the mitten keeps its size.
+                    p.joints[1][J.ARM * 5 + 3] = reach
+                    p.set(1, J.HAND, sx = 1f / reach)
+                    if (q in 0.15f..0.87f) {
                         p.clock = 1f
-                        // Upright whatever the arm does, tipped a little towards him as he reads it.
-                        val read = hold(((q - 0.33f) / 0.42f).coerceIn(0f, 1f), 0.2f, 0.2f)
-                        p.set(1, J.CLOCK, turn = -arm - 8f * read, sx = out, sy = out)
+                        // Upright whatever the arm does, tipped a little to him as he reads it.
+                        val read = hold(((q - 0.36f) / 0.36f).coerceIn(0f, 1f), 0.25f, 0.25f)
+                        p.set(1, J.CLOCK, turn = -arm - 6f * read)
                     }
                     val look = hold(((q - 0.3f) / 0.48f).coerceIn(0f, 1f), 0.15f, 0.2f)
-                    p.add(1, J.HEAD, turn = 2f * look + 4f * (bump(q, 0.54f, 0.61f) + bump(q, 0.62f, 0.69f)))
+                    p.add(1, J.HEAD, turn = 3f * look + 4f * (bump(q, 0.54f, 0.61f) + bump(q, 0.62f, 0.69f)))
                     p.add(1, J.SANTA, turn = 2f * look)
-                    p.set(1, J.SANTA_EYE, sy = 1f - 0.45f * hold(((q - 0.36f) / 0.14f).coerceIn(0f, 1f), 0.3f, 0.3f))
+                    p.set(1, J.SANTA_EYE, sy = 1f - 0.45f * hold(((q - 0.38f) / 0.14f).coerceIn(0f, 1f), 0.3f, 0.3f))
                 }
                 SANTA_STRETCH -> {
                     val b = bell(q)
@@ -798,7 +798,7 @@ class SleighMotion(seed: Int = 1) {
         const val DEER_HEAD = 12
         const val DEER_NOSE = 13
         const val DEER_WAG = 14
-        val LENGTHS = floatArrayOf(1.6f, 0.8f, 1f, 0.9f, 0.9f, 3.4f, 1.3f, 1.1f, 1.8f, 1.1f, 0.6f, 0.6f, 1.6f, 2.8f, 1.5f)
+        val LENGTHS = floatArrayOf(1.6f, 0.8f, 1f, 0.9f, 0.9f, 3.6f, 1.3f, 1.1f, 1.8f, 1.1f, 0.6f, 0.6f, 1.6f, 2.8f, 1.5f)
 
         fun frac(x: Float) = x - floor(x)
 

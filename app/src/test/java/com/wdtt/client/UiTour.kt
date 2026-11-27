@@ -156,8 +156,8 @@ class UiTour {
         compose.onAllNodesWithContentDescription("qWDTT Client")[0].performTouchInput { longClick() }
         settle(8)
         shot(dir, "06_about")
-        compose.onNodeWithText("Закрыть").performClick()
-        settle(8)
+        // No button: it goes with a tap beside it or «Назад».
+        pressBack(); settle(8)
 
         // Profiles tab, add sheet, import preview.
         compose.onNodeWithText("Профили").performClick()

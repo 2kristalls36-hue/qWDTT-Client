@@ -55,8 +55,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.wdtt.client.BuildConfig
-import com.wdtt.client.ui.components.control.ArdttButton
-import com.wdtt.client.ui.components.control.ArdttButtonVariant
 import com.wdtt.client.ui.theme.Brand
 import com.wdtt.client.ui.theme.BrandWordmark
 
@@ -71,7 +69,7 @@ internal object AboutLinks {
  * «О приложении», opened by a long press on the logo of the main screen: a card in the
  * middle of the screen with the logo in white on the neon of the app icon, the version,
  * what the app is for and links to its source code, to qWDTT it is built on and to its
- * licence. It comes in with a short rise.
+ * licence. It comes in with a short rise and goes with a tap beside it or «Назад».
  */
 @Composable
 fun AboutDialog(onDismiss: () -> Unit) {
@@ -132,7 +130,7 @@ fun AboutDialog(onDismiss: () -> Unit) {
             Column(
                 Modifier
                     .fillMaxWidth()
-                    .padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 20.dp),
+                    .padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 22.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
@@ -163,11 +161,6 @@ fun AboutDialog(onDismiss: () -> Unit) {
                     AboutDivider()
                     AboutLink(Icons.Outlined.Gavel, "Лицензия", "GNU GPL v3") { open(AboutLinks.LICENCE) }
                 }
-                ArdttButton(
-                    text = "Закрыть",
-                    variant = ArdttButtonVariant.Tonal,
-                    onClick = onDismiss,
-                )
             }
         }
     }

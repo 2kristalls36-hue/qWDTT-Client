@@ -682,12 +682,18 @@ private fun sleigh() = figure {
                 close()
             }
             joint(J.HAND, 17.6f, 11.7f) {
-                // A big round wall clock, held by its side, out only while he looks at it;
-                // turned to him, so its face is seen from the side: a narrow cream oval with
-                // the hands (five to midnight) in a brass rim, the depth of the case behind
-                // it, a ring to hang it by. Behind the mitten.
+                fill(Fur, gap = 0.15f) { round(17.6f, 10.75f, 1.1f, 1.9f, 0.4f) }
+                fill(Mitten, gap = 0.2f) {
+                    circle(19.2f, 11.7f, 0.95f)
+                    circle(19.4f, 10.8f, 0.4f)
+                }
+                line(Mitten.tint(0.4f), 0.15f, Mono.Skip) { seg(18.5f, 11.3f, 19.8f, 11.5f) }
+                // A big round wall clock, out only while he looks at it, held from behind (the
+                // mitten behind it hardly shows); turned to him, so its face is seen from the
+                // side: a narrow cream oval with the hands (five to midnight) in a brass rim,
+                // the depth of the case behind it, a ring to hang it by.
                 joint(J.CLOCK, 19.2f, 11.7f) {
-                    val cx = 18.2f
+                    val cx = 18.75f
                     val cy = 11.7f
                     // How narrow the round face looks from the side.
                     val k = 0.42f
@@ -716,12 +722,6 @@ private fun sleigh() = figure {
                         cubicTo(cx - 0.55f, cy - 1f, cx - 0.4f, cy - 1.3f, cx - 0.2f, cy - 1.45f)
                     }
                 }
-                fill(Fur, gap = 0.15f) { round(17.6f, 10.75f, 1.1f, 1.9f, 0.4f) }
-                fill(Mitten, gap = 0.2f) {
-                    circle(19.2f, 11.7f, 0.95f)
-                    circle(19.4f, 10.8f, 0.4f)
-                }
-                line(Mitten.tint(0.4f), 0.15f, Mono.Skip) { seg(18.5f, 11.3f, 19.8f, 11.5f) }
             }
         }
         // A fur collar showing beside the beard.
@@ -1653,6 +1653,11 @@ fun DrawScope.drawSleighTab(
             // Santa's flick runs along the reins.
             if (pose.reinFlick != 0f) y += pose.reinFlick * sin(t * 9f - pose.reinPhase) * (1f - t)
             if (k == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        }
+        // Hung over the side of the sleigh: the loose end hangs down outside it.
+        if (laid > 0f) {
+            path.moveTo(mx, my)
+            path.cubicTo(mx + 0.15f, my + 0.35f, mx - 0.05f, my + 0.75f, mx - 0.3f, my + 1.05f * laid)
         }
         val color = if (coloured) seen(Leather) else plain
         if (!coloured) drawPath(path, Color.Black, style = Stroke(0.95f, cap = StrokeCap.Round), blendMode = BlendMode.Clear)

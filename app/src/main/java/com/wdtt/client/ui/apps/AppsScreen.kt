@@ -78,9 +78,42 @@ import com.wdtt.client.ui.components.layout.ArdttPageHeader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.withLock
 import java.util.Locale
 
 internal data class AppItem(val packageName: String, val name: String, val system: Boolean)
+
+/**
+ * The installed apps for «Обход», kept in memory: read in the background soon after the app
+ * starts and again whenever the screen opens (an app may have been installed meanwhile),
+ * so the list is there at once instead of after the seconds reading every app's name can
+ * take (a Huawei phone with many apps). The icons read for its rows are kept too.
+ */
+internal object InstalledApps {
+    private val state = kotlinx.coroutines.flow.MutableStateFlow<List<AppItem>?>(null)
+    val list: kotlinx.coroutines.flow.StateFlow<List<AppItem>?> = state
+    private val lock = kotlinx.coroutines.sync.Mutex()
+    private var readAt = 0L
+    private val icons = object : android.util.LruCache<String, ImageBitmap>(8 * 1024 * 1024) {
+        override fun sizeOf(key: String, value: ImageBitmap) = value.width * value.height * 4
+    }
+
+    /** Reads the list again, unless it was read a moment ago (two callers at once read it once). */
+    suspend fun refresh(context: Context) {
+        val app = context.applicationContext
+        lock.withLock {
+            if (state.value != null && android.os.SystemClock.elapsedRealtime() - readAt < 5_000) return
+            state.value = withContext(Dispatchers.IO) { loadApps(app) }
+            readAt = android.os.SystemClock.elapsedRealtime()
+        }
+    }
+
+    fun icon(packageName: String): ImageBitmap? = icons.get(packageName)
+
+    fun keepIcon(packageName: String, icon: ImageBitmap) {
+        icons.put(packageName, icon)
+    }
+}
 
 /**
  * Apps that bypass the tunnel (or, in the second mode, the only apps that use it).
@@ -103,7 +136,9 @@ fun AppsScreen(settingsStore: SettingsStore) {
     var showSystem by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
 
-    val apps by produceState<List<AppItem>?>(null) { value = withContext(Dispatchers.IO) { loadApps(context) } }
+    // Kept in memory: there at once when it was read before, read again in the background.
+    val apps by InstalledApps.list.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { InstalledApps.refresh(context) }
 
     // The list is sorted by a copy of the selection that lags behind it: a toggled row
     // stays in place while its switch animates, then leaves (a slight swipe up with a
@@ -229,7 +264,9 @@ fun AppsScreen(settingsStore: SettingsStore) {
             ).value
         } else 0f
         val stubBase = com.wdtt.client.ui.theme.liteInsetColor()
-        val stubLight = com.wdtt.client.ui.theme.liteCardColor()
+        // The glint lighter than the bars but not the row's own colour: under it the bars
+        // must not vanish (the stub looked gone for a moment each time it passed).
+        val stubLight = androidx.compose.ui.graphics.lerp(stubBase, com.wdtt.client.ui.theme.liteCardColor(), 0.45f)
         val shimmer = Brush.horizontalGradient(listOf(stubBase, stubLight, stubBase), startX = shift, endX = shift + 420f)
         LazyColumn(
             state = listState,
@@ -422,14 +459,16 @@ internal fun AppRow(
 ) {
     val out by animateFloatAsState(if (leaving) 1f else 0f, tween(170), label = "leave")
     val context = LocalContext.current
-    val icon by produceState<ImageBitmap?>(null, app.packageName) {
+    // An icon read before is there at once; another is read in the background and kept.
+    val icon by produceState(InstalledApps.icon(app.packageName), app.packageName) {
+        if (value != null) return@produceState
         value = withContext(Dispatchers.IO) {
             try {
                 context.packageManager.getApplicationIcon(app.packageName).toBitmap(96, 96).asImageBitmap()
             } catch (_: Exception) {
                 null
             }
-        }
+        }?.also { InstalledApps.keepIcon(app.packageName, it) }
     }
     AppRowFrame(
         modifier = modifier

@@ -50,6 +50,12 @@ fun AppRoot(settingsStore: SettingsStore) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val update by com.wdtt.client.lite.AppUpdate.available.collectAsState()
     androidx.compose.runtime.LaunchedEffect(Unit) { com.wdtt.client.lite.AppUpdate.checkIfDue(context) }
+    // The installed apps read in the background once the first screen is up, so «Обход»
+    // shows its list at once.
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(1500)
+        com.wdtt.client.ui.apps.InstalledApps.refresh(context)
+    }
     val lite = androidx.compose.runtime.remember { com.wdtt.client.lite.LiteSettings(context) }
     // Until the settings are read here, as they were read at the start (see StartupSettings).
     val startup = com.wdtt.client.lite.StartupSettings

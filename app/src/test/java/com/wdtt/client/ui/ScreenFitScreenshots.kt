@@ -96,6 +96,10 @@ class ScreenFitScreenshots {
     @Test @Config(sdk = [35], qualifiers = "w411dp-h891dp-xxhdpi")
     fun newYearGlassMax() = run("ny_glass_max", ScreenShape(58.dp, true), PowerLevel.Maximum, glass = true, clear = 0.9f, newYear = true, theme = "dark")
 
+    // The New Year bar on the simpler glass (Android 12, HarmonyOS).
+    @Test @Config(sdk = [31], qualifiers = "w393dp-h873dp-xxhdpi")
+    fun newYearGlassAndroid12() = run("ny_glass_a12", ScreenShape(44.dp, true), PowerLevel.Maximum, glass = true, newYear = true, theme = "dark")
+
     @Test @Config(sdk = [35], qualifiers = "w411dp-h891dp-xxhdpi")
     fun newYearPlainStableLight() = run("ny_plain_stable_light", ScreenShape(58.dp, true), PowerLevel.Stable, glass = false, newYear = true, theme = "light")
 

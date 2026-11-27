@@ -312,6 +312,7 @@ class SleighMotion(seed: Int = 1) {
         p.reinFlick = 0f
         p.noseGlow = 0f
         p.clock = 0f
+        p.reinsLaid = 0f
         val t = time
 
         // Going: the reindeer gallop, the sleighs bump along, the wind blows things back.
@@ -385,34 +386,31 @@ class SleighMotion(seed: Int = 1) {
                     p.add(TrainPose.BIRD, J.BIRD_WING, turn = -12f * b)
                 }
                 SANTA_CLOCK -> {
-                    // Down into the sleigh, up with a big round clock held by its side, turned
-                    // to him: a look at it (five to midnight), two nods, back down with it. The
-                    // clock comes out and goes in below the side of the sleigh, unseen.
-                    val down = 52f
-                    val downReach = 1.48f
-                    val up = -45f
-                    val upReach = 1.14f
-                    val (arm, reach) = when {
-                        q < 0.16f -> ease(q / 0.16f).let { e -> down * e to 1f + (downReach - 1f) * e }
-                        q < 0.36f -> ease((q - 0.16f) / 0.2f).let { e -> down + (up - down) * e to downReach + (upReach - downReach) * e }
-                        q < 0.72f -> up to upReach
-                        q < 0.88f -> ease((q - 0.72f) / 0.16f).let { e -> up + (down - up) * e to upReach + (downReach - upReach) * e }
-                        else -> ease((q - 0.88f) / 0.12f).let { e -> down * (1f - e) to downReach + (1f - downReach) * e }
-                    }
+                    // The reins laid down on the side of the sleigh; down into the sleigh and
+                    // up with a big round clock held by its side, turned to him; a look at it
+                    // (five to midnight), two nods; back down with it, and the reins taken up
+                    // again. The clock comes out and goes in below the side of the sleigh.
+                    var key = 0
+                    while (key < CLOCK_AT.size - 2 && q >= CLOCK_AT[key + 1]) key++
+                    val e = ease(((q - CLOCK_AT[key]) / (CLOCK_AT[key + 1] - CLOCK_AT[key])).coerceIn(0f, 1f))
+                    val arm = CLOCK_TURN[key] + (CLOCK_TURN[key + 1] - CLOCK_TURN[key]) * e
+                    val reach = CLOCK_REACH[key] + (CLOCK_REACH[key + 1] - CLOCK_REACH[key]) * e
                     p.add(1, J.ARM, turn = arm)
                     // The sleeve reaches; the mitten keeps its size.
                     p.joints[1][J.ARM * 5 + 3] = reach
                     p.set(1, J.HAND, sx = 1f / reach)
-                    if (q in 0.15f..0.87f) {
+                    // Let go of on the side of the sleigh, taken up there again.
+                    if (q >= CLOCK_AT[1] && q < CLOCK_AT[6]) p.reinsLaid = 1f
+                    if (q in 0.215f..0.775f) {
                         p.clock = 1f
                         // Upright whatever the arm does, tipped a little to him as he reads it.
-                        val read = hold(((q - 0.36f) / 0.36f).coerceIn(0f, 1f), 0.25f, 0.25f)
+                        val read = hold(((q - 0.38f) / 0.26f).coerceIn(0f, 1f), 0.25f, 0.25f)
                         p.set(1, J.CLOCK, turn = -arm - 6f * read)
                     }
-                    val look = hold(((q - 0.3f) / 0.48f).coerceIn(0f, 1f), 0.15f, 0.2f)
-                    p.add(1, J.HEAD, turn = 3f * look + 4f * (bump(q, 0.54f, 0.61f) + bump(q, 0.62f, 0.69f)))
+                    val look = hold(((q - 0.34f) / 0.36f).coerceIn(0f, 1f), 0.15f, 0.2f)
+                    p.add(1, J.HEAD, turn = 3f * look + 4f * (bump(q, 0.5f, 0.57f) + bump(q, 0.58f, 0.65f)))
                     p.add(1, J.SANTA, turn = 2f * look)
-                    p.set(1, J.SANTA_EYE, sy = 1f - 0.45f * hold(((q - 0.38f) / 0.14f).coerceIn(0f, 1f), 0.3f, 0.3f))
+                    p.set(1, J.SANTA_EYE, sy = 1f - 0.45f * hold(((q - 0.4f) / 0.12f).coerceIn(0f, 1f), 0.3f, 0.3f))
                 }
                 SANTA_STRETCH -> {
                     val b = bell(q)
@@ -789,6 +787,14 @@ class SleighMotion(seed: Int = 1) {
         const val BIRD_PECK = 3
         const val BIRD_FLUFF = 4
         const val SANTA_CLOCK = 5
+        /**
+         * Santa's clock, keyed: when (share of the stir), the arm's turn and how far the
+         * sleeve reaches. To the side of the sleigh (the reins laid there), down into it, up
+         * with the clock, held, down again, to the side (the reins taken up), back.
+         */
+        val CLOCK_AT = floatArrayOf(0f, 0.1f, 0.22f, 0.38f, 0.64f, 0.78f, 0.88f, 1f)
+        val CLOCK_TURN = floatArrayOf(0f, 15f, 52f, -45f, -45f, 52f, 15f, 0f)
+        val CLOCK_REACH = floatArrayOf(1f, 1.23f, 1.48f, 1.14f, 1.14f, 1.48f, 1.23f, 1f)
         const val SANTA_STRETCH = 6
         const val SANTA_CHUCKLE = 7
         const val SANTA_LOOK = 8
@@ -798,7 +804,7 @@ class SleighMotion(seed: Int = 1) {
         const val DEER_HEAD = 12
         const val DEER_NOSE = 13
         const val DEER_WAG = 14
-        val LENGTHS = floatArrayOf(1.6f, 0.8f, 1f, 0.9f, 0.9f, 3.6f, 1.3f, 1.1f, 1.8f, 1.1f, 0.6f, 0.6f, 1.6f, 2.8f, 1.5f)
+        val LENGTHS = floatArrayOf(1.6f, 0.8f, 1f, 0.9f, 0.9f, 4.6f, 1.3f, 1.1f, 1.8f, 1.1f, 0.6f, 0.6f, 1.6f, 2.8f, 1.5f)
 
         fun frac(x: Float) = x - floor(x)
 

@@ -83,6 +83,8 @@ object SleighTrain {
     internal val PERCH = Offset(31.9f, 9.8f)
     /** Where the reins leave Santa's mitten, in the hand's own place. */
     internal val MITTEN = Offset(19.5f, 11.8f)
+    /** Where Santa lays the reins down on the side of the sleigh. */
+    internal val REINS_LAID = Offset(19.5f, 12.9f)
     /** The ground under the runners and hooves. */
     internal const val GROUND = 22.6f
 }
@@ -156,6 +158,8 @@ class TrainPose {
     var colour = 0f
     /** Santa's big clock is out (it is drawn only then). */
     var clock = 0f
+    /** The reins lie on the side of the sleigh instead of in Santa's mitten. */
+    var reinsLaid = 0f
     /** Snow thrown up by the hooves and runners: figure, place (grid units), size, age 0..1. */
     internal val dustFigure = IntArray(MAX_DUST) { -1 }
     internal val dustX = FloatArray(MAX_DUST)
@@ -188,6 +192,7 @@ class TrainPose {
         noseGlow = 0f
         colour = 0f
         clock = 0f
+        reinsLaid = 0f
         dustFigure.fill(-1)
         birdX = SleighTrain.PERCH.x
         birdY = SleighTrain.PERCH.y
@@ -1631,8 +1636,12 @@ fun DrawScope.drawSleighTab(
 
     fun reins(coloured: Boolean) {
         // From Santa's mitten over the front of the sleigh to the first reindeer.
-        val mx = placed.x(J.HAND, SleighTrain.MITTEN.x, SleighTrain.MITTEN.y)
-        val my = placed.y(J.HAND, SleighTrain.MITTEN.x, SleighTrain.MITTEN.y)
+        // In the mitten, or laid on the side of the sleigh while his hands are busy.
+        val laid = pose.reinsLaid
+        val mx = placed.x(J.HAND, SleighTrain.MITTEN.x, SleighTrain.MITTEN.y) * (1f - laid) +
+            placed.x(J.ROOT, SleighTrain.REINS_LAID.x, SleighTrain.REINS_LAID.y) * laid
+        val my = placed.y(J.HAND, SleighTrain.MITTEN.x, SleighTrain.MITTEN.y) * (1f - laid) +
+            placed.y(J.ROOT, SleighTrain.REINS_LAID.x, SleighTrain.REINS_LAID.y) * laid
         val ex = placed.x(J.ROOT, SleighTrain.WIDE, SleighTrain.REINS_Y)
         val ey = placed.y(J.ROOT, SleighTrain.WIDE, SleighTrain.REINS_Y)
         val sag = 0.25f + 0.9f * pose.reinSlack

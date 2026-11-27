@@ -271,14 +271,14 @@ class SleighMotion(seed: Int = 1) {
             val r = rnd()
             kind[a] = when (a) {
                 0 -> when {
-                    r < 0.3f -> BIRD_LOOK
-                    r < 0.55f -> BIRD_TAIL
+                    r < 0.25f -> BIRD_LOOK
+                    r < 0.45f -> BIRD_TAIL
                     r < 0.7f -> BIRD_HOP
                     r < 0.85f -> BIRD_PECK
                     else -> BIRD_FLUFF
                 }
                 1 -> when {
-                    r < 0.35f -> SANTA_HAT
+                    r < 0.35f -> SANTA_CLOCK
                     r < 0.55f -> SANTA_STRETCH
                     r < 0.75f -> SANTA_CHUCKLE
                     else -> SANTA_LOOK
@@ -311,6 +311,7 @@ class SleighMotion(seed: Int = 1) {
         p.reinSlack = 1f - 0.9f * a
         p.reinFlick = 0f
         p.noseGlow = 0f
+        p.clock = 0f
         val t = time
 
         // Going: the reindeer gallop, the sleighs bump along, the wind blows things back.
@@ -365,8 +366,17 @@ class SleighMotion(seed: Int = 1) {
                 BIRD_LOOK -> p.add(TrainPose.BIRD, J.BIRD_HEAD, turn = (if (variant[actor] % 2 == 0) -20f else 14f) * hold(q, 0.2f, 0.25f))
                 BIRD_TAIL -> p.add(TrainPose.BIRD, J.BIRD_TAIL, turn = -28f * (bump(q, 0f, 0.35f) + bump(q, 0.4f, 0.75f)))
                 BIRD_HOP -> {
-                    p.add(TrainPose.BIRD, J.ROOT, dy = -1.2f * sin(PI.toFloat() * q))
-                    p.set(TrainPose.BIRD, J.BIRD_LEGS, sy = 1f - 0.5f * sin(PI.toFloat() * q))
+                    // Up off the perch for a second, not high, with quick wing beats; it turns
+                    // round at the top and comes down on the same place facing the other way.
+                    val crouch = bump(q, 0f, 0.14f)
+                    val air = ((q - 0.12f) / 0.74f).coerceIn(0f, 1f)
+                    val lift = sin(PI.toFloat() * air)
+                    p.add(TrainPose.BIRD, J.ROOT, dx = 0.35f * sin(2f * PI.toFloat() * air), dy = -2.3f * lift + 0.2f * bump(q, 0.86f, 1f))
+                    p.set(TrainPose.BIRD, J.BIRD_LEGS, sy = if (air in 0.01f..0.99f) 0.35f else 1f - 0.35f * crouch)
+                    if (air in 0.01f..0.99f) {
+                        p.set(TrainPose.BIRD, J.BIRD_WING, turn = -35f + 48f * sin(t * 2f * PI.toFloat() * 9f))
+                        p.set(TrainPose.BIRD, J.BIRD_TAIL, turn = -8f)
+                    }
                 }
                 BIRD_PECK -> p.add(TrainPose.BIRD, J.BIRD_HEAD, turn = 35f * (bump(q, 0f, 0.4f) + bump(q, 0.45f, 0.85f)))
                 BIRD_FLUFF -> {
@@ -374,15 +384,35 @@ class SleighMotion(seed: Int = 1) {
                     p.set(TrainPose.BIRD, J.ROOT, sx = 1f + 0.12f * b, sy = 1f + 0.1f * b)
                     p.add(TrainPose.BIRD, J.BIRD_WING, turn = -12f * b)
                 }
-                SANTA_HAT -> {
-                    // The arm up to the cap, straightening to reach it, the cap set
-                    // straight, the arm down.
-                    val up = hold(q, 0.25f, 0.3f)
-                    reachForTheCap(p, up)
-                    val w = bump(q, 0.28f, 0.68f)
-                    p.add(1, J.HAT, turn = -7f * sin((q - 0.28f) / 0.4f * 2f * PI.toFloat()) * w, dy = -0.25f * w)
-                    p.add(1, J.HAT_TIP, turn = 9f * sin((q - 0.28f) / 0.4f * 3f * PI.toFloat()) * w)
-                    p.add(1, J.HEAD, turn = -4f * hold(q, 0.25f, 0.3f))
+                SANTA_CLOCK -> {
+                    // Down into the sleigh, up with a big round clock, a long look at it
+                    // (five to midnight), two nods, and back down into the sleigh with it.
+                    val down = 45f
+                    val up = -12f
+                    val arm = when {
+                        q < 0.15f -> down * ease(q / 0.15f)
+                        q < 0.35f -> down + (up - down) * ease((q - 0.15f) / 0.2f)
+                        q < 0.72f -> up
+                        q < 0.88f -> up + (down - up) * ease((q - 0.72f) / 0.16f)
+                        else -> down * (1f - ease((q - 0.88f) / 0.12f))
+                    }
+                    p.add(1, J.ARM, turn = arm)
+                    val out = when {
+                        q < 0.15f || q > 0.88f -> 0f
+                        q < 0.27f -> ease((q - 0.15f) / 0.12f)
+                        q < 0.78f -> 1f
+                        else -> 1f - ease((q - 0.78f) / 0.1f)
+                    }
+                    if (out > 0f) {
+                        p.clock = 1f
+                        // Upright whatever the arm does, tipped a little towards him as he reads it.
+                        val read = hold(((q - 0.33f) / 0.42f).coerceIn(0f, 1f), 0.2f, 0.2f)
+                        p.set(1, J.CLOCK, turn = -arm - 8f * read, sx = out, sy = out)
+                    }
+                    val look = hold(((q - 0.3f) / 0.48f).coerceIn(0f, 1f), 0.15f, 0.2f)
+                    p.add(1, J.HEAD, turn = 2f * look + 4f * (bump(q, 0.54f, 0.61f) + bump(q, 0.62f, 0.69f)))
+                    p.add(1, J.SANTA, turn = 2f * look)
+                    p.set(1, J.SANTA_EYE, sy = 1f - 0.45f * hold(((q - 0.36f) / 0.14f).coerceIn(0f, 1f), 0.3f, 0.3f))
                 }
                 SANTA_STRETCH -> {
                     val b = bell(q)
@@ -758,7 +788,7 @@ class SleighMotion(seed: Int = 1) {
         const val BIRD_HOP = 2
         const val BIRD_PECK = 3
         const val BIRD_FLUFF = 4
-        const val SANTA_HAT = 5
+        const val SANTA_CLOCK = 5
         const val SANTA_STRETCH = 6
         const val SANTA_CHUCKLE = 7
         const val SANTA_LOOK = 8
@@ -768,7 +798,7 @@ class SleighMotion(seed: Int = 1) {
         const val DEER_HEAD = 12
         const val DEER_NOSE = 13
         const val DEER_WAG = 14
-        val LENGTHS = floatArrayOf(1.6f, 0.8f, 0.5f, 0.9f, 0.9f, 2.2f, 1.3f, 1.1f, 1.8f, 1.1f, 0.6f, 0.6f, 1.6f, 2.8f, 1.5f)
+        val LENGTHS = floatArrayOf(1.6f, 0.8f, 1f, 0.9f, 0.9f, 3.4f, 1.3f, 1.1f, 1.8f, 1.1f, 0.6f, 0.6f, 1.6f, 2.8f, 1.5f)
 
         fun frac(x: Float) = x - floor(x)
 
@@ -810,18 +840,6 @@ class SleighMotion(seed: Int = 1) {
         /** A bell from [a] to [b], 0 elsewhere. */
         fun bump(q: Float, a: Float, b: Float): Float = if (q <= a || q >= b) 0f else bell((q - a) / (b - a))
     }
-}
-
-/**
- * Santa's arm up to the front of his cap, [up] 0..1: it comes forward past his face
- * and straightens to reach; the sleeve grows, the mitten keeps its size.
- */
-internal fun reachForTheCap(p: TrainPose, up: Float) {
-    p.add(1, J.ARM, turn = -89f * up, dx = 1.3f * up)
-    val k = J.ARM * 5
-    p.joints[1][k + 3] = 1f + 0.48f * up
-    p.joints[1][k + 4] = 1f - 0.2f * up
-    p.set(1, J.HAND, sx = 1f / (1f + 0.48f * up), sy = 1f / (1f - 0.2f * up))
 }
 
 /**

@@ -146,6 +146,36 @@ class SleighMotionTest {
         assertTrue("it wags: $wag", wag > 20f)
     }
 
+    @Test fun santaTakesOutHisClockAndPutsItBack() {
+        val m = SleighMotion(seed = 5)
+        var out = 0
+        var put = 0
+        var was = false
+        run(m, 300f, travel = false, lens = 1f) {
+            val now = m.pose.clock > 0f
+            if (now && !was) out++
+            if (!now && was) put++
+            was = now
+        }
+        println("Santa's clock: out $out times, put back $put")
+        assertTrue("the clock comes out: $out", out >= 1)
+        assertTrue("and goes back: $put", put >= out - 1)
+    }
+
+    @Test fun theBirdFliesUpALittleAndComesDownTurned() {
+        val m = SleighMotion(seed = 5)
+        var high = 0f
+        val facing = mutableSetOf<Float>()
+        run(m, 300f, travel = false, lens = 0f) {
+            high = minOf(high, m.pose.joints[TrainPose.BIRD][J.ROOT * 5 + 2])
+            facing += m.pose.birdFacing
+        }
+        println("bird: up to ${-high}, facing $facing")
+        assertTrue("it flies up: $high", high < -2f)
+        assertTrue("not high: $high", high > -3f)
+        assertEquals("and turns round", setOf(1f, -1f), facing)
+    }
+
     @Test fun aBlipOfConnectionDoesNotStartIt() {
         val m = SleighMotion(seed = 4)
         run(m, 2f, travel = false)

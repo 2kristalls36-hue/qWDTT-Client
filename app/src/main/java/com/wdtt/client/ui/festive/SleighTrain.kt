@@ -100,6 +100,7 @@ internal object J {
     const val ARM = 5
     const val SANTA_EYE = 6
     const val HAND = 7
+    const val CLOCK = 8
     // A reindeer.
     const val NECK = 1
     const val DEER_HEAD = 2
@@ -153,6 +154,8 @@ class TrainPose {
     var noseGlow = 0f
     /** How much the figures are in their colours outside the droplet (all of them, going). */
     var colour = 0f
+    /** Santa's big clock is out (it is drawn only then). */
+    var clock = 0f
     /** Snow thrown up by the hooves and runners: figure, place (grid units), size, age 0..1. */
     internal val dustFigure = IntArray(MAX_DUST) { -1 }
     internal val dustX = FloatArray(MAX_DUST)
@@ -184,6 +187,7 @@ class TrainPose {
         reinFlick = 0f
         noseGlow = 0f
         colour = 0f
+        clock = 0f
         dustFigure.fill(-1)
         birdX = SleighTrain.PERCH.x
         birdY = SleighTrain.PERCH.y
@@ -304,6 +308,8 @@ private val Skin = Color(0xFFF3C7A5)
 private val Rosy = Color(0xFFEA8C86)
 private val Belt = Color(0xFF29221F)
 private val Mitten = Color(0xFF2E8B57)
+private val ClockFace = Color(0xFFFFF4DC)
+private val ClockInk = Color(0xFF2A1C14)
 private val Burlap = Color(0xFFAF8452)
 private val Twine = Color(0xFFDDB86E)
 private val Leather = Color(0xFF8A4E2B)
@@ -671,6 +677,32 @@ private fun sleigh() = figure {
                 close()
             }
             joint(J.HAND, 17.6f, 11.7f) {
+                // A big round wall clock, held by its rim, out only while he looks at it:
+                // a brass rim with a ring to hang it by, a cream face with the hours marked,
+                // five to midnight, the glass catching the light. Behind the mitten.
+                joint(J.CLOCK, 19.4f, 10.9f) {
+                    val cx = 19.5f
+                    val cy = 8.75f
+                    line(GoldDeep, 0.22f) { circle(cx, 6.45f, 0.3f) }
+                    fill(Gold, gap = 0.2f) { circle(cx, cy, 2.05f) }
+                    fill(ClockFace, Mono.Cut) { circle(cx, cy, 1.62f) }
+                    fill(ClockInk, Mono.Skip) {
+                        for (k in 0 until 12) {
+                            val a = k * PI.toFloat() / 6f
+                            circle(cx + 1.3f * sin(a), cy - 1.3f * cos(a), if (k % 3 == 0) 0.15f else 0.08f)
+                        }
+                    }
+                    // The hour hand just short of twelve, the minute hand at eleven.
+                    val hour = (-2.5f) * PI.toFloat() / 180f
+                    val minute = (-30f) * PI.toFloat() / 180f
+                    line(ClockInk, 0.24f) { seg(cx, cy, cx + 0.85f * sin(hour), cy - 0.85f * cos(hour)) }
+                    line(ClockInk, 0.15f) { seg(cx, cy, cx + 1.28f * sin(minute), cy - 1.28f * cos(minute)) }
+                    fill(CandyRed, Mono.Own) { circle(cx, cy, 0.17f) }
+                    line(Color.White.copy(alpha = 0.7f), 0.14f, Mono.Skip) {
+                        moveTo(cx - 1.15f, cy - 0.35f)
+                        cubicTo(cx - 1.1f, cy - 0.85f, cx - 0.8f, cy - 1.15f, cx - 0.35f, cy - 1.2f)
+                    }
+                }
                 fill(Fur, gap = 0.15f) { round(17.6f, 10.75f, 1.1f, 1.9f, 0.4f) }
                 fill(Mitten, gap = 0.2f) {
                     circle(19.2f, 11.7f, 0.95f)
@@ -1495,8 +1527,10 @@ private fun DrawScope.shade(p: Part) {
     drawPath(p.path, if (nightNow) MoonShadow else SunShadow, style = style)
 }
 
-private fun DrawScope.parts(fig: FigureData, at: JointPlaces, coloured: Boolean, plain: Color, alpha: Float = 1f) {
+private fun DrawScope.parts(fig: FigureData, at: JointPlaces, coloured: Boolean, plain: Color, alpha: Float = 1f, hide: Int = -1) {
     fun one(p: Part, mode: Int) {
+        // What is put away (Santa's clock) is not drawn.
+        if (p.joint == hide) return
         if (at.still[p.joint]) part(p, coloured, plain, alpha, mode)
         else withTransform({ transform(at.matrix[p.joint]) }) { part(p, coloured, plain, alpha, mode) }
     }
@@ -1723,6 +1757,7 @@ fun DrawScope.drawSleighTab(
                 scale(unit, unit, pivot = Offset.Zero) {
                     withTransform({ transform(cast) }) {
                         for (p in figure.parts) {
+                            if (i == 1 && p.joint == J.CLOCK && pose.clock <= 0f) continue
                             if (at.still[p.joint]) shade(p)
                             else withTransform({ transform(at.matrix[p.joint]) }) { shade(p) }
                         }
@@ -1744,7 +1779,7 @@ fun DrawScope.drawSleighTab(
             if (layers and SleighLayers.FIGURE == 0) return@clipRect
             translate(left, top) {
                 scale(unit, unit, pivot = Offset.Zero) {
-                    parts(fig, placed, coloured, plain)
+                    parts(fig, placed, coloured, plain, hide = if (index == 1 && pose.clock <= 0f) J.CLOCK else -1)
                     if (nightNow && coloured) {
                         // By night the lights glow round them.
                         if (index == 0) {

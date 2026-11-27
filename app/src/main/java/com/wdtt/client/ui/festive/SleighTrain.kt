@@ -417,6 +417,23 @@ private class Figure {
 
 private fun figure(body: Figure.() -> Unit): FigureData = Figure().apply(body).build()
 
+/** A reindeer's head, facing right (grid units of its figure). */
+private fun Path.deerHead() {
+    moveTo(24.6f, 4.9f)
+    // The back of the skull over to the forehead.
+    cubicTo(24.7f, 3.6f, 25.9f, 2.75f, 27.3f, 2.8f)
+    cubicTo(28.3f, 2.85f, 29f, 3.2f, 29.6f, 3.5f)
+    // The bridge of the nose, gently down to the muzzle.
+    cubicTo(30.5f, 3.9f, 31.6f, 4.3f, 32.3f, 4.75f)
+    // The round muzzle and the chin.
+    cubicTo(33.2f, 5.3f, 33.3f, 6.6f, 32.4f, 7.15f)
+    cubicTo(31.6f, 7.65f, 30.4f, 7.75f, 29.5f, 7.55f)
+    // The jaw, back into the throat and up to the poll.
+    cubicTo(28.4f, 7.35f, 27.6f, 6.9f, 26.9f, 6.5f)
+    cubicTo(26.1f, 6.1f, 25.2f, 5.7f, 24.6f, 4.9f)
+    close()
+}
+
 private fun Path.rect(x: Float, y: Float, w: Float, h: Float) = addRect(Rect(x, y, x + w, y + h))
 private fun Path.round(x: Float, y: Float, w: Float, h: Float, r: Float) =
     addRoundRect(RoundRect(x, y, x + w, y + h, CornerRadius(r)))
@@ -1143,27 +1160,60 @@ private fun reindeer(leads: Boolean) = figure {
     }
     // The neck and head: they lift, lower and turn together.
     joint(J.NECK, 22.8f, 10f) {
-        // Set into the body: no light or shade along its foot.
+        // Curved, its crest rising to the poll and its throat falling to the chest; set into
+        // the body: no light or shade along its foot.
         fill(Deer, edgeShape = {
             moveTo(20.8f, 10.4f)
-            cubicTo(22.4f, 8.4f, 23.8f, 6.4f, 24.8f, 4.8f)
-            lineTo(28.2f, 5.8f)
-            cubicTo(27.6f, 8.2f, 27f, 10.6f, 25.8f, 13f)
+            cubicTo(22.6f, 8.9f, 23.9f, 6.9f, 24.7f, 4.6f)
+            lineTo(26.6f, 5.6f)
+            cubicTo(27.6f, 6.1f, 28.2f, 6.6f, 28.1f, 7.3f)
+            cubicTo(27.9f, 9.2f, 27.2f, 11.2f, 25.8f, 13f)
             lineTo(26f, 20f)
             lineTo(19.5f, 20f)
             close()
         }) {
             moveTo(20.8f, 10.4f)
-            cubicTo(22.4f, 8.4f, 23.8f, 6.4f, 24.8f, 4.8f)
-            lineTo(28.2f, 5.8f)
-            cubicTo(27.6f, 8.2f, 27f, 10.6f, 25.8f, 13f)
+            cubicTo(22.6f, 8.9f, 23.9f, 6.9f, 24.7f, 4.6f)
+            lineTo(26.6f, 5.6f)
+            cubicTo(27.6f, 6.1f, 28.2f, 6.6f, 28.1f, 7.3f)
+            cubicTo(27.9f, 9.2f, 27.2f, 11.2f, 25.8f, 13f)
             close()
         }
+        // A soft white ruff down the throat, its front edge in small tufts.
         fill(Cream) {
-            poly(
-                28.4f, 6.4f, 27.4f, 7.4f, 28f, 7.8f, 27f, 9f, 27.6f, 9.4f, 26.6f, 10.6f, 27.1f, 11f, 26f, 12.6f,
-                25.4f, 12.4f, 26f, 9.6f, 26.8f, 6.6f,
-            )
+            fun at(t: Float, out: FloatArray) {
+                val u = 1f - t
+                out[0] = u * u * u * 28.1f + 3f * u * u * t * 27.9f + 3f * u * t * t * 27.2f + t * t * t * 25.8f
+                out[1] = u * u * u * 7.3f + 3f * u * u * t * 9.2f + 3f * u * t * t * 11.2f + t * t * t * 13f
+            }
+            val p = FloatArray(2)
+            val q = FloatArray(2)
+            val n = 40
+            for (k in 0..n) {
+                val t = 0.03f + 0.9f * k / n
+                at(t, p)
+                at(t + 0.01f, q)
+                val dx = q[0] - p[0]
+                val dy = q[1] - p[1]
+                val len = kotlin.math.sqrt(dx * dx + dy * dy)
+                // Outward (to the front of the throat), tufted.
+                val tuft = 0.28f * kotlin.math.abs(sin(t * PI.toFloat() * 7f))
+                val x = p[0] + dy / len * tuft
+                val y = p[1] - dx / len * tuft
+                if (k == 0) moveTo(x, y) else lineTo(x, y)
+            }
+            for (k in n downTo 0) {
+                val t = 0.03f + 0.9f * k / n
+                at(t, p)
+                at(t + 0.01f, q)
+                val dx = q[0] - p[0]
+                val dy = q[1] - p[1]
+                val len = kotlin.math.sqrt(dx * dx + dy * dy)
+                // Inward, narrowing towards the chest.
+                val w = 1.3f - 0.6f * t
+                lineTo(p[0] - dy / len * w, p[1] + dx / len * w)
+            }
+            close()
         }
         if (leads) {
             // A green scarf with white stripes, its ends flying back.
@@ -1216,26 +1266,23 @@ private fun reindeer(leads: Boolean) = figure {
                 close()
             }
         }
-        // The head: muzzle forward, a bridle, a smile, a blush, a big eye.
-        fill(Deer.tint(0.06f)) {
-            moveTo(24.4f, 4.8f)
-            cubicTo(24.8f, 3.4f, 26.4f, 2.9f, 27.6f, 3.3f)
-            lineTo(31.8f, 4.9f)
-            cubicTo(32.9f, 5.3f, 33.1f, 6.6f, 32.2f, 7.1f)
-            lineTo(30.3f, 7.9f)
-            cubicTo(29.1f, 8.3f, 28.1f, 7.7f, 27.7f, 6.9f)
-            lineTo(25.6f, 6.2f)
-            close()
-        }
-        fill(DeerLight, Mono.Skip) { oval(31.1f, 6.3f, 1.5f, 0.95f) }
+        // The head: a round skull, a gentle bridge down to a round muzzle, the jaw curving
+        // back into the throat; a bridle, a smile, a blush, a big eye. Where it is set on the
+        // neck it gets no light or shade.
+        fill(Deer.tint(0.06f), edgeShape = {
+            val head = Path().apply { deerHead() }
+            val neck = Path().apply { poly(24.3f, 4.9f, 27f, 6.4f, 28.6f, 7.4f, 28.4f, 10f, 23.4f, 10f) }
+            op(head, neck, androidx.compose.ui.graphics.PathOperation.Union)
+        }) { deerHead() }
+        fill(DeerLight, Mono.Skip) { oval(31.4f, 6.25f, 1.45f, 0.95f) }
         line(Hoof, 0.15f, Mono.Skip) {
             moveTo(30.4f, 7.15f)
             cubicTo(30.9f, 7.5f, 31.5f, 7.45f, 31.9f, 7.1f)
         }
         fill(Rosy.copy(alpha = 0.7f), Mono.Skip) { oval(29.4f, 6.4f, 0.55f, 0.38f) }
         line(Harness, 0.28f, Mono.Skip) {
-            moveTo(30.1f, 4.75f)
-            lineTo(30.6f, 7.6f)
+            moveTo(30.05f, 3.85f)
+            lineTo(30.55f, 7.55f)
             moveTo(30.3f, 5.9f)
             lineTo(27.2f, 4.1f)
         }

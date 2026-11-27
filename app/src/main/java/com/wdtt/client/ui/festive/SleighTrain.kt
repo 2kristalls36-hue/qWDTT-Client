@@ -325,9 +325,9 @@ private val Belt = Color(0xFF29221F)
 private val Mitten = Color(0xFF2E8B57)
 private val ClockFace = Color(0xFFFFF4DC)
 /** The drift going by under the train: its shade by day, its top and shade by moonlight. */
-private val GroundShade = Color(0xFFC3D1E6)
+private val GroundShade = Color(0xFFA3B6D3)
 private val NightGroundTop = Color(0xFFCFDCF5)
-private val NightGroundShade = Color(0xFF8DA2CA)
+private val NightGroundShade = Color(0xFF7890BE)
 private val ClockInk = Color(0xFF2A1C14)
 private val Burlap = Color(0xFFAF8452)
 private val Twine = Color(0xFFDDB86E)
@@ -1731,17 +1731,27 @@ fun DrawScope.drawSleighTab(
     }
 
     fun snowGoingBy() {
-        // Going: the drift under the train goes by with the ground (as fast as the nearest
-        // trees): its top in soft waves, streaks and glints in it. Snow in its own colours,
-        // in the silhouette too.
+        // Going: the drift under the train goes by with the ground. Its top in soft waves,
+        // each shaded on its side away from the light; down through the whole drift to the
+        // bottom of the bar, specks, streaks and glints, the lower (nearer) ones larger and a
+        // little faster, so the ground is seen to go by in depth. Snow in its own colours,
+        // in the silhouette too; it comes and goes with the speed.
         val sp = pose.speed
         if (sp < 0.02f) return
         val fade = min(1f, sp * 1.6f)
         val surface = top + (SleighTrain.GROUND - 0.35f) * unit
         val lump = if (nightNow) NightGroundTop else SnowWhite
         val shade = if (nightNow) NightGroundShade else GroundShade
-        val run = pose.distance
-        fun along(cell: Float, seed: Int, most: Float, each: (x: Float, h: Float, key: Int) -> Unit) {
+        // How deep the drift is seen below its top, down to the bottom of the bar.
+        val deep = ((height - surface) / unit + 2.5f).coerceIn(2f, 9f)
+        // The ends of the bar are round: the texture fades out towards them.
+        fun ends(x: Float): Float = when (index) {
+            0 -> ((x / width) / 0.35f).coerceIn(0f, 1f)
+            count - 1 -> (((width - x) / width) / 0.35f).coerceIn(0f, 1f)
+            else -> 1f
+        }
+        fun along(cell: Float, seed: Int, most: Float, speed: Float, each: (x: Float, h: Float, key: Int) -> Unit) {
+            val run = pose.distance * speed
             val k0 = floor((run + index - 0.3f) / cell).toInt()
             val k1 = floor((run + index + 1.3f) / cell).toInt()
             for (k in k0..k1) {
@@ -1751,14 +1761,14 @@ fun DrawScope.drawSleighTab(
                     // In tab widths from tab 0's left edge: it goes by to the left.
                     val barX = (k + hash01(seed + 2, key)) * cell - run
                     val x = (barX - index) * width
-                    if (x < -2f * unit || x > width + 2f * unit) continue
+                    if (x < -3f * unit || x > width + 3f * unit) continue
                     each(x, hash01(seed + 4, key), key)
                 }
             }
         }
-        // The top of the drift in soft waves going by, each shaded on its side away from
-        // the light, so the drift is seen to move under the train.
+        // The top in soft waves going by.
         val away = if (nightNow) -1f else 1f
+        val run = pose.distance
         fun crest(x: Float): Float {
             val u = index + x / width + run
             val a = 0.45f * sin(u * 2f * PI.toFloat() * 1.3f + 0.7f) +
@@ -1767,29 +1777,43 @@ fun DrawScope.drawSleighTab(
             return surface - (0.45f + a) * unit
         }
         fun wave(dx: Float, dy: Float) = Path().apply {
-            val step = 3f
             var x = -4f * unit
             moveTo(x, surface + 1.4f * unit)
             while (x <= width + 4f * unit) {
                 lineTo(x + dx, crest(x) + dy)
-                x += step
+                x += 3f
             }
             lineTo(width + 4f * unit, surface + 1.4f * unit)
             close()
         }
-        drawPath(wave(0.5f * unit * away, 0.4f * unit), shade, alpha = 0.6f * fade)
-        drawPath(wave(0f, 0f), lump, alpha = fade)
-        // Streaks in the drift, the snow's grain.
-        along(0.16f, 83, 1f) { x, h, _ ->
-            val y = surface + (1f + 1.8f * h) * unit
-            val len = (1.5f + 2.5f * h) * unit
-            drawLine(shade, Offset(x, y), Offset(x + len, y), strokeWidth = 0.3f * unit, cap = StrokeCap.Round, alpha = 0.5f * fade)
-        }
-        // Glints.
-        along(0.11f, 97, 1f) { x, h, key ->
-            val y = surface + (0.4f + 2.2f * h) * unit
-            val glint = 0.5f + 0.5f * sin(pose.time * 5f + key * 1.7f)
-            drawCircle(Color.White, 0.18f * unit, Offset(x, y), alpha = 0.85f * fade * glint)
+        val endFade = if (index == 0 || index == count - 1) 0.85f else 1f
+        drawPath(wave(0.5f * unit * away, 0.45f * unit), shade, alpha = 0.75f * fade * endFade)
+        drawPath(wave(0f, 0f), lump, alpha = fade * endFade)
+        // Down through the drift, in bands from its top to the bottom of the bar: the deeper
+        // the band, the nearer the snow, so larger and faster.
+        val bands = 5
+        for (b in 0 until bands) {
+            val d0 = 0.5f + (deep - 0.5f) * b / bands
+            val d1 = 0.5f + (deep - 0.5f) * (b + 1) / bands
+            val near = (b + 0.5f) / bands
+            val speed = 1f + 0.4f * near
+            // Specks of snow.
+            along(0.045f, 101 + b * 11, 1f, speed) { x, h, _ ->
+                val y = surface + (d0 + (d1 - d0) * h) * unit
+                drawCircle(shade, (0.12f + 0.12f * near + 0.08f * h) * unit, Offset(x, y), alpha = 0.65f * fade * ends(x))
+            }
+            // Streaks, the snow's grain.
+            along(0.14f, 83 + b * 11, 1f, speed) { x, h, _ ->
+                val y = surface + (d0 + (d1 - d0) * h) * unit
+                val len = (1.2f + 2f * h) * (1f + 0.5f * near) * unit
+                drawLine(shade, Offset(x, y), Offset(x + len, y), strokeWidth = (0.22f + 0.12f * near) * unit, cap = StrokeCap.Round, alpha = 0.5f * fade * ends(x))
+            }
+            // Glints.
+            along(0.1f, 97 + b * 11, 1f, speed) { x, h, key ->
+                val y = surface + (d0 + (d1 - d0) * h) * unit
+                val glint = 0.5f + 0.5f * sin(pose.time * 5f + key * 1.7f)
+                drawCircle(Color.White, (0.14f + 0.1f * near) * unit, Offset(x, y), alpha = 0.9f * fade * glint * ends(x))
+            }
         }
     }
 

@@ -324,6 +324,12 @@ private val Rosy = Color(0xFFEA8C86)
 private val Belt = Color(0xFF29221F)
 private val Mitten = Color(0xFF2E8B57)
 private val ClockFace = Color(0xFFFFF4DC)
+/**
+ * How far behind the near hind leg the far one stands, grid units: a little, so it shows
+ * beside it without sticking out behind the rump.
+ */
+internal const val FAR_HIND = -0.7f
+
 /** The drift going by under the train: its shade by day, its top and shade by moonlight. */
 private val GroundShade = Color(0xFFA3B6D3)
 private val NightGroundTop = Color(0xFFCFDCF5)
@@ -1000,21 +1006,24 @@ private fun reindeer(leads: Boolean) = figure {
         if (fore) {
             joint(hip, 23.3f + dx, 13.2f) {
                 group(gid) {
+                    // The shoulder and the forearm: it leaves the chest still broad, an elbow
+                    // behind, and tapers to the knee, as the thigh does behind.
                     fill(coat, gap = gap) {
-                        moveTo(21f + dx, 12.2f)
-                        lineTo(25.4f + dx, 12.2f)
-                        cubicTo(25.9f + dx, 13.6f, 25.2f + dx, 15f, 24.5f + dx, 15.9f)
-                        cubicTo(24.2f + dx, 16.6f, 24f + dx, 17.3f, 23.95f + dx, 18f)
-                        lineTo(22.85f + dx, 18f)
-                        cubicTo(22.75f + dx, 17.2f, 22.5f + dx, 16.4f, 22.1f + dx, 15.8f)
-                        cubicTo(21.2f + dx, 14.9f, 20.8f + dx, 13.6f, 21f + dx, 12.2f)
+                        moveTo(20.9f + dx, 12.2f)
+                        lineTo(25.5f + dx, 12.2f)
+                        cubicTo(26f + dx, 13.8f, 25.5f + dx, 15.4f, 24.85f + dx, 16.5f)
+                        cubicTo(24.4f + dx, 17.3f, 24.05f + dx, 18.1f, 23.95f + dx, 18.8f)
+                        lineTo(22.9f + dx, 18.8f)
+                        cubicTo(22.75f + dx, 18.1f, 22.4f + dx, 17.5f, 21.85f + dx, 17f)
+                        cubicTo(21.2f + dx, 16.4f, 20.9f + dx, 15.6f, 20.85f + dx, 14.6f)
+                        cubicTo(20.8f + dx, 13.8f, 20.8f + dx, 13f, 20.9f + dx, 12.2f)
                         close()
                     }
                 }
-                joint(knee, 23.4f + dx, 18f) {
+                joint(knee, 23.42f + dx, 18.8f) {
                     group(gid) {
-                        fill(coat, gap = gap) { poly(22.95f + dx, 17.9f, 23.9f + dx, 17.9f, 23.78f + dx, 21f, 23.05f + dx, 21f) }
-                        fill(coat, gap = gap) { circle(23.42f + dx, 18f, 0.48f) }
+                        fill(coat, gap = gap) { poly(22.98f + dx, 18.7f, 23.88f + dx, 18.7f, 23.76f + dx, 21f, 23.06f + dx, 21f) }
+                        fill(coat, gap = gap) { circle(23.42f + dx, 18.8f, 0.48f) }
                     }
                     joint(fetlock, 23.4f + dx, 21f) {
                         group(gid) {
@@ -1056,7 +1065,7 @@ private fun reindeer(leads: Boolean) = figure {
         }
     }
     // The far legs, a shade darker, behind the body; each outlined thinly.
-    leg(J.HIND_FAR, J.HOCK_FAR, J.FETLOCK_HIND_FAR, -1.6f, fore = false, coat = DeerDeep, gap = 0.18f, gid = 100)
+    leg(J.HIND_FAR, J.HOCK_FAR, J.FETLOCK_HIND_FAR, FAR_HIND, fore = false, coat = DeerDeep, gap = 0.18f, gid = 100)
     leg(J.FORE_FAR, J.KNEE_FAR, J.FETLOCK_FORE_FAR, 1.1f, fore = true, coat = DeerDeep, gap = 0.18f, gid = 101)
     // A short white tail.
     joint(J.TAIL, 7.2f, 10.9f) {
@@ -1078,8 +1087,8 @@ private fun reindeer(leads: Boolean) = figure {
         moveTo(10.2f, 9.95f)
         cubicTo(13.6f, 10.35f, 17.6f, 10.25f, 20.4f, 9.55f)
         cubicTo(22.6f, 9f, 25.4f, 9.9f, 26.4f, 12.2f)
-        cubicTo(27.1f, 13.9f, 26.6f, 15.9f, 25f, 16.9f)
-        cubicTo(23.9f, 17.5f, 22.3f, 17.4f, 21f, 17f)
+        cubicTo(27.1f, 13.9f, 26.6f, 15.9f, 25.2f, 16.7f)
+        cubicTo(24f, 17.15f, 22.3f, 17.05f, 21f, 16.75f)
         cubicTo(18.4f, 16.6f, 15.4f, 16.2f, 13.4f, 15.6f)
         cubicTo(12.4f, 15.9f, 11.6f, 16.5f, 10.3f, 16.5f)
         cubicTo(8.8f, 16.5f, 7.4f, 15.6f, 7f, 13.9f)
@@ -1090,8 +1099,8 @@ private fun reindeer(leads: Boolean) = figure {
     // The pale underside from the chest to the flank, a pale patch on the rump.
     fill(DeerLight, Mono.Skip) {
         moveTo(13.5f, 15.7f)
-        cubicTo(15.5f, 16.2f, 18.5f, 16.6f, 21f, 17f)
-        cubicTo(22.3f, 17.4f, 23.9f, 17.5f, 25f, 16.9f)
+        cubicTo(15.5f, 16.2f, 18.5f, 16.5f, 21f, 16.75f)
+        cubicTo(22.3f, 17.05f, 24f, 17.15f, 25.2f, 16.7f)
         cubicTo(26f, 16.3f, 26.6f, 15.3f, 26.8f, 14.2f)
         cubicTo(26.3f, 15.6f, 25.2f, 16.4f, 23.6f, 16.6f)
         cubicTo(20.8f, 16.7f, 17f, 15.9f, 13.5f, 15.7f)
@@ -1969,14 +1978,14 @@ fun DrawScope.drawSleighTab(
 
 /** Where the bottom of a reindeer's hoof is when it stands (grid units). */
 internal fun SleighTrain.hoofRest(fore: Boolean, far: Boolean): Offset {
-    val dx = if (far) (if (fore) 1.1f else -1.6f) else 0f
+    val dx = if (far) (if (fore) 1.1f else FAR_HIND) else 0f
     return Offset((if (fore) 23.95f else 11.1f) + dx, 22.6f)
 }
 
 /** Where the bottom of a hoof is (grid units of the figure, its joints placed). */
 internal fun hoofAt(fig: FigureData, pose: FloatArray, fetlock: Int, fore: Boolean, far: Boolean, out: FloatArray) {
     hoofPlaces.place(fig, pose)
-    val dx = if (far) (if (fore) 1.1f else -1.6f) else 0f
+    val dx = if (far) (if (fore) 1.1f else FAR_HIND) else 0f
     val hx = (if (fore) 23.95f else 11.1f) + dx
     out[0] = hoofPlaces.x(fetlock, hx, 22.6f)
     out[1] = hoofPlaces.y(fetlock, hx, 22.6f)

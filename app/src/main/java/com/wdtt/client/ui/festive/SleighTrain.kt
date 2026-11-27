@@ -989,13 +989,13 @@ private fun reindeer(leads: Boolean) = figure {
             joint(hip, 23.3f + dx, 13.2f) {
                 group(gid) {
                     fill(coat, gap = gap) {
-                        moveTo(21.6f + dx, 12.4f)
-                        lineTo(24.9f + dx, 12.4f)
-                        cubicTo(25.3f + dx, 13.6f, 24.8f + dx, 14.8f, 24.1f + dx, 15.6f)
-                        cubicTo(24f + dx, 16.4f, 23.95f + dx, 17.2f, 23.95f + dx, 18f)
+                        moveTo(21f + dx, 12.2f)
+                        lineTo(25.4f + dx, 12.2f)
+                        cubicTo(25.9f + dx, 13.6f, 25.2f + dx, 15f, 24.5f + dx, 15.9f)
+                        cubicTo(24.2f + dx, 16.6f, 24f + dx, 17.3f, 23.95f + dx, 18f)
                         lineTo(22.85f + dx, 18f)
-                        cubicTo(22.8f + dx, 17.2f, 22.75f + dx, 16.5f, 22.6f + dx, 15.8f)
-                        cubicTo(21.9f + dx, 15f, 21.4f + dx, 13.6f, 21.6f + dx, 12.4f)
+                        cubicTo(22.75f + dx, 17.2f, 22.5f + dx, 16.4f, 22.1f + dx, 15.8f)
+                        cubicTo(21.2f + dx, 14.9f, 20.8f + dx, 13.6f, 21f + dx, 12.2f)
                         close()
                     }
                 }
@@ -1019,11 +1019,11 @@ private fun reindeer(leads: Boolean) = figure {
                     fill(coat, gap = gap) {
                         moveTo(8f + dx, 12.4f)
                         lineTo(12.8f + dx, 12.6f)
-                        cubicTo(13.6f + dx, 13.6f, 13.5f + dx, 15f, 12.9f + dx, 15.9f)
-                        cubicTo(12.2f + dx, 16.9f, 11.5f + dx, 17.8f, 11.2f + dx, 18.9f)
+                        cubicTo(13.4f + dx, 13.6f, 13.1f + dx, 15f, 12.5f + dx, 15.9f)
+                        cubicTo(11.9f + dx, 16.9f, 11.4f + dx, 17.8f, 11.2f + dx, 18.9f)
                         lineTo(10f + dx, 18.95f)
-                        cubicTo(9.6f + dx, 17.6f, 8.9f + dx, 16.6f, 8.4f + dx, 15.6f)
-                        cubicTo(7.9f + dx, 14.6f, 7.8f + dx, 13.4f, 8f + dx, 12.4f)
+                        cubicTo(9.7f + dx, 17.7f, 9.3f + dx, 16.7f, 9f + dx, 15.8f)
+                        cubicTo(8.5f + dx, 14.6f, 7.9f + dx, 13.4f, 8f + dx, 12.4f)
                         close()
                     }
                 }
@@ -1061,26 +1061,26 @@ private fun reindeer(leads: Boolean) = figure {
     group(102) {
     fill(Deer, edges = true) {
         moveTo(9.6f, 9.8f)
-        cubicTo(13f, 9.3f, 19f, 9.1f, 22.4f, 9.6f)
-        cubicTo(25f, 10f, 26.2f, 11.8f, 25.8f, 13.6f)
-        cubicTo(25.4f, 15.4f, 23.8f, 16.2f, 22f, 16f)
-        cubicTo(18f, 15.6f, 14f, 15.8f, 10.6f, 16f)
+        cubicTo(13f, 9.3f, 18.6f, 8.95f, 22.2f, 9.2f)
+        cubicTo(25.2f, 9.45f, 26.65f, 11.6f, 26.35f, 13.8f)
+        cubicTo(26.05f, 15.9f, 24.35f, 16.85f, 22.2f, 16.65f)
+        cubicTo(18f, 16.15f, 14f, 15.95f, 10.6f, 16f)
         cubicTo(8f, 16.2f, 6.6f, 14.8f, 6.8f, 12.8f)
         cubicTo(7f, 11f, 8f, 10.1f, 9.6f, 9.8f)
         close()
     }
     fill(DeerLight, Mono.Skip) {
         moveTo(10f, 15.9f)
-        cubicTo(14f, 15.3f, 18f, 15.1f, 22f, 15.4f)
-        cubicTo(23.8f, 15.5f, 25f, 14.6f, 25.5f, 13.2f)
-        cubicTo(25.6f, 14.8f, 24f, 16.2f, 22f, 16f)
-        cubicTo(18f, 15.7f, 14f, 15.9f, 10.6f, 16f)
+        cubicTo(14f, 15.35f, 18f, 15.4f, 22.2f, 15.95f)
+        cubicTo(24.2f, 16.05f, 25.6f, 15.1f, 26.05f, 13.6f)
+        cubicTo(26.15f, 15.5f, 24.5f, 16.85f, 22.2f, 16.65f)
+        cubicTo(18f, 16.2f, 14f, 16f, 10.6f, 16f)
         close()
         oval(8.2f, 11.9f, 1.1f, 1.3f)
     }
     line(DeerDeep, 0.35f, Mono.Skip) {
         moveTo(10.5f, 10f)
-        cubicTo(14f, 9.5f, 18.5f, 9.35f, 21.5f, 9.75f)
+        cubicTo(14f, 9.5f, 18.5f, 9.2f, 21.5f, 9.4f)
     }
     leg(J.HIND_NEAR, J.HOCK_NEAR, J.FETLOCK_HIND_NEAR, 0f, fore = false, coat = Deer, gap = 0.3f, gid = 102)
     leg(J.FORE_NEAR, J.KNEE_NEAR, J.FETLOCK_FORE_NEAR, 0f, fore = true, coat = Deer, gap = 0.3f, gid = 102)

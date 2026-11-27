@@ -263,6 +263,8 @@ internal class Part(
      * joints like a wooden toy's).
      */
     val group: Int = -1,
+    /** In a group, but with light and shade of its own all the same (a reindeer's body). */
+    val edges: Boolean = false,
 ) {
     /** Its colour by moonlight. */
     val nightColor: Color? by lazy { color?.let { if (lit) it else moon(it) } }
@@ -278,7 +280,7 @@ internal class Part(
     val nightShaded: Path? by lazy { edge(SHADE_X, -SHADE_Y) }
 
     private fun edge(dx: Float, dy: Float): Path? {
-        if (stroke > 0f || color == null || mono == Mono.Cut || lit || group >= 0) return null
+        if (stroke > 0f || color == null || mono == Mono.Cut || lit || (group >= 0 && !edges)) return null
         val b = path.getBounds()
         if (b.width < 1.4f && b.height < 1.4f) return null
         val moved = Path().apply { addPath(path, Offset(dx, dy)) }
@@ -384,12 +386,12 @@ private class Figure {
         groupNow = was
     }
 
-    fun fill(color: Color?, mono: Mono = Mono.Fill, gap: Float = 0f, outline: Float = 0f, lit: Boolean = false, body: Path.() -> Unit) {
-        parts += Part(Path().apply(body), color, mono, 0f, gap, 0f, at, outline, lit, groupNow)
+    fun fill(color: Color?, mono: Mono = Mono.Fill, gap: Float = 0f, outline: Float = 0f, lit: Boolean = false, edges: Boolean = false, body: Path.() -> Unit) {
+        parts += Part(Path().apply(body), color, mono, 0f, gap, 0f, at, outline, lit, groupNow, edges)
     }
 
     fun line(color: Color?, width: Float, mono: Mono = Mono.Fill, gap: Float = 0f, dash: Float = 0f, body: Path.() -> Unit) {
-        parts += Part(Path().apply(body), color, mono, width, gap, dash, at)
+        parts += Part(Path().apply(body), color, mono, width, gap, dash, at, group = groupNow)
     }
 
     fun build() = FigureData(parts.toTypedArray(), pivotX, pivotY, parent)
@@ -979,11 +981,13 @@ private fun reindeer(leads: Boolean) = figure {
     root(16f, 13f)
     // A leg: the haunch and gaskin (or the forearm) on [hip], the cannon on [knee], the
     // pastern with the hoof on [fetlock]. Standing, a hind leg makes its natural zigzag.
-    fun leg(hip: Int, knee: Int, fetlock: Int, dx: Float, fore: Boolean, coat: Color, gap: Float) {
-        // The coat of the leg is one piece (outlined round the whole of it); the hoof apart.
+    // The coat of the leg and its hoof are one piece in [gid] (outlined round the whole of
+    // it). A segment and the round of its joint are separate shapes: drawn as one, their
+    // overlap would be left empty (they wind opposite ways).
+    fun leg(hip: Int, knee: Int, fetlock: Int, dx: Float, fore: Boolean, coat: Color, gap: Float, gid: Int) {
         if (fore) {
             joint(hip, 23.3f + dx, 13.2f) {
-                group(hip) {
+                group(gid) {
                     fill(coat, gap = gap) {
                         moveTo(21.6f + dx, 12.4f)
                         lineTo(24.9f + dx, 12.4f)
@@ -996,26 +1000,22 @@ private fun reindeer(leads: Boolean) = figure {
                     }
                 }
                 joint(knee, 23.4f + dx, 18f) {
-                    group(hip) {
-                        fill(coat, gap = gap) {
-                            poly(22.95f + dx, 17.9f, 23.9f + dx, 17.9f, 23.78f + dx, 21f, 23.05f + dx, 21f)
-                            circle(23.42f + dx, 18f, 0.48f)
-                        }
+                    group(gid) {
+                        fill(coat, gap = gap) { poly(22.95f + dx, 17.9f, 23.9f + dx, 17.9f, 23.78f + dx, 21f, 23.05f + dx, 21f) }
+                        fill(coat, gap = gap) { circle(23.42f + dx, 18f, 0.48f) }
                     }
                     joint(fetlock, 23.4f + dx, 21f) {
-                        group(hip) {
-                            fill(coat, gap = gap) {
-                                poly(23.05f + dx, 20.9f, 23.75f + dx, 20.9f, 24.15f + dx, 21.7f, 23.45f + dx, 21.8f)
-                                circle(23.41f + dx, 21f, 0.36f)
-                            }
+                        group(gid) {
+                            fill(coat, gap = gap) { poly(23.05f + dx, 20.9f, 23.75f + dx, 20.9f, 24.15f + dx, 21.7f, 23.45f + dx, 21.8f) }
+                            fill(coat, gap = gap) { circle(23.41f + dx, 21f, 0.36f) }
+                            fill(Hoof, outline = 0.2f) { poly(23.15f + dx, 21.6f, 24.45f + dx, 21.5f, 24.8f + dx, 22.6f, 23.1f + dx, 22.6f) }
                         }
-                        fill(Hoof, outline = 0.2f) { poly(23.15f + dx, 21.6f, 24.45f + dx, 21.5f, 24.8f + dx, 22.6f, 23.1f + dx, 22.6f) }
                     }
                 }
             }
         } else {
             joint(hip, 10.6f + dx, 13.4f) {
-                group(hip) {
+                group(gid) {
                     fill(coat, gap = gap) {
                         moveTo(8f + dx, 12.4f)
                         lineTo(12.8f + dx, 12.6f)
@@ -1028,30 +1028,24 @@ private fun reindeer(leads: Boolean) = figure {
                     }
                 }
                 joint(knee, 10.6f + dx, 18.9f) {
-                    group(hip) {
-                        fill(coat, gap = gap) {
-                            poly(10.05f + dx, 18.8f, 11.1f + dx, 18.8f, 10.95f + dx, 21f, 10.2f + dx, 21f)
-                            circle(10.58f + dx, 18.9f, 0.53f)
-                        }
+                    group(gid) {
+                        fill(coat, gap = gap) { poly(10.05f + dx, 18.8f, 11.1f + dx, 18.8f, 10.95f + dx, 21f, 10.2f + dx, 21f) }
+                        fill(coat, gap = gap) { circle(10.58f + dx, 18.9f, 0.53f) }
                     }
                     joint(fetlock, 10.58f + dx, 21f) {
-                        group(hip) {
-                            fill(coat, gap = gap) {
-                                poly(10.2f + dx, 20.9f, 10.9f + dx, 20.9f, 11.3f + dx, 21.7f, 10.6f + dx, 21.8f)
-                                circle(10.57f + dx, 21f, 0.36f)
-                            }
+                        group(gid) {
+                            fill(coat, gap = gap) { poly(10.2f + dx, 20.9f, 10.9f + dx, 20.9f, 11.3f + dx, 21.7f, 10.6f + dx, 21.8f) }
+                            fill(coat, gap = gap) { circle(10.57f + dx, 21f, 0.36f) }
+                            fill(Hoof, outline = 0.2f) { poly(10.3f + dx, 21.6f, 11.6f + dx, 21.5f, 11.95f + dx, 22.6f, 10.25f + dx, 22.6f) }
                         }
-                        fill(Hoof, outline = 0.2f) { poly(10.3f + dx, 21.6f, 11.6f + dx, 21.5f, 11.95f + dx, 22.6f, 10.25f + dx, 22.6f) }
                     }
                 }
             }
         }
     }
-    // The far legs, a shade darker, then the near ones.
-    leg(J.HIND_FAR, J.HOCK_FAR, J.FETLOCK_HIND_FAR, -1.6f, fore = false, coat = DeerDeep, gap = 0f)
-    leg(J.FORE_FAR, J.KNEE_FAR, J.FETLOCK_FORE_FAR, 1.1f, fore = true, coat = DeerDeep, gap = 0f)
-    leg(J.HIND_NEAR, J.HOCK_NEAR, J.FETLOCK_HIND_NEAR, 0f, fore = false, coat = Deer, gap = 0.3f)
-    leg(J.FORE_NEAR, J.KNEE_NEAR, J.FETLOCK_FORE_NEAR, 0f, fore = true, coat = Deer, gap = 0.3f)
+    // The far legs, a shade darker, behind the body; each outlined thinly.
+    leg(J.HIND_FAR, J.HOCK_FAR, J.FETLOCK_HIND_FAR, -1.6f, fore = false, coat = DeerDeep, gap = 0.18f, gid = 100)
+    leg(J.FORE_FAR, J.KNEE_FAR, J.FETLOCK_FORE_FAR, 1.1f, fore = true, coat = DeerDeep, gap = 0.18f, gid = 101)
     // A short white tail.
     joint(J.TAIL, 7.2f, 10.9f) {
         fill(Cream, gap = 0.15f) {
@@ -1061,8 +1055,11 @@ private fun reindeer(leads: Boolean) = figure {
             close()
         }
     }
-    // The body, its belly lighter, a pale patch on the rump.
-    fill(Deer) {
+    // The body, its belly lighter, a pale patch on the rump; then the near legs over it,
+    // all one piece: their outline is drawn first and the body over it, so the legs come out
+    // of the body (outlined only outside it) instead of being set under its edge.
+    group(102) {
+    fill(Deer, edges = true) {
         moveTo(9.6f, 9.8f)
         cubicTo(13f, 9.3f, 19f, 9.1f, 22.4f, 9.6f)
         cubicTo(25f, 10f, 26.2f, 11.8f, 25.8f, 13.6f)
@@ -1085,12 +1082,8 @@ private fun reindeer(leads: Boolean) = figure {
         moveTo(10.5f, 10f)
         cubicTo(14f, 9.5f, 18.5f, 9.35f, 21.5f, 9.75f)
     }
-    // The haunch and the shoulder.
-    line(DeerDeep.copy(alpha = 0.55f), 0.2f, Mono.Skip) {
-        moveTo(9.4f, 11.2f)
-        cubicTo(11.6f, 11.8f, 12.6f, 13.6f, 12.2f, 15.6f)
-        moveTo(22.6f, 10.8f)
-        cubicTo(23.6f, 12f, 23.9f, 13.8f, 23.4f, 15.4f)
+    leg(J.HIND_NEAR, J.HOCK_NEAR, J.FETLOCK_HIND_NEAR, 0f, fore = false, coat = Deer, gap = 0.3f, gid = 102)
+    leg(J.FORE_NEAR, J.KNEE_NEAR, J.FETLOCK_FORE_NEAR, 0f, fore = true, coat = Deer, gap = 0.3f, gid = 102)
     }
     // The harness: a saddle pad edged in gold with tassels, the girth strap (cut) with a
     // buckle; on the lead's pad a gold star, on the other one a sprig of holly.

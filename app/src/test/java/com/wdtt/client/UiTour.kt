@@ -7,6 +7,7 @@ import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.swipeUp
@@ -199,6 +200,12 @@ class UiTour {
         shot(dir, "11d_settings_interface")
         swipeSheetUp("БЕТА-ФУНКЦИИ", optional = true)
         shot(dir, "11e_settings_beta")
+        // To the end of the settings: updates, support, the journal.
+        repeat(3) {
+            compose.onRoot().performTouchInput { swipeUp(startY = height * 0.75f, endY = height * 0.15f, durationMillis = 300) }
+            settle(5)
+        }
+        shot(dir, "11h_settings_end")
         // The journal, from the settings: errors first, then everything.
         compose.onNodeWithText("Журнал подключения").performClick()
         settle(8)

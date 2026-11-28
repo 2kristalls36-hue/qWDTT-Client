@@ -64,7 +64,7 @@ internal object AboutLinks {
     const val QWDTT = "https://github.com/SpaceNeuroX/proxy-turn-vk-android"
     const val LICENCE = "https://github.com/2kristalls36-hue/qWDTT-Client/blob/main/LICENSE"
     /** The page of voluntary support (CloudTips); empty — the «Поддержка» section is not shown. */
-    const val DONATE = ""
+    const val DONATE = "https://pay.cloudtips.ru/p/7edaf342"
 }
 
 /**

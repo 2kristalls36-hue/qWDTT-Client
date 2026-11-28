@@ -23,6 +23,7 @@ import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Gavel
 import androidx.compose.material.icons.outlined.Handshake
+import androidx.compose.material.icons.outlined.LocalCafe
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -162,6 +163,10 @@ fun AboutDialog(onDismiss: () -> Unit) {
                     AboutLink(Icons.Outlined.Handshake, "Основано на qWDTT", "github.com/SpaceNeuroX/proxy-turn-vk-android") { open(AboutLinks.QWDTT) }
                     AboutDivider()
                     AboutLink(Icons.Outlined.Gavel, "Лицензия", "GNU GPL v3") { open(AboutLinks.LICENCE) }
+                    if (AboutLinks.DONATE.isNotBlank()) {
+                        AboutDivider()
+                        AboutLink(Icons.Outlined.LocalCafe, SupportText.TITLE, "Угостить автора чашкой кофе") { open(AboutLinks.DONATE) }
+                    }
                 }
             }
         }

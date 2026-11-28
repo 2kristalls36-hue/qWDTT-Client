@@ -344,7 +344,7 @@ fun SettingsScreen() {
             if (AboutLinks.DONATE.isNotBlank()) {
                 item {
                     Box(Modifier.padding(horizontal = 16.dp)) {
-                        SupportSection()
+                        SupportCard(Modifier.fillMaxWidth())
                     }
                 }
             }
@@ -361,27 +361,6 @@ fun SettingsScreen() {
         }
     }
     if (logsOpen) LogsSheet(onDismiss = { logsOpen = false })
-}
-
-/** The page of voluntary support, opened in the browser. */
-@Composable
-private fun SupportSection() {
-    val context = LocalContext.current
-    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
-    val haptics = com.wdtt.client.ui.motion.LocalAppHaptics.current
-    Section("Поддержка") {
-        Hint("Добровольная поддержка разработки приложения.\nОплата выполняется на странице CloudTips.")
-        ArdttButton(
-            text = "Поддержать разработку",
-            variant = ArdttButtonVariant.Outlined,
-            onClick = {
-                haptics.perform(com.wdtt.client.ui.motion.Haptic.Click)
-                runCatching { uriHandler.openUri(AboutLinks.DONATE) }
-                    .onFailure { android.widget.Toast.makeText(context, "Не удалось открыть ссылку.", android.widget.Toast.LENGTH_SHORT).show() }
-            },
-            modifier = Modifier.fillMaxWidth(),
-        )
-    }
 }
 
 /** Version, check for a newer GitHub release, download with progress, install. */

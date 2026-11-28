@@ -437,9 +437,10 @@ private fun UpdateSection() {
             else -> ""
         }
         if (status.isNotEmpty()) Hint(status)
-        if (c is AppUpdate.Check.Available && c.release.notes.isNotBlank()) {
+        val brief = if (c is AppUpdate.Check.Available) com.wdtt.client.lite.ReleaseNotes.brief(c.release.notes) else emptyList()
+        if (brief.isNotEmpty()) {
             Text(
-                c.release.notes.lines().filter { it.isNotBlank() }.take(6).joinToString("\n"),
+                brief.joinToString("\n"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

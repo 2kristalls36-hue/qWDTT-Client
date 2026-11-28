@@ -25,6 +25,14 @@ class RawTunVpnService : VpnService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // Управляет TunnelManager; сервис — просто держатель VpnService.
+        // Android starts the service by itself for «Постоянная VPN» (always-on): after
+        // boot, after an update of the app, when the setting is turned on. The app starts
+        // it without the VpnService action. Without a connection then, «Блокировать
+        // соединения без VPN» leaves the device without internet: connect as the tile does.
+        if (startedBySystem(intent) && !TunnelManager.sessionActive()) {
+            com.wdtt.client.lite.RawLog.add("[RAW] Подключение запущено системой: постоянная VPN")
+            startSaved(applicationContext)
+        }
         return START_STICKY
     }
 
@@ -255,5 +263,12 @@ class RawTunVpnService : VpnService() {
         @Volatile
         var instance: RawTunVpnService? = null
             private set
+
+        /** The system, not the app, started the service: always-on VPN. */
+        internal fun startedBySystem(intent: Intent?): Boolean = intent?.action == SERVICE_INTERFACE
+
+        /** How a system start connects; replaced in tests. */
+        @Volatile
+        internal var startSaved: (android.content.Context) -> Unit = { TunnelControl.startFromSavedSettings(it) }
     }
 }

@@ -29,7 +29,7 @@ android {
         versionCode = buildMinute
         // Release version. The release workflow checks that the tag (v1.0.0) matches it;
         // the in-app update check compares it with the latest GitHub release.
-        versionName = "1.2.0"
+        versionName = "1.2.1"
 
         // -PlogcatMirror=true: test builds copy the journal to logcat (tag qWDTT),
         // so a phone on USB can be checked with adb. Off in published builds.
